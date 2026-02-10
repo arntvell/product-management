@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { GroupCard } from "./group-card";
@@ -15,10 +16,22 @@ interface GroupListProps {
 const LINK_STATUS_OPTIONS = ["linked", "partially_linked", "not_linked"];
 
 export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
-  const [search, setSearch] = useState("");
-  const [vendorFilter, setVendorFilter] = useState<string[]>([]);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [groupFilters, setGroupFilters] = usePersistedState(
+    "metafield-manager:group-filters",
+    { search: "", vendorFilter: [] as string[], typeFilter: [] as string[], tagFilter: [] as string[], statusFilter: [] as string[] }
+  );
+
+  const search = groupFilters.search;
+  const vendorFilter = groupFilters.vendorFilter;
+  const typeFilter = groupFilters.typeFilter;
+  const tagFilter = groupFilters.tagFilter;
+  const statusFilter = groupFilters.statusFilter;
+
+  const setSearch = (v: string) => setGroupFilters((prev) => ({ ...prev, search: v }));
+  const setVendorFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, vendorFilter: v }));
+  const setTypeFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, typeFilter: v }));
+  const setTagFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, tagFilter: v }));
+  const setStatusFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, statusFilter: v }));
 
   const vendors = useMemo(
     () => [...new Set(groups.map((g) => g.vendor))].filter(Boolean).sort(),
@@ -27,6 +40,14 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
 
   const productTypes = useMemo(
     () => [...new Set(groups.map((g) => g.productType))].filter(Boolean).sort(),
+    [groups]
+  );
+
+  const availableTags = useMemo(
+    () =>
+      [...new Set(groups.flatMap((g) => g.members.flatMap((m) => m.tags)))]
+        .filter(Boolean)
+        .sort(),
     [groups]
   );
 
@@ -44,6 +65,12 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
       return false;
     }
     if (typeFilter.length > 0 && !typeFilter.includes(group.productType)) {
+      return false;
+    }
+    if (
+      tagFilter.length > 0 &&
+      !group.members.some((m) => m.tags.some((t) => tagFilter.includes(t)))
+    ) {
       return false;
     }
     if (
@@ -75,6 +102,12 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
           selected={typeFilter}
           onChange={setTypeFilter}
           placeholder="All Types"
+        />
+        <MultiSelect
+          options={availableTags}
+          selected={tagFilter}
+          onChange={setTagFilter}
+          placeholder="All Tags"
         />
         <MultiSelect
           options={LINK_STATUS_OPTIONS}

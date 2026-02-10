@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useRef, type SetStateAction } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { InlineCellEditor } from "./inline-cell-editor";
@@ -49,6 +50,8 @@ interface ProductTableProps {
   dirtyCount: number;
   saveProgress?: { completed: number; total: number } | null;
   pages?: ShopifyPage[];
+  carePages?: ShopifyPage[];
+  fitguidePages?: ShopifyPage[];
   collections?: ShopifyCollection[];
   models?: Model[];
   onOpenPicker?: (picker: ActivePicker) => void;
@@ -88,20 +91,21 @@ const ProductRow = React.memo(function ProductRow({
   style,
 }: ProductRowProps) {
   return (
-    <tr
+    <div
+      role="row"
       style={style}
       className={cn(
         "border-b hover:bg-muted/30 transition-colors flex",
         isSelected && "bg-blue-50/50"
       )}
     >
-      <td className="p-2 w-10 shrink-0 flex items-center">
+      <div role="cell" className="p-2 w-10 shrink-0 flex items-center">
         <Checkbox
           checked={isSelected}
           onCheckedChange={() => onToggleSelection(product.id)}
         />
-      </td>
-      <td className="p-2 w-12 shrink-0 flex items-center">
+      </div>
+      <div role="cell" className="p-2 w-12 shrink-0 flex items-center">
         {product.featuredImage ? (
           <img
             src={product.featuredImage}
@@ -111,17 +115,17 @@ const ProductRow = React.memo(function ProductRow({
         ) : (
           <div className="w-8 h-8 bg-muted rounded" />
         )}
-      </td>
-      <td className="p-2 min-w-[200px] flex-1 flex items-center">
+      </div>
+      <div role="cell" className="p-2 min-w-[200px] flex-1 flex items-center">
         <span className="text-sm font-medium truncate">{product.title}</span>
-      </td>
-      <td className="p-2 w-[100px] shrink-0 text-sm text-muted-foreground flex items-center">
+      </div>
+      <div role="cell" className="p-2 w-[100px] shrink-0 text-sm text-muted-foreground flex items-center">
         {product.vendor}
-      </td>
-      <td className="p-2 w-[80px] shrink-0 text-sm text-muted-foreground flex items-center">
+      </div>
+      <div role="cell" className="p-2 w-[80px] shrink-0 text-sm text-muted-foreground flex items-center">
         {product.productType}
-      </td>
-      <td className="p-2 w-[90px] shrink-0 text-sm text-muted-foreground flex items-center">
+      </div>
+      <div role="cell" className="p-2 w-[90px] shrink-0 text-sm text-muted-foreground flex items-center">
         <span
           className={cn(
             "text-xs px-1.5 py-0.5 rounded",
@@ -132,13 +136,14 @@ const ProductRow = React.memo(function ProductRow({
         >
           {product.status}
         </span>
-      </td>
+      </div>
       {columns.map((col) => {
         const isVisible = !col.visibilityPredicate || col.visibilityPredicate(product);
 
         if (col.renderType === "text") {
           return (
-            <td
+            <div
+              role="cell"
               key={col.key}
               className="border-l"
               style={{ minWidth: col.minWidth, flex: 1 }}
@@ -148,13 +153,14 @@ const ProductRow = React.memo(function ProductRow({
                 isDirty={isCellDirty(product.id, col.key)}
                 onClick={() => onTextCellClick(product, col.key)}
               />
-            </td>
+            </div>
           );
         }
 
         if (col.renderType === "ref_file") {
           return (
-            <td
+            <div
+              role="cell"
               key={col.key}
               className="border-l"
               style={{ minWidth: col.minWidth, flex: 1 }}
@@ -164,12 +170,13 @@ const ProductRow = React.memo(function ProductRow({
                 isDirty={isCellDirty(product.id, col.key)}
                 onClick={() => onRefFieldClick(product, col.key, col)}
               />
-            </td>
+            </div>
           );
         }
 
         return (
-          <td
+          <div
+            role="cell"
             key={col.key}
             className="border-l"
             style={{ minWidth: col.minWidth, flex: 1 }}
@@ -184,10 +191,10 @@ const ProductRow = React.memo(function ProductRow({
               collections={collections}
               models={models}
             />
-          </td>
+          </div>
         );
       })}
-    </tr>
+    </div>
   );
 });
 
@@ -201,6 +208,8 @@ export function ProductTable({
   dirtyCount,
   saveProgress,
   pages,
+  carePages,
+  fitguidePages,
   collections,
   models,
   onOpenPicker,
@@ -294,6 +303,30 @@ export function ProductTable({
     [selectedIds, onCellChange]
   );
 
+  const handleCopyDown = useCallback(
+    (fields: MetafieldKey[]) => {
+      if (selectedIds.size < 2 || fields.length === 0) return;
+
+      // Find the first selected product in display order
+      const sourceProduct = products.find((p) => selectedIds.has(p.id));
+      if (!sourceProduct) return;
+
+      const otherIds = [...selectedIds].filter((id) => id !== sourceProduct.id);
+
+      for (const field of fields) {
+        const value = getCellValue(sourceProduct, field);
+        for (const id of otherIds) {
+          onCellChange(id, field, value);
+        }
+      }
+
+      toast.success(
+        `Copied ${fields.length} field${fields.length !== 1 ? "s" : ""} from ${sourceProduct.title} to ${otherIds.length} product${otherIds.length !== 1 ? "s" : ""}`
+      );
+    },
+    [selectedIds, products, getCellValue, onCellChange]
+  );
+
   const handleTextCellClick = useCallback(
     (product: Product, field: MetafieldKey) => {
       setSidePanel({ product, field });
@@ -313,7 +346,7 @@ export function ProductTable({
           pickerType = "product";
           break;
         case "ref_page":
-          pickerType = field === "care" ? "page_care" : "page_fitguide";
+          pickerType = field === "care_page" ? "page_care" : "page_fitguide";
           break;
         case "ref_collection":
           pickerType = "collection";
@@ -377,7 +410,8 @@ export function ProductTable({
         selectedCount={selectedIds.size}
         onClearSelection={() => onSelectedIdsChange(new Set())}
         onBulkApply={() => setBulkApplyOpen(true)}
-        onCopyDown={() => {}}
+        onCopyDown={handleCopyDown}
+        columns={columns}
       />
 
       {dirtyCount > 0 && (
@@ -529,6 +563,10 @@ export function ProductTable({
         onOpenChange={setBulkApplyOpen}
         selectedCount={selectedIds.size}
         onApply={handleBulkApply}
+        carePages={carePages}
+        fitguidePages={fitguidePages}
+        collections={collections}
+        models={models}
       />
     </div>
   );

@@ -18,10 +18,10 @@ export interface ProductMetafields {
   same_product: string; // JSON array of GIDs
   style_with: string; // JSON array of GIDs
   flat: string; // file_reference GID
-  care: string; // page_reference GID
+  care_page: string; // page_reference GID
   fitguide: string; // page_reference GID
   model_info: string; // metaobject_reference GID
-  recommended_collection: string; // collection_reference GID
+  recommended_product_from_collection: string; // collection_reference GID
   style_with_unisex_herre: string; // JSON array of GIDs
   style_with_unisex_dame: string; // JSON array of GIDs
   men_images: string; // JSON array of file GIDs

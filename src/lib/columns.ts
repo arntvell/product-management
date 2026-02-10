@@ -50,7 +50,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     defaultVisible: false,
   },
   {
-    key: "care",
+    key: "care_page",
     label: "Care",
     renderType: "ref_page",
     minWidth: 140,
@@ -71,7 +71,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     defaultVisible: false,
   },
   {
-    key: "recommended_collection",
+    key: "recommended_product_from_collection",
     label: "Rec. Collection",
     renderType: "ref_collection",
     minWidth: 140,

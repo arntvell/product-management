@@ -16,6 +16,22 @@ export const METAFIELDS_SET_MUTATION = `
   }
 `;
 
+export const METAFIELDS_DELETE_MUTATION = `
+  mutation MetafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+    metafieldsDelete(metafields: $metafields) {
+      deletedMetafields {
+        ownerId
+        namespace
+        key
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 export const METAOBJECT_DEFINITION_CREATE_MUTATION = `
   mutation MetaobjectDefinitionCreate($definition: MetaobjectDefinitionCreateInput!) {
     metaobjectDefinitionCreate(definition: $definition) {

@@ -204,6 +204,20 @@ export interface NodesQueryResult {
   } | null>;
 }
 
+export interface MetafieldsDeleteResult {
+  metafieldsDelete: {
+    deletedMetafields: Array<{
+      ownerId: string;
+      namespace: string;
+      key: string;
+    }> | null;
+    userErrors: Array<{
+      field: string[];
+      message: string;
+    }>;
+  };
+}
+
 export interface MetafieldsSetResult {
   metafieldsSet: {
     metafields: Array<{

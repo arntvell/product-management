@@ -1,8 +1,8 @@
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 
 export const PRODUCTS_QUERY = `
-  query GetProducts($first: Int!, $after: String) {
-    products(first: $first, after: $after) {
+  query GetProducts($first: Int!, $after: String, $query: String) {
+    products(first: $first, after: $after, query: $query) {
       edges {
         node {
           id

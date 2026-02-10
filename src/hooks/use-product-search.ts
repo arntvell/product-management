@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { usePersistedState } from "./use-persisted-state";
 import type { Product } from "@/types";
 
 export interface Filters {
@@ -22,7 +23,10 @@ export const DEFAULT_FILTERS: Filters = {
 };
 
 export function useProductSearch(products: Product[] | undefined) {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = usePersistedState<Filters>(
+    "metafield-manager:product-filters",
+    DEFAULT_FILTERS
+  );
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];

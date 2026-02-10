@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { METAFIELD_DEFINITIONS } from "@/lib/constants";
 import type { BulkMetafieldUpdate, DirtyCell, Product } from "@/types";
 
@@ -27,13 +27,8 @@ async function saveMetafields(
 }
 
 export function useMetafieldMutation() {
-  const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: saveMetafields,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-    },
   });
 }
 

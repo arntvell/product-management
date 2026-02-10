@@ -48,7 +48,7 @@ export const METAFIELD_DEFINITIONS: MetafieldDefinition[] = [
     description: "Flat lay image file reference",
   },
   {
-    key: "care",
+    key: "care_page",
     namespace: METAFIELD_NAMESPACE,
     label: "Care",
     type: "page_reference",
@@ -69,7 +69,7 @@ export const METAFIELD_DEFINITIONS: MetafieldDefinition[] = [
     description: "Model information text (auto-generated from model picker)",
   },
   {
-    key: "recommended_collection",
+    key: "recommended_product_from_collection",
     namespace: METAFIELD_NAMESPACE,
     label: "Recommended Collection",
     type: "collection_reference",

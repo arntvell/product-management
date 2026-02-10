@@ -18,18 +18,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { METAFIELD_DEFINITIONS } from "@/lib/constants";
-import type { MetafieldKey } from "@/types";
+import type { MetafieldKey, ShopifyPage, ShopifyCollection, Model } from "@/types";
 
 interface BulkApplyDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selectedCount: number;
   onApply: (field: MetafieldKey, value: string) => void;
+  carePages?: ShopifyPage[];
+  fitguidePages?: ShopifyPage[];
+  collections?: ShopifyCollection[];
+  models?: Model[];
 }
 
-const TEXT_FIELDS = METAFIELD_DEFINITIONS.filter(
-  (d) => d.type !== "list.product_reference"
+// Fields that can be bulk-applied (exclude list types handled by other UIs)
+const BULK_FIELDS = METAFIELD_DEFINITIONS.filter(
+  (d) =>
+    d.type !== "list.product_reference" &&
+    d.type !== "list.file_reference" &&
+    d.type !== "file_reference"
 );
 
 const LARGE_SELECTION_THRESHOLD = 50;
@@ -39,10 +48,17 @@ export function BulkApplyDialog({
   onOpenChange,
   selectedCount,
   onApply,
+  carePages = [],
+  fitguidePages = [],
+  collections = [],
+  models = [],
 }: BulkApplyDialogProps) {
-  const [field, setField] = useState<MetafieldKey>(TEXT_FIELDS[0].key);
+  const [field, setField] = useState<MetafieldKey>(BULK_FIELDS[0].key);
   const [value, setValue] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+
+  const selectedFieldDef = BULK_FIELDS.find((d) => d.key === field);
+  const fieldType = selectedFieldDef?.type;
 
   const needsConfirmation =
     selectedCount >= LARGE_SELECTION_THRESHOLD && !confirmed;
@@ -66,11 +82,16 @@ export function BulkApplyDialog({
     onOpenChange(next);
   };
 
-  const selectedFieldDef = TEXT_FIELDS.find((d) => d.key === field);
+  const handleFieldChange = (v: string) => {
+    setField(v as MetafieldKey);
+    setValue("");
+  };
+
+  const displayValue = getDisplayValue(value, field, carePages, fitguidePages, collections, models);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Bulk Apply Value</DialogTitle>
         </DialogHeader>
@@ -82,12 +103,10 @@ export function BulkApplyDialog({
                 Are you sure you want to update {selectedCount} products?
               </p>
               <p className="text-xs text-muted-foreground">
-                This will set <strong>{selectedFieldDef?.label}</strong> to the
-                value below for all {selectedCount} selected products.
+                This will set <strong>{selectedFieldDef?.label}</strong> to{" "}
+                <strong>{displayValue}</strong> for all {selectedCount} selected
+                products.
               </p>
-              <pre className="mt-2 rounded bg-muted p-2 text-xs max-h-[100px] overflow-auto whitespace-pre-wrap">
-                {value}
-              </pre>
             </div>
             <DialogFooter>
               <Button
@@ -117,15 +136,12 @@ export function BulkApplyDialog({
             <div className="space-y-4 py-4">
               <div>
                 <Label>Metafield</Label>
-                <Select
-                  value={field}
-                  onValueChange={(v) => setField(v as MetafieldKey)}
-                >
+                <Select value={field} onValueChange={handleFieldChange}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TEXT_FIELDS.map((d) => (
+                    {BULK_FIELDS.map((d) => (
                       <SelectItem key={d.key} value={d.key}>
                         {d.label}
                       </SelectItem>
@@ -135,12 +151,45 @@ export function BulkApplyDialog({
               </div>
               <div>
                 <Label>Value</Label>
-                <Textarea
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder="Enter value to apply..."
-                  className="min-h-[100px]"
-                />
+                {fieldType === "page_reference" && field === "care_page" ? (
+                  <ReferenceList
+                    items={carePages.map((p) => ({ id: p.id, label: p.title }))}
+                    selectedId={value}
+                    onSelect={setValue}
+                    emptyText="No care pages available"
+                  />
+                ) : fieldType === "page_reference" && field === "fitguide" ? (
+                  <ReferenceList
+                    items={fitguidePages.map((p) => ({ id: p.id, label: p.title }))}
+                    selectedId={value}
+                    onSelect={setValue}
+                    emptyText="No fitguide pages available"
+                  />
+                ) : fieldType === "collection_reference" ? (
+                  <ReferenceList
+                    items={collections.map((c) => ({ id: c.id, label: c.title }))}
+                    selectedId={value}
+                    onSelect={setValue}
+                    emptyText="No collections available"
+                  />
+                ) : fieldType === "single_line_text_field" && field === "model_info" ? (
+                  <ReferenceList
+                    items={models.map((m) => ({
+                      id: `Model is ${m.fields.height} tall and wearing a size ${m.fields.size_worn}`,
+                      label: `${m.fields.name} (${m.fields.height}, size ${m.fields.size_worn})`,
+                    }))}
+                    selectedId={value}
+                    onSelect={setValue}
+                    emptyText="No models available"
+                  />
+                ) : (
+                  <Textarea
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    placeholder="Enter value to apply..."
+                    className="min-h-[100px]"
+                  />
+                )}
               </div>
             </div>
             <DialogFooter>
@@ -158,4 +207,66 @@ export function BulkApplyDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function ReferenceList({
+  items,
+  selectedId,
+  onSelect,
+  emptyText,
+}: {
+  items: { id: string; label: string }[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  emptyText: string;
+}) {
+  if (items.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground py-4 text-center">
+        {emptyText}
+      </p>
+    );
+  }
+
+  return (
+    <div className="max-h-[200px] overflow-auto rounded-md border">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={cn(
+            "w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors border-b last:border-b-0",
+            selectedId === item.id && "bg-blue-50 font-medium"
+          )}
+          onClick={() => onSelect(item.id)}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function getDisplayValue(
+  value: string,
+  field: MetafieldKey,
+  carePages: ShopifyPage[],
+  fitguidePages: ShopifyPage[],
+  collections: ShopifyCollection[],
+  models: Model[]
+): string {
+  if (!value) return "(empty)";
+  if (field === "care_page") {
+    return carePages.find((p) => p.id === value)?.title || value;
+  }
+  if (field === "fitguide") {
+    return fitguidePages.find((p) => p.id === value)?.title || value;
+  }
+  if (field === "recommended_product_from_collection") {
+    return collections.find((c) => c.id === value)?.title || value;
+  }
+  if (field === "model_info") {
+    return value;
+  }
+  return value.length > 80 ? value.slice(0, 80) + "..." : value;
 }

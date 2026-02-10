@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProducts } from "@/hooks/use-products";
 import { useProductSearch } from "@/hooks/use-product-search";
@@ -11,6 +12,7 @@ import { useColumnVisibility } from "@/hooks/use-column-visibility";
 import {
   useMetafieldMutation,
   dirtyCellsToUpdates,
+  applyDirtyCellsToProducts,
 } from "@/hooks/use-metafield-mutation";
 import { ProductTable } from "@/components/products/product-table";
 import { ProductFilters } from "@/components/products/product-filters";
@@ -45,6 +47,7 @@ export default function ProductsPage() {
   const { models } = useModels();
   const { visibleKeys, visibleColumns, toggleColumn, resetToDefaults, showAll } =
     useColumnVisibility();
+  const queryClient = useQueryClient();
   const mutation = useMetafieldMutation();
   const [dirtyCells, setDirtyCells] = useState<Map<string, DirtyCell>>(
     new Map()
@@ -97,7 +100,11 @@ export default function ProductsPage() {
       try {
         const result = await mutation.mutateAsync(updates);
         if (result.success) {
+          queryClient.setQueryData<Product[]>(["products"], (old) =>
+            old ? applyDirtyCellsToProducts(old, dirtyCells) : old
+          );
           setDirtyCells(new Map());
+          setTimeout(() => queryClient.invalidateQueries({ queryKey: ["products"] }), 3000);
           toast.success(
             `Saved ${dirtyCells.size} change${dirtyCells.size !== 1 ? "s" : ""}`
           );
@@ -134,14 +141,18 @@ export default function ProductsPage() {
     setSaveProgress(null);
 
     if (errors.length === 0) {
+      queryClient.setQueryData<Product[]>(["products"], (old) =>
+        old ? applyDirtyCellsToProducts(old, dirtyCells) : old
+      );
       setDirtyCells(new Map());
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["products"] }), 3000);
       toast.success(
         `Saved ${dirtyCells.size} change${dirtyCells.size !== 1 ? "s" : ""}`
       );
     } else {
       toast.error(`Some updates failed: ${errors.join(", ")}`);
     }
-  }, [dirtyCells, mutation]);
+  }, [dirtyCells, mutation, queryClient]);
 
   const handlePickerSelect = useCallback(
     (id: string) => {
@@ -255,6 +266,8 @@ export default function ProductsPage() {
         dirtyCount={dirtyCells.size}
         saveProgress={saveProgress}
         pages={pages}
+        carePages={carePages}
+        fitguidePages={fitguidePages}
         collections={collections}
         models={models}
         onOpenPicker={setActivePicker}

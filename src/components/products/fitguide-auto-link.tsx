@@ -25,7 +25,12 @@ interface FitguideAutoLinkProps {
 interface Match {
   product: Product;
   page: ShopifyPage;
+  /** True when overriding an existing fitguide with a seasonal one */
+  isOverride: boolean;
 }
+
+/** Season tags to check, in priority order (newest first) */
+const SEASON_TAGS = ["SS26"];
 
 export function FitguideAutoLink({
   products,
@@ -52,17 +57,43 @@ export function FitguideAutoLink({
     if (!open) return [];
     const result: Match[] = [];
     for (const product of targetProducts) {
+      const parts = product.handle.toLowerCase().split("-");
+
+      // Check if product has a season tag — if so, try seasonal fitguide first
+      const seasonTag = SEASON_TAGS.find((tag) =>
+        product.tags.some((t) => t.toLowerCase() === tag.toLowerCase())
+      );
+
+      if (seasonTag) {
+        // Try seasonal fitguide: e.g. "abby-black" + "SS26" → "abby-ss26-fitguide"
+        const seasonSuffix = seasonTag.toLowerCase();
+        let matchedSeasonal = false;
+        for (let len = parts.length; len >= 1 && !matchedSeasonal; len--) {
+          const prefix = parts.slice(0, len).join("-");
+          const page = pageByHandle.get(`${prefix}-${seasonSuffix}-fitguide`);
+          if (page) {
+            // Only add if it's different from the current fitguide
+            if (product.metafields.fitguide !== page.id) {
+              result.push({ product, page, isOverride: !!product.metafields.fitguide });
+            }
+            matchedSeasonal = true;
+          }
+        }
+        if (matchedSeasonal) continue;
+      }
+
+      // Standard matching: skip products that already have a fitguide
       if (product.metafields.fitguide) continue;
+
       // Try progressively shorter prefixes of the handle
       // e.g. "nelson-slim-black" → try "nelson-slim-black-fitguide",
       //   then "nelson-slim-fitguide", then "nelson-fitguide"
-      const parts = product.handle.toLowerCase().split("-");
       let matched = false;
       for (let len = parts.length; len >= 1 && !matched; len--) {
         const prefix = parts.slice(0, len).join("-");
         const page = pageByHandle.get(`${prefix}-fitguide`);
         if (page) {
-          result.push({ product, page });
+          result.push({ product, page, isOverride: false });
           matched = true;
         }
       }
@@ -80,10 +111,22 @@ export function FitguideAutoLink({
     setOpen(false);
   };
 
-  const unlinkedCount = useMemo(
-    () => targetProducts.filter((p) => !p.metafields.fitguide).length,
-    [targetProducts]
-  );
+  const actionableCount = useMemo(() => {
+    let count = 0;
+    for (const p of targetProducts) {
+      if (!p.metafields.fitguide) {
+        count++;
+      } else if (
+        SEASON_TAGS.some((tag) =>
+          p.tags.some((t) => t.toLowerCase() === tag.toLowerCase())
+        )
+      ) {
+        // SS26 products may need re-linking to seasonal fitguide
+        count++;
+      }
+    }
+    return count;
+  }, [targetProducts]);
 
   const hasSelection = selectedIds.size > 0;
 
@@ -93,7 +136,7 @@ export function FitguideAutoLink({
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        disabled={unlinkedCount === 0}
+        disabled={actionableCount === 0}
       >
         Auto-link Fitguides
         {hasSelection && ` (${selectedIds.size})`}
@@ -106,7 +149,7 @@ export function FitguideAutoLink({
               {hasSelection
                 ? `Matching ${selectedIds.size} selected product${selectedIds.size !== 1 ? "s" : ""} to fitguide pages by handle`
                 : "Matching all products to fitguide pages by handle"}
-              {" "}({unlinkedCount} without fitguide)
+              {" "}({actionableCount} actionable)
             </DialogDescription>
           </DialogHeader>
           {matches.length === 0 ? (
@@ -128,6 +171,9 @@ export function FitguideAutoLink({
                     >
                       <span className="truncate flex-1 min-w-0">
                         {m.product.title}
+                        {m.isOverride && (
+                          <span className="ml-1 text-xs text-yellow-600">(update)</span>
+                        )}
                       </span>
                       <span className="text-muted-foreground shrink-0">&rarr;</span>
                       <span className="truncate flex-1 min-w-0 text-muted-foreground">

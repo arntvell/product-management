@@ -14,9 +14,12 @@ const LIVID_VENDORS = ["Livid Jeans", "Livid Unisex"];
  * 4. Filter out single-product groups
  */
 export function detectProductGroups(products: Product[]): ProductGroup[] {
+  // Filter out archived products before grouping
+  const activeProducts = products.filter((p) => p.status !== "ARCHIVED");
+
   // Step 1: Group by vendor + type
   const vendorTypeGroups = new Map<string, Product[]>();
-  for (const product of products) {
+  for (const product of activeProducts) {
     const key = `${product.vendor}|||${product.productType}`;
     const group = vendorTypeGroups.get(key) || [];
     group.push(product);
@@ -177,8 +180,8 @@ function computeLinkStatus(
 export function detectLividAutoLinks(
   products: Product[]
 ): Map<string, string[]> {
-  const lividProducts = products.filter((p) =>
-    LIVID_VENDORS.includes(p.vendor)
+  const lividProducts = products.filter(
+    (p) => LIVID_VENDORS.includes(p.vendor) && p.status !== "ARCHIVED"
   );
 
   const groups = detectProductGroups(lividProducts);

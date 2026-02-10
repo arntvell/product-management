@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { shopifyGraphQL } from "@/lib/shopify/client";
-import { METAFIELDS_SET_MUTATION } from "@/lib/shopify/mutations";
-import type { MetafieldsSetResult } from "@/lib/shopify/types";
+import {
+  METAFIELDS_SET_MUTATION,
+  METAFIELDS_DELETE_MUTATION,
+} from "@/lib/shopify/mutations";
+import type {
+  MetafieldsSetResult,
+  MetafieldsDeleteResult,
+} from "@/lib/shopify/types";
 import type { BulkMetafieldUpdate } from "@/types";
 
 const BATCH_SIZE = 25;
@@ -29,34 +35,69 @@ export async function POST(request: NextRequest) {
       }))
     );
 
-    // Process in batches (Shopify limit is 25 metafields per mutation)
-    const results: Array<{ success: boolean; errors: string[] }> = [];
+    // Split into sets (non-empty values) and deletes (empty values)
+    const setInputs = allInputs.filter((input) => input.value !== "");
+    const deleteInputs = allInputs.filter((input) => input.value === "");
 
-    for (let i = 0; i < allInputs.length; i += BATCH_SIZE) {
-      const batch = allInputs.slice(i, i + BATCH_SIZE);
+    const allErrors: string[] = [];
+
+    // Process sets in batches
+    for (let i = 0; i < setInputs.length; i += BATCH_SIZE) {
+      const batch = setInputs.slice(i, i + BATCH_SIZE);
+
+      console.log("[metafields] SET batch:", JSON.stringify(batch, null, 2));
 
       const data = await shopifyGraphQL<MetafieldsSetResult>(
         METAFIELDS_SET_MUTATION,
         { metafields: batch }
       );
 
+      console.log("[metafields] SET result:", JSON.stringify(data, null, 2));
+
       const userErrors = data.metafieldsSet.userErrors;
       if (userErrors.length > 0) {
-        results.push({
-          success: false,
-          errors: userErrors.map((e) => `${e.field.join(".")}: ${e.message}`),
-        });
-      } else {
-        results.push({ success: true, errors: [] });
+        allErrors.push(
+          ...userErrors.map((e) => `${e.field.join(".")}: ${e.message}`)
+        );
       }
     }
 
-    const allErrors = results.flatMap((r) => r.errors);
-    const allSuccess = allErrors.length === 0;
+    // Process deletes in batches (metafieldsDelete accepts ownerId+namespace+key)
+    if (deleteInputs.length > 0) {
+      const deleteIdentifiers = deleteInputs.map((input) => ({
+        ownerId: input.ownerId,
+        namespace: input.namespace,
+        key: input.key,
+      }));
+
+      for (let i = 0; i < deleteIdentifiers.length; i += BATCH_SIZE) {
+        const batch = deleteIdentifiers.slice(i, i + BATCH_SIZE);
+
+        try {
+          const data = await shopifyGraphQL<MetafieldsDeleteResult>(
+            METAFIELDS_DELETE_MUTATION,
+            { metafields: batch }
+          );
+
+          const userErrors = data.metafieldsDelete.userErrors;
+          if (userErrors.length > 0) {
+            allErrors.push(
+              ...userErrors.map((e) => `${e.field.join(".")}: ${e.message}`)
+            );
+          }
+        } catch (err) {
+          allErrors.push(
+            `Failed to clear metafields: ${err instanceof Error ? err.message : "Unknown error"}`
+          );
+        }
+      }
+    }
 
     return NextResponse.json({
-      success: allSuccess,
-      batchesProcessed: results.length,
+      success: allErrors.length === 0,
+      batchesProcessed:
+        Math.ceil(setInputs.length / BATCH_SIZE) +
+        Math.ceil(deleteInputs.length / BATCH_SIZE),
       errors: allErrors,
     });
   } catch (error) {

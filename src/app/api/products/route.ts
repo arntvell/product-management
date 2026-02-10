@@ -16,6 +16,7 @@ export async function GET() {
         await shopifyGraphQL<ProductsQueryResult>(PRODUCTS_QUERY, {
           first: PRODUCTS_PER_PAGE,
           after: cursor,
+          query: "NOT status:archived",
         });
 
       const products = data.products.edges.map((edge) => {
@@ -28,10 +29,10 @@ export async function GET() {
           same_product: "",
           style_with: "",
           flat: "",
-          care: "",
+          care_page: "",
           fitguide: "",
           model_info: "",
-          recommended_collection: "",
+          recommended_product_from_collection: "",
           style_with_unisex_herre: "",
           style_with_unisex_dame: "",
           men_images: "",
