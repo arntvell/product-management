@@ -107,6 +107,20 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     defaultVisible: false,
     visibilityPredicate: (p) => p.vendor === UNISEX_VENDOR,
   },
+  {
+    key: "style_tagline",
+    label: "Style Tagline",
+    renderType: "text",
+    minWidth: 160,
+    defaultVisible: false,
+  },
+  {
+    key: "style_name",
+    label: "Style Name",
+    renderType: "text",
+    minWidth: 140,
+    defaultVisible: false,
+  },
 ];
 
 export const DEFAULT_VISIBLE_KEYS = new Set(

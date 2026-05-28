@@ -103,6 +103,20 @@ export const METAFIELD_DEFINITIONS: MetafieldDefinition[] = [
     type: "list.file_reference",
     description: "Women images for unisex products",
   },
+  {
+    key: "style_tagline",
+    namespace: METAFIELD_NAMESPACE,
+    label: "Style Tagline",
+    type: "multi_line_text_field",
+    description: "Short style tagline for the product",
+  },
+  {
+    key: "style_name",
+    namespace: METAFIELD_NAMESPACE,
+    label: "Style Name",
+    type: "single_line_text_field",
+    description: "Style name for the product",
+  },
 ];
 
 export const METAFIELD_KEYS = METAFIELD_DEFINITIONS.map((d) => d.key);

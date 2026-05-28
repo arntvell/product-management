@@ -26,6 +26,8 @@ export interface ProductMetafields {
   style_with_unisex_dame: string; // JSON array of GIDs
   men_images: string; // JSON array of file GIDs
   women_images: string; // JSON array of file GIDs
+  style_tagline: string;
+  style_name: string;
 }
 
 export type MetafieldKey = keyof ProductMetafields;
