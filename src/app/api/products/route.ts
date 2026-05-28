@@ -37,6 +37,8 @@ export async function GET() {
           style_with_unisex_dame: "",
           men_images: "",
           women_images: "",
+          style_tagline: "",
+          style_name: "",
         };
 
         for (const mfEdge of node.metafields.edges) {
