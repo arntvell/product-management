@@ -121,7 +121,7 @@ export const METAFIELD_DEFINITIONS: MetafieldDefinition[] = [
     key: "color_hex",
     namespace: METAFIELD_NAMESPACE,
     label: "Color Hex",
-    type: "single_line_text_field",
+    type: "color",
     description: "Hex color code for the product color",
   },
 ];

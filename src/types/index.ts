@@ -40,6 +40,7 @@ export interface MetafieldDefinition {
   type:
     | "single_line_text_field"
     | "multi_line_text_field"
+    | "color"
     | "list.product_reference"
     | "file_reference"
     | "page_reference"
