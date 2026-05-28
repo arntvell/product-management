@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { usePersistedState } from "./use-persisted-state";
 import type { Product } from "@/types";
 
+export type SortKey = "title" | "vendor" | "productType" | "status";
+
 export interface Filters {
   search: string;
   vendors: string[];
@@ -11,6 +13,8 @@ export interface Filters {
   tags: string[];
   statuses: string[];
   missingFlat: boolean;
+  sortKey: SortKey | null;
+  sortDir: "asc" | "desc";
 }
 
 export const DEFAULT_FILTERS: Filters = {
@@ -20,6 +24,8 @@ export const DEFAULT_FILTERS: Filters = {
   tags: [],
   statuses: [],
   missingFlat: false,
+  sortKey: null,
+  sortDir: "asc",
 };
 
 export function useProductSearch(products: Product[] | undefined) {
@@ -31,7 +37,7 @@ export function useProductSearch(products: Product[] | undefined) {
   const filteredProducts = useMemo(() => {
     if (!products) return [];
 
-    return products.filter((product) => {
+    let result = products.filter((product) => {
       if (filters.search) {
         const q = filters.search.toLowerCase();
         const matchesSearch =
@@ -75,6 +81,18 @@ export function useProductSearch(products: Product[] | undefined) {
 
       return true;
     });
+
+    if (filters.sortKey) {
+      const key = filters.sortKey;
+      const dir = filters.sortDir === "asc" ? 1 : -1;
+      result = [...result].sort((a, b) => {
+        const va = a[key].toLowerCase();
+        const vb = b[key].toLowerCase();
+        return va < vb ? -dir : va > vb ? dir : 0;
+      });
+    }
+
+    return result;
   }, [products, filters]);
 
   const vendors = useMemo(() => {
@@ -99,6 +117,16 @@ export function useProductSearch(products: Product[] | undefined) {
     return [...new Set(products.map((p) => p.status))].filter(Boolean).sort();
   }, [products]);
 
+  const setSort = (key: SortKey) => {
+    setFilters((prev) => ({
+      ...prev,
+      sortKey: key,
+      sortDir: prev.sortKey === key && prev.sortDir === "asc" ? "desc" : "asc",
+    }));
+  };
+
+  const clearSort = () => setFilters((prev) => ({ ...prev, sortKey: null }));
+
   return {
     filters,
     setFilters,
@@ -107,5 +135,7 @@ export function useProductSearch(products: Product[] | undefined) {
     productTypes,
     tags,
     statuses,
+    setSort,
+    clearSort,
   };
 }

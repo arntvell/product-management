@@ -3,33 +3,43 @@ import { parseGidList } from "./utils";
 
 const LIVID_VENDORS = ["Livid Jeans", "Livid Unisex"];
 
+// Products matching these patterns are excluded from auto-grouping
+const EXCLUDE_FROM_GROUPING = /vintage|used|preloved/i;
+
+function isExcluded(product: Product): boolean {
+  return (
+    EXCLUDE_FROM_GROUPING.test(product.productType) ||
+    EXCLUDE_FROM_GROUPING.test(product.title) ||
+    product.tags.some((t) => EXCLUDE_FROM_GROUPING.test(t))
+  );
+}
+
 /**
  * Auto-detect product groups by finding products that share a base name
- * within the same vendor + product type.
+ * within the same vendor, using union-find so that transitively connected
+ * names (e.g. Boston Suede Taupe + Boston Suede Black + Boston Taupe) all
+ * land in the same group regardless of how specific each pairwise prefix is.
  *
- * Algorithm:
- * 1. Group products by (vendor, productType)
- * 2. Within each group, find the longest common prefix for subsets of titles
- * 3. Group products by their detected base name
- * 4. Filter out single-product groups
+ * Vintage / used goods are excluded entirely from grouping.
  */
 export function detectProductGroups(products: Product[]): ProductGroup[] {
-  // Filter out archived products before grouping
-  const activeProducts = products.filter((p) => p.status !== "ARCHIVED");
+  // Only group active (and draft) non-vintage products
+  const eligible = products.filter(
+    (p) => p.status !== "ARCHIVED" && !isExcluded(p)
+  );
 
-  // Step 1: Group by vendor + type
-  const vendorTypeGroups = new Map<string, Product[]>();
-  for (const product of activeProducts) {
-    const key = `${product.vendor}|||${product.productType}`;
-    const group = vendorTypeGroups.get(key) || [];
+  // Group by vendor
+  const vendorGroups = new Map<string, Product[]>();
+  for (const product of eligible) {
+    const key = product.vendor;
+    const group = vendorGroups.get(key) ?? [];
     group.push(product);
-    vendorTypeGroups.set(key, group);
+    vendorGroups.set(key, group);
   }
 
   const allGroups: ProductGroup[] = [];
 
-  // Step 2: Within each vendor+type group, detect base names
-  for (const [, groupProducts] of vendorTypeGroups) {
+  for (const [, groupProducts] of vendorGroups) {
     if (groupProducts.length < 2) continue;
 
     const baseNameGroups = detectBaseNames(groupProducts);
@@ -38,7 +48,16 @@ export function detectProductGroups(products: Product[]): ProductGroup[] {
       if (members.length < 2) continue;
 
       const linkStatus = computeLinkStatus(members);
-      const groupId = `${members[0].vendor}--${members[0].productType}--${baseName}`
+
+      // Use most common productType for the group card label
+      const typeCounts = new Map<string, number>();
+      for (const m of members)
+        typeCounts.set(m.productType, (typeCounts.get(m.productType) ?? 0) + 1);
+      const productType = [...typeCounts.entries()].sort(
+        (a, b) => b[1] - a[1]
+      )[0][0];
+
+      const groupId = `${members[0].vendor}--${baseName}`
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, "-");
 
@@ -46,7 +65,7 @@ export function detectProductGroups(products: Product[]): ProductGroup[] {
         id: groupId,
         baseName,
         vendor: members[0].vendor,
-        productType: members[0].productType,
+        productType,
         members,
         linkStatus,
       });
@@ -57,58 +76,65 @@ export function detectProductGroups(products: Product[]): ProductGroup[] {
 }
 
 /**
- * For a set of products (same vendor+type), detect base names by finding
- * the longest common prefix between title pairs, then clustering.
+ * For a set of products (same vendor), detect base name groups using
+ * union-find so that transitively related products end up in the same group.
+ *
+ * Example: "Boston Suede Taupe" + "Boston Suede Black" + "Boston Taupe"
+ * - Pair 1-2 share "Boston Suede"
+ * - Pair 1-3 share "Boston"
+ * - All three end up in one group with base name "Boston"
  */
 function detectBaseNames(products: Product[]): Map<string, Product[]> {
-  const titles = products.map((p) => p.title);
-  const baseNames = new Map<string, Product[]>();
+  const n = products.length;
 
-  // For each pair, compute the word-level common prefix
-  // Then take the most frequent prefixes as base names
-  const prefixCounts = new Map<string, Set<number>>();
+  // Union-Find
+  const parent = Array.from({ length: n }, (_, i) => i);
+  function find(x: number): number {
+    if (parent[x] !== x) parent[x] = find(parent[x]);
+    return parent[x];
+  }
+  function union(x: number, y: number) {
+    parent[find(x)] = find(y);
+  }
 
-  for (let i = 0; i < titles.length; i++) {
-    for (let j = i + 1; j < titles.length; j++) {
-      const prefix = longestCommonWordPrefix(titles[i], titles[j]);
-      if (prefix.length > 0) {
-        const existing = prefixCounts.get(prefix) || new Set();
-        existing.add(i);
-        existing.add(j);
-        prefixCounts.set(prefix, existing);
-      }
+  // Add edge between any two products that share at least one common word prefix
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const prefix = longestCommonWordPrefix(
+        products[i].title,
+        products[j].title
+      );
+      if (prefix.length > 0) union(i, j);
     }
   }
 
-  // Sort prefixes by length (longest first) to prefer more specific groupings
-  const sortedPrefixes = [...prefixCounts.entries()].sort(
-    (a, b) => b[0].length - a[0].length
-  );
+  // Collect connected components
+  const components = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const root = find(i);
+    const group = components.get(root) ?? [];
+    group.push(i);
+    components.set(root, group);
+  }
 
-  const assigned = new Set<number>();
+  // Compute base name for each component = minimum pairwise common prefix
+  const baseNames = new Map<string, Product[]>();
+  for (const [, indices] of components) {
+    if (indices.length < 2) continue;
 
-  for (const [prefix, indices] of sortedPrefixes) {
-    // Only consider prefixes that match at least 2 unassigned products
-    const unassigned = [...indices].filter((i) => !assigned.has(i));
-    if (unassigned.length < 2) continue;
+    const members = indices.map((i) => products[i]);
 
-    // Also check for any other unassigned products that share this prefix
-    for (let i = 0; i < products.length; i++) {
-      if (!assigned.has(i) && products[i].title.startsWith(prefix)) {
-        // Check the suffix is a reasonable variant name (not empty after trimming)
-        const suffix = products[i].title.slice(prefix.length).trim();
-        if (suffix.length > 0) {
-          unassigned.push(i);
-        }
+    // Iteratively narrow down the base name to the shortest prefix
+    // shared across all members
+    let baseName = members[0].title;
+    for (const m of members.slice(1)) {
+      const p = longestCommonWordPrefix(baseName, m.title);
+      if (p.length > 0 && p.length < baseName.length) {
+        baseName = p;
       }
     }
-
-    const uniqueIndices = [...new Set(unassigned)];
-    if (uniqueIndices.length < 2) continue;
-
-    const members = uniqueIndices.map((i) => products[i]);
-    baseNames.set(prefix.trim(), members);
-    uniqueIndices.forEach((i) => assigned.add(i));
+    baseName = baseName.trim();
+    if (baseName) baseNames.set(baseName, members);
   }
 
   return baseNames;
@@ -116,7 +142,7 @@ function detectBaseNames(products: Product[]): Map<string, Product[]> {
 
 /**
  * Find the longest common prefix at word boundaries.
- * "Amber Japan Blue Scurry" + "Amber Japan Fog" → "Amber Japan"
+ * "Amber Japan Blue Scurry" + "Amber Japan Fog" → "Amber Japan "
  */
 function longestCommonWordPrefix(a: string, b: string): string {
   const wordsA = a.split(/\s+/);
@@ -131,7 +157,7 @@ function longestCommonWordPrefix(a: string, b: string): string {
     }
   }
 
-  // Don't return the prefix if it covers ALL words of both titles (they're identical)
+  // Don't return the prefix if it covers ALL words of both titles (identical)
   if (
     commonWords.length === wordsA.length &&
     commonWords.length === wordsB.length
@@ -139,7 +165,6 @@ function longestCommonWordPrefix(a: string, b: string): string {
     return "";
   }
 
-  // Need at least one common word, and the prefix shouldn't be just a generic word
   if (commonWords.length === 0) return "";
 
   return commonWords.join(" ") + " ";
@@ -174,14 +199,15 @@ function computeLinkStatus(
 
 /**
  * Auto-detect Livid product groups and suggest same_product links.
- * Filters to Livid vendors, runs grouping, returns a map of
- * productId -> suggested linked IDs (excluding already-linked).
  */
 export function detectLividAutoLinks(
   products: Product[]
 ): Map<string, string[]> {
   const lividProducts = products.filter(
-    (p) => LIVID_VENDORS.includes(p.vendor) && p.status !== "ARCHIVED"
+    (p) =>
+      LIVID_VENDORS.includes(p.vendor) &&
+      p.status !== "ARCHIVED" &&
+      !isExcluded(p)
   );
 
   const groups = detectProductGroups(lividProducts);

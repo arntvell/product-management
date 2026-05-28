@@ -92,6 +92,13 @@ export interface DirtyCell {
   value: string;
 }
 
+export interface DirtyProductProp {
+  productId: string;
+  tags?: string[];
+  status?: Product["status"];
+  vendor?: string;
+}
+
 export interface ProductGroup {
   id: string;
   baseName: string;

@@ -93,6 +93,23 @@ export const METAOBJECT_DELETE_MUTATION = `
   }
 `;
 
+export const PRODUCT_UPDATE_MUTATION = `
+  mutation ProductUpdate($input: ProductInput!) {
+    productUpdate(input: $input) {
+      product {
+        id
+        tags
+        status
+        vendor
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 export const STAGED_UPLOADS_CREATE_MUTATION = `
   mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
     stagedUploadsCreate(input: $input) {

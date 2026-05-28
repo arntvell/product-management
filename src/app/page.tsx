@@ -18,12 +18,13 @@ import { ProductTable } from "@/components/products/product-table";
 import { ProductFilters } from "@/components/products/product-filters";
 import { ColumnPicker } from "@/components/products/column-picker";
 import { FitguideAutoLink } from "@/components/products/fitguide-auto-link";
+import { FindReplaceDialog } from "@/components/products/find-replace-dialog";
 import { CarePicker } from "@/components/pickers/care-picker";
 import { FitguidePicker } from "@/components/pickers/fitguide-picker";
 import { CollectionPicker } from "@/components/pickers/collection-picker";
 import { ModelPicker } from "@/components/pickers/model-picker";
 import { Button } from "@/components/ui/button";
-import type { DirtyCell, MetafieldKey, Product } from "@/types";
+import type { DirtyCell, DirtyProductProp, MetafieldKey, Product } from "@/types";
 
 interface ActivePicker {
   product: Product;
@@ -41,6 +42,7 @@ export default function ProductsPage() {
     productTypes,
     tags,
     statuses,
+    setSort,
   } = useProductSearch(products);
   const { pages, carePages, fitguidePages } = usePages();
   const { collections } = useCollections();
@@ -49,39 +51,69 @@ export default function ProductsPage() {
     useColumnVisibility();
   const queryClient = useQueryClient();
   const mutation = useMetafieldMutation();
-  const [dirtyCells, setDirtyCells] = useState<Map<string, DirtyCell>>(
-    new Map()
-  );
-  const [saveProgress, setSaveProgress] = useState<{
-    completed: number;
-    total: number;
-  } | null>(null);
+  const [dirtyCells, setDirtyCells] = useState<Map<string, DirtyCell>>(new Map());
+  const [dirtyProductProps, setDirtyProductProps] = useState<Map<string, DirtyProductProp>>(new Map());
+  const [saveProgress, setSaveProgress] = useState<{ completed: number; total: number } | null>(null);
   const abortRef = useRef(false);
   const [activePicker, setActivePicker] = useState<ActivePicker | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+
+  const totalDirtyCount = dirtyCells.size + dirtyProductProps.size;
 
   // Warn before closing tab with unsaved changes
   useEffect(() => {
-    if (dirtyCells.size === 0) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
+    if (totalDirtyCount === 0) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [dirtyCells.size]);
+  }, [totalDirtyCount]);
 
   const handleCellChange = useCallback(
     (productId: string, field: MetafieldKey, value: string) => {
       setDirtyCells((prev) => {
         const next = new Map(prev);
         const key = `${productId}:${field}`;
-
-        // Check if value matches original
         const product = products?.find((p) => p.id === productId);
         if (product && product.metafields[field] === value) {
           next.delete(key);
         } else {
           next.set(key, { productId, field, value });
+        }
+        return next;
+      });
+    },
+    [products]
+  );
+
+  const handleProductPropChange = useCallback(
+    (productId: string, field: "tags" | "status" | "vendor", value: string | string[]) => {
+      setDirtyProductProps((prev) => {
+        const next = new Map(prev);
+        const existing = next.get(productId) ?? { productId };
+        const updated: DirtyProductProp = { ...existing, [field]: value };
+
+        // Remove if reverted to original
+        const product = products?.find((p) => p.id === productId);
+        if (product) {
+          if (updated.tags !== undefined) {
+            const orig = [...product.tags].sort().join(",");
+            const curr = [...updated.tags].sort().join(",");
+            if (orig === curr) delete updated.tags;
+          }
+          if (updated.status !== undefined && updated.status === product.status) {
+            delete updated.status;
+          }
+          if (updated.vendor !== undefined && updated.vendor === product.vendor) {
+            delete updated.vendor;
+          }
+        }
+
+        const hasChanges = updated.tags !== undefined || updated.status !== undefined || updated.vendor !== undefined;
+        if (hasChanges) {
+          next.set(productId, updated);
+        } else {
+          next.delete(productId);
         }
 
         return next;
@@ -90,76 +122,83 @@ export default function ProductsPage() {
     [products]
   );
 
+  const saveProductProps = useCallback(async (): Promise<string[]> => {
+    if (dirtyProductProps.size === 0) return [];
+
+    const updates = [...dirtyProductProps.values()].map((prop) => {
+      const u: Record<string, unknown> = { productId: prop.productId };
+      if (prop.tags !== undefined) u.tags = prop.tags;
+      if (prop.status !== undefined) u.status = prop.status;
+      if (prop.vendor !== undefined) u.vendor = prop.vendor;
+      return u;
+    });
+
+    const res = await fetch("/api/product-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }),
+    });
+
+    if (!res.ok) throw new Error(`Product update failed: ${res.statusText}`);
+    const data = await res.json();
+    return data.errors ?? [];
+  }, [dirtyProductProps]);
+
   const handleSaveAll = useCallback(async () => {
-    if (dirtyCells.size === 0) return;
+    if (totalDirtyCount === 0) return;
 
     const updates = dirtyCellsToUpdates(dirtyCells);
-    const total = updates.length;
-
-    if (total <= 1) {
-      try {
-        const result = await mutation.mutateAsync(updates);
-        if (result.success) {
-          queryClient.setQueryData<Product[]>(["products"], (old) =>
-            old ? applyDirtyCellsToProducts(old, dirtyCells) : old
-          );
-          setDirtyCells(new Map());
-          setTimeout(() => queryClient.invalidateQueries({ queryKey: ["products"] }), 3000);
-          toast.success(
-            `Saved ${dirtyCells.size} change${dirtyCells.size !== 1 ? "s" : ""}`
-          );
-        } else {
-          toast.error(`Some updates failed: ${result.errors.join(", ")}`);
-        }
-      } catch (err) {
-        toast.error(
-          `Failed to save: ${err instanceof Error ? err.message : "Unknown error"}`
-        );
-      }
-      return;
-    }
+    const total = updates.length + (dirtyProductProps.size > 0 ? 1 : 0);
 
     abortRef.current = false;
-    setSaveProgress({ completed: 0, total });
+    if (total > 1) setSaveProgress({ completed: 0, total });
+
     const errors: string[] = [];
 
+    // Save metafields
     for (let i = 0; i < updates.length; i++) {
       if (abortRef.current) break;
       try {
         const result = await mutation.mutateAsync([updates[i]]);
-        if (!result.success) {
-          errors.push(...result.errors);
-        }
+        if (!result.success) errors.push(...result.errors);
       } catch (err) {
-        errors.push(
-          err instanceof Error ? err.message : "Unknown error"
-        );
+        errors.push(err instanceof Error ? err.message : "Unknown error");
       }
-      setSaveProgress({ completed: i + 1, total });
+      if (total > 1) setSaveProgress({ completed: i + 1, total });
+    }
+
+    // Save product props (tags, status, vendor)
+    if (dirtyProductProps.size > 0 && !abortRef.current) {
+      try {
+        const propErrors = await saveProductProps();
+        errors.push(...propErrors);
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : "Unknown error");
+      }
+      if (total > 1) setSaveProgress({ completed: total, total });
     }
 
     setSaveProgress(null);
 
     if (errors.length === 0) {
+      // Apply metafield changes optimistically
       queryClient.setQueryData<Product[]>(["products"], (old) =>
         old ? applyDirtyCellsToProducts(old, dirtyCells) : old
       );
       setDirtyCells(new Map());
+      setDirtyProductProps(new Map());
+      // Refetch after short delay to get server-confirmed values
       setTimeout(() => queryClient.invalidateQueries({ queryKey: ["products"] }), 3000);
-      toast.success(
-        `Saved ${dirtyCells.size} change${dirtyCells.size !== 1 ? "s" : ""}`
-      );
+      toast.success(`Saved ${totalDirtyCount} change${totalDirtyCount !== 1 ? "s" : ""}`);
     } else {
       toast.error(`Some updates failed: ${errors.join(", ")}`);
     }
-  }, [dirtyCells, mutation, queryClient]);
+  }, [dirtyCells, dirtyProductProps, totalDirtyCount, mutation, queryClient, saveProductProps]);
 
   const handlePickerSelect = useCallback(
     (id: string) => {
       if (!activePicker) return;
-
       if (activePicker.pickerType === "metaobject") {
-        // Generate formatted text from model data
         const model = models.find((m) => m.id === id);
         if (model) {
           const text = `Model is ${model.fields.height} tall and wearing a size ${model.fields.size_worn}`;
@@ -168,7 +207,6 @@ export default function ProductsPage() {
       } else {
         handleCellChange(activePicker.product.id, activePicker.field, id);
       }
-
       setActivePicker(null);
     },
     [activePicker, handleCellChange, models]
@@ -187,6 +225,18 @@ export default function ProductsPage() {
       }
       toast.success(
         `Linked ${updates.length} product${updates.length !== 1 ? "s" : ""} to fitguides — save to apply`
+      );
+    },
+    [handleCellChange]
+  );
+
+  const handleFindReplaceApply = useCallback(
+    (replacements: Array<{ productId: string; field: MetafieldKey; value: string }>) => {
+      for (const r of replacements) {
+        handleCellChange(r.productId, r.field, r.value);
+      }
+      toast.success(
+        `Applied ${replacements.length} replacement${replacements.length !== 1 ? "s" : ""} — save to commit`
       );
     },
     [handleCellChange]
@@ -241,6 +291,13 @@ export default function ProductsPage() {
         filteredCount={filteredProducts.length}
         actions={
           <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFindReplaceOpen(true)}
+            >
+              Find & Replace
+            </Button>
             <FitguideAutoLink
               products={products || []}
               selectedIds={selectedIds}
@@ -260,10 +317,12 @@ export default function ProductsPage() {
         products={filteredProducts}
         allProducts={products || []}
         dirtyCells={dirtyCells}
+        dirtyProductProps={dirtyProductProps}
         onCellChange={handleCellChange}
+        onProductPropChange={handleProductPropChange}
         onSaveAll={handleSaveAll}
         isSaving={mutation.isPending}
-        dirtyCount={dirtyCells.size}
+        dirtyCount={totalDirtyCount}
         saveProgress={saveProgress}
         pages={pages}
         carePages={carePages}
@@ -274,6 +333,11 @@ export default function ProductsPage() {
         visibleColumns={visibleColumns}
         selectedIds={selectedIds}
         onSelectedIdsChange={setSelectedIds}
+        sortKey={filters.sortKey}
+        sortDir={filters.sortDir}
+        onSort={setSort}
+        allTags={tags}
+        allVendors={vendors}
       />
 
       {/* Care Picker */}
@@ -332,6 +396,15 @@ export default function ProductsPage() {
         }
         onSelect={handlePickerSelect}
         onClear={handlePickerClear}
+      />
+
+      {/* Find & Replace */}
+      <FindReplaceDialog
+        open={findReplaceOpen}
+        onOpenChange={setFindReplaceOpen}
+        products={products || []}
+        dirtyCells={dirtyCells}
+        onApply={handleFindReplaceApply}
       />
     </div>
   );

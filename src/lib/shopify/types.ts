@@ -218,6 +218,13 @@ export interface MetafieldsDeleteResult {
   };
 }
 
+export interface ProductUpdateResult {
+  productUpdate: {
+    product: { id: string; tags: string[]; status: string; vendor: string } | null;
+    userErrors: Array<{ field: string[]; message: string }>;
+  };
+}
+
 export interface MetafieldsSetResult {
   metafieldsSet: {
     metafields: Array<{

@@ -13,25 +13,37 @@ interface GroupListProps {
   isLinking: boolean;
 }
 
-const LINK_STATUS_OPTIONS = ["linked", "partially_linked", "not_linked"];
+const LINK_STATUS_OPTIONS = [
+  { value: "linked", label: "Linked" },
+  { value: "partially_linked", label: "Partially Linked" },
+  { value: "not_linked", label: "Not Linked" },
+];
 
 export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
   const [groupFilters, setGroupFilters] = usePersistedState(
-    "metafield-manager:group-filters",
-    { search: "", vendorFilter: [] as string[], typeFilter: [] as string[], tagFilter: [] as string[], statusFilter: [] as string[] }
+    "metafield-manager:group-filters-v2",
+    {
+      search: "",
+      vendorFilter: [] as string[],
+      typeFilter: [] as string[],
+      tagFilter: [] as string[],
+      linkStatusFilter: [] as string[],
+    }
   );
 
-  const search = groupFilters.search;
-  const vendorFilter = groupFilters.vendorFilter;
-  const typeFilter = groupFilters.typeFilter;
-  const tagFilter = groupFilters.tagFilter;
-  const statusFilter = groupFilters.statusFilter;
+  const { search, vendorFilter, typeFilter, tagFilter, linkStatusFilter } =
+    groupFilters;
 
-  const setSearch = (v: string) => setGroupFilters((prev) => ({ ...prev, search: v }));
-  const setVendorFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, vendorFilter: v }));
-  const setTypeFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, typeFilter: v }));
-  const setTagFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, tagFilter: v }));
-  const setStatusFilter = (v: string[]) => setGroupFilters((prev) => ({ ...prev, statusFilter: v }));
+  const setSearch = (v: string) =>
+    setGroupFilters((prev) => ({ ...prev, search: v }));
+  const setVendorFilter = (v: string[]) =>
+    setGroupFilters((prev) => ({ ...prev, vendorFilter: v }));
+  const setTypeFilter = (v: string[]) =>
+    setGroupFilters((prev) => ({ ...prev, typeFilter: v }));
+  const setTagFilter = (v: string[]) =>
+    setGroupFilters((prev) => ({ ...prev, tagFilter: v }));
+  const setLinkStatusFilter = (v: string[]) =>
+    setGroupFilters((prev) => ({ ...prev, linkStatusFilter: v }));
 
   const vendors = useMemo(
     () => [...new Set(groups.map((g) => g.vendor))].filter(Boolean).sort(),
@@ -39,7 +51,8 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
   );
 
   const productTypes = useMemo(
-    () => [...new Set(groups.map((g) => g.productType))].filter(Boolean).sort(),
+    () =>
+      [...new Set(groups.map((g) => g.productType))].filter(Boolean).sort(),
     [groups]
   );
 
@@ -51,36 +64,44 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
     [groups]
   );
 
-  const filtered = groups.filter((group) => {
-    if (search) {
-      const q = search.toLowerCase();
-      if (
-        !group.baseName.toLowerCase().includes(q) &&
-        !group.vendor.toLowerCase().includes(q)
-      ) {
-        return false;
-      }
-    }
-    if (vendorFilter.length > 0 && !vendorFilter.includes(group.vendor)) {
-      return false;
-    }
-    if (typeFilter.length > 0 && !typeFilter.includes(group.productType)) {
-      return false;
-    }
-    if (
-      tagFilter.length > 0 &&
-      !group.members.some((m) => m.tags.some((t) => tagFilter.includes(t)))
-    ) {
-      return false;
-    }
-    if (
-      statusFilter.length > 0 &&
-      !statusFilter.includes(group.linkStatus)
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filtered = useMemo(
+    () =>
+      groups.filter((group) => {
+        if (search) {
+          const q = search.toLowerCase();
+          if (
+            !group.baseName.toLowerCase().includes(q) &&
+            !group.vendor.toLowerCase().includes(q) &&
+            !group.members.some((m) => m.title.toLowerCase().includes(q))
+          ) {
+            return false;
+          }
+        }
+        if (vendorFilter.length > 0 && !vendorFilter.includes(group.vendor)) {
+          return false;
+        }
+        if (
+          typeFilter.length > 0 &&
+          !typeFilter.some((t) => group.members.some((m) => m.productType === t))
+        ) {
+          return false;
+        }
+        if (
+          tagFilter.length > 0 &&
+          !group.members.some((m) => m.tags.some((t) => tagFilter.includes(t)))
+        ) {
+          return false;
+        }
+        if (
+          linkStatusFilter.length > 0 &&
+          !linkStatusFilter.includes(group.linkStatus)
+        ) {
+          return false;
+        }
+        return true;
+      }),
+    [groups, search, vendorFilter, typeFilter, tagFilter, linkStatusFilter]
+  );
 
   return (
     <div className="space-y-4">
@@ -110,10 +131,18 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
           placeholder="All Tags"
         />
         <MultiSelect
-          options={LINK_STATUS_OPTIONS}
-          selected={statusFilter}
-          onChange={setStatusFilter}
-          placeholder="All Statuses"
+          options={LINK_STATUS_OPTIONS.map((o) => o.label)}
+          selected={linkStatusFilter.map(
+            (v) => LINK_STATUS_OPTIONS.find((o) => o.value === v)?.label ?? v
+          )}
+          onChange={(labels) =>
+            setLinkStatusFilter(
+              labels.map(
+                (l) => LINK_STATUS_OPTIONS.find((o) => o.label === l)?.value ?? l
+              )
+            )
+          }
+          placeholder="Link Status"
         />
         <span className="text-sm text-muted-foreground ml-auto">
           {filtered.length} group{filtered.length !== 1 ? "s" : ""}
