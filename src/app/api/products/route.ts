@@ -39,6 +39,7 @@ export async function GET() {
           women_images: "",
           style_tagline: "",
           style_name: "",
+          color_hex: "",
         };
 
         for (const mfEdge of node.metafields.edges) {

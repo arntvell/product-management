@@ -28,6 +28,7 @@ export interface ProductMetafields {
   women_images: string; // JSON array of file GIDs
   style_tagline: string;
   style_name: string;
+  color_hex: string;
 }
 
 export type MetafieldKey = keyof ProductMetafields;

@@ -121,6 +121,13 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     minWidth: 140,
     defaultVisible: false,
   },
+  {
+    key: "color_hex",
+    label: "Color Hex",
+    renderType: "text",
+    minWidth: 120,
+    defaultVisible: false,
+  },
 ];
 
 export const DEFAULT_VISIBLE_KEYS = new Set(

@@ -117,6 +117,13 @@ export const METAFIELD_DEFINITIONS: MetafieldDefinition[] = [
     type: "single_line_text_field",
     description: "Style name for the product",
   },
+  {
+    key: "color_hex",
+    namespace: METAFIELD_NAMESPACE,
+    label: "Color Hex",
+    type: "single_line_text_field",
+    description: "Hex color code for the product color",
+  },
 ];
 
 export const METAFIELD_KEYS = METAFIELD_DEFINITIONS.map((d) => d.key);
