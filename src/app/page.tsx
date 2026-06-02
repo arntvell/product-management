@@ -23,8 +23,10 @@ import { CarePicker } from "@/components/pickers/care-picker";
 import { FitguidePicker } from "@/components/pickers/fitguide-picker";
 import { CollectionPicker } from "@/components/pickers/collection-picker";
 import { ModelPicker } from "@/components/pickers/model-picker";
+import { PricesTable } from "@/components/prices/prices-table";
 import { Button } from "@/components/ui/button";
-import type { DirtyCell, DirtyProductProp, MetafieldKey, Product } from "@/types";
+import { cn } from "@/lib/utils";
+import type { DirtyCell, DirtyProductProp, DirtyPrice, MetafieldKey, Product } from "@/types";
 
 interface ActivePicker {
   product: Product;
@@ -58,8 +60,11 @@ export default function ProductsPage() {
   const [activePicker, setActivePicker] = useState<ActivePicker | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"metafields" | "prices">("metafields");
+  const [dirtyPrices, setDirtyPrices] = useState<Map<string, DirtyPrice>>(new Map());
+  const [isSavingPrices, setIsSavingPrices] = useState(false);
 
-  const totalDirtyCount = dirtyCells.size + dirtyProductProps.size;
+  const totalDirtyCount = dirtyCells.size + dirtyProductProps.size + dirtyPrices.size;
 
   // Warn before closing tab with unsaved changes
   useEffect(() => {
@@ -230,6 +235,60 @@ export default function ProductsPage() {
     [handleCellChange]
   );
 
+  const handlePriceChange = useCallback(
+    (productId: string, price: string, compareAtPrice: string) => {
+      setDirtyPrices((prev) => {
+        const next = new Map(prev);
+        const product = products?.find((p) => p.id === productId);
+        const origPrice = product?.variants[0]?.price ?? "";
+        const origCompare = product?.variants[0]?.compareAtPrice ?? "";
+        if (price === origPrice && compareAtPrice === origCompare) {
+          next.delete(productId);
+        } else {
+          next.set(productId, { productId, price, compareAtPrice });
+        }
+        return next;
+      });
+    },
+    [products]
+  );
+
+  const handleSavePrices = useCallback(async () => {
+    if (dirtyPrices.size === 0) return;
+    setIsSavingPrices(true);
+
+    const updates = [...dirtyPrices.values()].map((dp) => {
+      const product = products!.find((p) => p.id === dp.productId)!;
+      return {
+        productId: dp.productId,
+        variantIds: product.variants.map((v) => v.id),
+        price: dp.price,
+        compareAtPrice: dp.compareAtPrice || null,
+      };
+    });
+
+    try {
+      const res = await fetch("/api/prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ updates }),
+      });
+      if (!res.ok) throw new Error(`Price update failed: ${res.statusText}`);
+      const data = await res.json();
+      if (data.errors?.length > 0) {
+        toast.error(`Some updates failed: ${data.errors.join(", ")}`);
+      } else {
+        setDirtyPrices(new Map());
+        setTimeout(() => queryClient.invalidateQueries({ queryKey: ["products"] }), 1000);
+        toast.success(`Saved prices for ${updates.length} product${updates.length !== 1 ? "s" : ""}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setIsSavingPrices(false);
+    }
+  }, [dirtyPrices, products, queryClient]);
+
   const handleFindReplaceApply = useCallback(
     (replacements: Array<{ productId: string; field: MetafieldKey; value: string }>) => {
       for (const r of replacements) {
@@ -280,6 +339,24 @@ export default function ProductsPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-56px)]">
+      {/* Tab bar */}
+      <div className="flex border-b px-4 shrink-0 bg-background">
+        {(["metafields", "prices"] as const).map((tab) => (
+          <button
+            key={tab}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px capitalize transition-colors",
+              activeTab === tab
+                ? "border-foreground text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab === "metafields" ? "Metafields" : "Prices"}
+          </button>
+        ))}
+      </div>
+
       <ProductFilters
         filters={filters}
         onFiltersChange={setFilters}
@@ -290,55 +367,68 @@ export default function ProductsPage() {
         totalCount={products?.length || 0}
         filteredCount={filteredProducts.length}
         actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setFindReplaceOpen(true)}
-            >
-              Find & Replace
-            </Button>
-            <FitguideAutoLink
-              products={products || []}
-              selectedIds={selectedIds}
-              fitguidePages={fitguidePages}
-              onApply={handleAutoLinkFitguides}
-            />
-            <ColumnPicker
-              visibleKeys={visibleKeys}
-              onToggle={toggleColumn}
-              onReset={resetToDefaults}
-              onShowAll={showAll}
-            />
-          </>
+          activeTab === "metafields" ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFindReplaceOpen(true)}
+              >
+                Find & Replace
+              </Button>
+              <FitguideAutoLink
+                products={products || []}
+                selectedIds={selectedIds}
+                fitguidePages={fitguidePages}
+                onApply={handleAutoLinkFitguides}
+              />
+              <ColumnPicker
+                visibleKeys={visibleKeys}
+                onToggle={toggleColumn}
+                onReset={resetToDefaults}
+                onShowAll={showAll}
+              />
+            </>
+          ) : null
         }
       />
-      <ProductTable
-        products={filteredProducts}
-        allProducts={products || []}
-        dirtyCells={dirtyCells}
-        dirtyProductProps={dirtyProductProps}
-        onCellChange={handleCellChange}
-        onProductPropChange={handleProductPropChange}
-        onSaveAll={handleSaveAll}
-        isSaving={mutation.isPending}
-        dirtyCount={totalDirtyCount}
-        saveProgress={saveProgress}
-        pages={pages}
-        carePages={carePages}
-        fitguidePages={fitguidePages}
-        collections={collections}
-        models={models}
-        onOpenPicker={setActivePicker}
-        visibleColumns={visibleColumns}
-        selectedIds={selectedIds}
-        onSelectedIdsChange={setSelectedIds}
-        sortKey={filters.sortKey}
-        sortDir={filters.sortDir}
-        onSort={setSort}
-        allTags={tags}
-        allVendors={vendors}
-      />
+
+      {activeTab === "metafields" ? (
+        <ProductTable
+          products={filteredProducts}
+          allProducts={products || []}
+          dirtyCells={dirtyCells}
+          dirtyProductProps={dirtyProductProps}
+          onCellChange={handleCellChange}
+          onProductPropChange={handleProductPropChange}
+          onSaveAll={handleSaveAll}
+          isSaving={mutation.isPending}
+          dirtyCount={totalDirtyCount}
+          saveProgress={saveProgress}
+          pages={pages}
+          carePages={carePages}
+          fitguidePages={fitguidePages}
+          collections={collections}
+          models={models}
+          onOpenPicker={setActivePicker}
+          visibleColumns={visibleColumns}
+          selectedIds={selectedIds}
+          onSelectedIdsChange={setSelectedIds}
+          sortKey={filters.sortKey}
+          sortDir={filters.sortDir}
+          onSort={setSort}
+          allTags={tags}
+          allVendors={vendors}
+        />
+      ) : (
+        <PricesTable
+          products={filteredProducts}
+          dirtyPrices={dirtyPrices}
+          onPriceChange={handlePriceChange}
+          onSave={handleSavePrices}
+          isSaving={isSavingPrices}
+        />
+      )}
 
       {/* Care Picker */}
       <CarePicker

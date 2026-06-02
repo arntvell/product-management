@@ -3,7 +3,7 @@ import { shopifyGraphQL } from "@/lib/shopify/client";
 import { PRODUCTS_QUERY } from "@/lib/shopify/queries";
 import { PRODUCTS_PER_PAGE, METAFIELD_DEFINITIONS } from "@/lib/constants";
 import type { ProductsQueryResult } from "@/lib/shopify/types";
-import type { Product, ProductMetafields } from "@/types";
+import type { Product, ProductMetafields, ProductVariant } from "@/types";
 
 export async function GET() {
   try {
@@ -42,6 +42,12 @@ export async function GET() {
           color_hex: "",
         };
 
+        const variants: ProductVariant[] = node.variants.edges.map((e) => ({
+          id: e.node.id,
+          price: e.node.price,
+          compareAtPrice: e.node.compareAtPrice ?? null,
+        }));
+
         for (const mfEdge of node.metafields.edges) {
           const mf = mfEdge.node;
           const def = METAFIELD_DEFINITIONS.find(
@@ -63,6 +69,7 @@ export async function GET() {
           featuredImage: node.featuredImage?.url || null,
           mediaCount: node.mediaCount?.count ?? 0,
           metafields,
+          variants,
         } satisfies Product;
       });
 

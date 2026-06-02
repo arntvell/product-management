@@ -28,6 +28,15 @@ export const PRODUCTS_QUERY = `
               }
             }
           }
+          variants(first: 100) {
+            edges {
+              node {
+                id
+                price
+                compareAtPrice
+              }
+            }
+          }
         }
         cursor
       }

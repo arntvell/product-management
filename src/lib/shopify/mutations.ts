@@ -110,6 +110,26 @@ export const PRODUCT_UPDATE_MUTATION = `
   }
 `;
 
+export const PRODUCT_VARIANTS_BULK_UPDATE_MUTATION = `
+  mutation ProductVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+      product {
+        id
+      }
+      productVariants {
+        id
+        price
+        compareAtPrice
+      }
+      userErrors {
+        field
+        message
+        code
+      }
+    }
+  }
+`;
+
 export const STAGED_UPLOADS_CREATE_MUTATION = `
   mutation StagedUploadsCreate($input: [StagedUploadInput!]!) {
     stagedUploadsCreate(input: $input) {

@@ -57,6 +57,15 @@ export interface ProductsQueryResult {
             };
           }>;
         };
+        variants: {
+          edges: Array<{
+            node: {
+              id: string;
+              price: string;
+              compareAtPrice: string | null;
+            };
+          }>;
+        };
       };
       cursor: string;
     }>;
@@ -64,6 +73,18 @@ export interface ProductsQueryResult {
       hasNextPage: boolean;
       endCursor: string | null;
     };
+  };
+}
+
+export interface ProductVariantsBulkUpdateResult {
+  productVariantsBulkUpdate: {
+    product: { id: string } | null;
+    productVariants: Array<{
+      id: string;
+      price: string;
+      compareAtPrice: string | null;
+    }> | null;
+    userErrors: Array<{ field: string[]; message: string; code: string }>;
   };
 }
 

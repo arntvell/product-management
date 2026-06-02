@@ -1,3 +1,9 @@
+export interface ProductVariant {
+  id: string;
+  price: string;
+  compareAtPrice: string | null;
+}
+
 export interface Product {
   id: string; // Shopify GID
   title: string;
@@ -9,6 +15,7 @@ export interface Product {
   featuredImage: string | null;
   mediaCount: number;
   metafields: ProductMetafields;
+  variants: ProductVariant[];
 }
 
 export interface ProductMetafields {
@@ -94,6 +101,12 @@ export interface DirtyCell {
   productId: string;
   field: MetafieldKey;
   value: string;
+}
+
+export interface DirtyPrice {
+  productId: string;
+  price: string;
+  compareAtPrice: string;
 }
 
 export interface DirtyProductProp {
