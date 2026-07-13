@@ -79,7 +79,12 @@ export default async function StyleDetailPage({
                       title={cw.swatchHex}
                     />
                   )}
-                  <span className="font-medium">{cw.name}</span>
+                  <Link
+                    href={`/catalog/colorways/${cw.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {cw.name}
+                  </Link>
                   {entry?.cancelled && (
                     <Badge className="border-destructive/40 text-destructive">
                       Dropped

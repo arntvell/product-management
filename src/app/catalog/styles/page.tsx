@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listStyles } from "@/lib/master/queries";
+import { listStyles, listSeasons } from "@/lib/master/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -7,8 +7,18 @@ function tfImage(ref: string | null): string | null {
   return ref ? `/api/catalog/tf-image?ref=${encodeURIComponent(ref)}` : null;
 }
 
-export default async function StylesPage() {
-  const styles = await listStyles();
+export default async function StylesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string }>;
+}) {
+  const { season } = await searchParams;
+  const [styles, seasons] = await Promise.all([
+    listStyles(season),
+    listSeasons(),
+  ]);
+
+  const filters = [{ code: undefined, label: "All seasons" }, ...seasons.map((s) => ({ code: s.code, label: s.code }))];
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
@@ -25,6 +35,26 @@ export default async function StylesPage() {
         <span className="text-sm text-muted-foreground tabular-nums">
           {styles.length} styles
         </span>
+      </div>
+
+      {/* Season filter */}
+      <div className="mt-5 flex flex-wrap gap-1.5">
+        {filters.map((f) => {
+          const active = season === f.code || (!season && f.code === undefined);
+          return (
+            <Link
+              key={f.label}
+              href={f.code ? `/catalog/styles?season=${f.code}` : "/catalog/styles"}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                active
+                  ? "border-foreground bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {f.label}
+            </Link>
+          );
+        })}
       </div>
 
       {styles.length === 0 ? (
