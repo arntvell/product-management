@@ -6,6 +6,7 @@ import {
 } from "@/components/catalog/colorway-editor";
 import {
   CHANNELS,
+  OVERRIDE_FIELD_KEYS,
   SPLIT_FIELD_KEYS,
   type ChannelKey,
   type ProductStatusValue,
@@ -33,10 +34,9 @@ export default async function ColorwayEditPage({
   for (const row of cw.channelContent) {
     if (
       (CHANNELS as readonly string[]).includes(row.channel) &&
-      (SPLIT_FIELD_KEYS as readonly string[]).includes(row.field)
+      (OVERRIDE_FIELD_KEYS as readonly string[]).includes(row.field)
     ) {
-      initialOverrides[row.channel as ChannelKey][row.field as SplitFieldKey] =
-        row.value;
+      initialOverrides[row.channel as ChannelKey][row.field] = row.value;
     }
   }
 

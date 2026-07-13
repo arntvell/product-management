@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import {
   CHANNELS,
+  OVERRIDE_FIELD_KEYS,
   SPLIT_FIELD_KEYS,
   type ChannelKey,
   type ProductStatusValue,
@@ -19,7 +20,8 @@ export interface UpdateColorwayInput {
     productType: string | null;
   };
   base: Partial<Record<SplitFieldKey, string | null>>;
-  overrides: Partial<Record<ChannelKey, Partial<Record<SplitFieldKey, string | null>>>>;
+  // Override keys include the text fields plus "tags" (comma-joined string).
+  overrides: Partial<Record<ChannelKey, Record<string, string | null>>>;
 }
 
 function norm(v: string | null | undefined): string | null {
@@ -202,10 +204,10 @@ export async function updateColorway(
     })
   );
 
-  // 2. Per-channel content overrides.
+  // 2. Per-channel content overrides (text fields + tags).
   for (const channel of CHANNELS) {
     const chOverrides = input.overrides[channel] ?? {};
-    for (const field of SPLIT_FIELD_KEYS) {
+    for (const field of OVERRIDE_FIELD_KEYS) {
       const value = norm(chOverrides[field]);
       if (value !== null) {
         ops.push(

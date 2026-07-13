@@ -24,7 +24,7 @@ interface ColDef {
 
 const COLUMNS: ColDef[] = [
   { key: "status", label: "Status", width: 104, kind: "status", split: false },
-  { key: "tags", label: "Tags", width: 160, kind: "tags", split: false },
+  { key: "tags", label: "Tags", width: 160, kind: "tags", split: true },
   { key: "vendor", label: "Vendor", width: 118, kind: "text", split: false },
   { key: "productType", label: "Type", width: 104, kind: "text", split: false },
   { key: "shortDescription", label: "Short desc", width: 200, kind: "text", split: true },
