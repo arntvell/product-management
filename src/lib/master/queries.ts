@@ -8,12 +8,18 @@ export interface SeasonOption {
 }
 
 export async function listBrands(): Promise<
-  { id: string; name: string; isLivid: boolean }[]
+  { id: string; name: string; isLivid: boolean; hasTemplate: boolean }[]
 > {
-  return prisma.brand.findMany({
+  const brands = await prisma.brand.findMany({
     orderBy: { name: "asc" },
-    select: { id: true, name: true, isLivid: true },
+    select: { id: true, name: true, isLivid: true, template: { select: { id: true } } },
   });
+  return brands.map((b) => ({
+    id: b.id,
+    name: b.name,
+    isLivid: b.isLivid,
+    hasTemplate: b.template !== null,
+  }));
 }
 
 export async function listManufacturers(): Promise<
@@ -23,6 +29,24 @@ export async function listManufacturers(): Promise<
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   });
+}
+
+export async function getBrandTemplate(brandId: string) {
+  const t = await prisma.brandTemplate.findUnique({ where: { brandId } });
+  if (!t) return null;
+  return {
+    category: t.category ?? "",
+    gender: t.gender ?? "",
+    unisex: t.unisex,
+    channels: t.channels as string[],
+    hsCode: t.hsCode ?? "",
+    customsDescription: t.customsDescription ?? "",
+    weightKg: t.weightKg?.toString() ?? "",
+    fiberComposition: t.fiberComposition ?? "",
+    countryOfOrigin: t.countryOfOrigin ?? "",
+    manufacturerId: t.manufacturerId ?? "",
+    sizes: t.sizes,
+  };
 }
 
 export async function listSeasons(): Promise<SeasonOption[]> {

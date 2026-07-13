@@ -18,19 +18,20 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model Brand {
-  id        String     @id @default(cuid())
-  name      String     @unique // "Livid", external brand names
-  isLivid   Boolean    @default(false)
+  id        String         @id @default(cuid())
+  name      String         @unique // "Livid", external brand names
+  isLivid   Boolean        @default(false)
   gender    String? // default gender for the brand's styles
   styles    Style[]
   colorways Colorway[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  template  BrandTemplate?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 }
 
 model Manufacturer {
-  id           String     @id @default(cuid())
-  threadflowId String?    @unique // Threadflow manufacturer_id (stable external key)
+  id           String          @id @default(cuid())
+  threadflowId String?         @unique // Threadflow manufacturer_id (stable external key)
   name         String
   addrLine1    String?
   addrLine2    String?
@@ -38,8 +39,32 @@ model Manufacturer {
   city         String?
   country      String?
   colorways    Colorway[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  templates    BrandTemplate[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+// Defaults for creating new products under a brand (plan §6). External brands
+// (footwear, accessories, scents, home…) reuse a saved template so only the
+// per-product bits are entered; customs defaults here flow to Loom.
+model BrandTemplate {
+  id                 String        @id @default(cuid())
+  brandId            String        @unique
+  brand              Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category           String?
+  gender             String?
+  unisex             Boolean       @default(false)
+  channels           Channel[]     @default([])
+  hsCode             String?
+  customsDescription String?
+  weightKg           Decimal?      @db.Decimal(8, 3)
+  fiberComposition   String?
+  countryOfOrigin    String?
+  manufacturerId     String?
+  manufacturer       Manufacturer? @relation(fields: [manufacturerId], references: [id])
+  sizes              String[]      @default([]) // default size set, e.g. XS,S,M,L,XL or 39-45
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 }
 
 model Season {

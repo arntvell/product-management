@@ -1,5 +1,5 @@
 import { listBrands, listManufacturers } from "@/lib/master/queries";
-import { NewProductForm } from "@/components/catalog/new-product-form";
+import { BrandProductBuilder } from "@/components/catalog/brand-product-builder";
 
 export const dynamic = "force-dynamic";
 
@@ -8,5 +8,5 @@ export default async function NewProductPage() {
     listBrands(),
     listManufacturers(),
   ]);
-  return <NewProductForm brands={brands} manufacturers={manufacturers} />;
+  return <BrandProductBuilder brands={brands} manufacturers={manufacturers} />;
 }
