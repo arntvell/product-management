@@ -39,6 +39,8 @@ export async function updateColorway(
       details: true,
       styleTagline: true,
       styleName: true,
+      vendor: true,
+      productType: true,
     },
   });
   if (!current) throw new Error("Colorway not found");
@@ -53,9 +55,15 @@ export async function updateColorway(
   };
 
   // Fields the user actually changed become MANUAL-owned (locked from sync).
-  const nowManual: SplitFieldKey[] = SPLIT_FIELD_KEYS.filter(
+  const nowManual: string[] = SPLIT_FIELD_KEYS.filter(
     (k) => base[k] !== (current[k] ?? null)
   );
+  // vendor / productType are Threadflow-derived, so lock them too when edited.
+  const newVendor = norm(input.props.vendor);
+  const newProductType = norm(input.props.productType);
+  if (newVendor !== (current.vendor ?? null)) nowManual.push("vendor");
+  if (newProductType !== (current.productType ?? null))
+    nowManual.push("productType");
 
   const ops: Promise<unknown>[] = [];
 

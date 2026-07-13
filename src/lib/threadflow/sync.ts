@@ -42,6 +42,15 @@ function hasValue(v: string | null | undefined): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+/** Livid vendor label derived from gender/unisex (Shopify-facing). */
+function deriveVendor(gender: string | null, unisex: boolean): string {
+  if (unisex) return "Livid Unisex";
+  const g = gender?.toLowerCase();
+  if (g === "women") return "Livid Femme";
+  if (g === "men") return "Livid Men";
+  return "Livid";
+}
+
 function deriveSize(dims: TFVariant["dimensions"]): {
   sizeLabel: string;
   dim1: string;
@@ -203,6 +212,22 @@ export async function syncSeason(
       existingEntries.map((e) => [e.colorwayId, e.id])
     );
 
+    // Manually-edited (locked) colorway fields — the sync must not clobber them
+    // (docs/product-master-architecture.md §5.3).
+    const existingColorwayIds = [...colorwayIdByTf.values()];
+    const ownerRows = await chunkedFind(existingColorwayIds, (ids) =>
+      prisma.fieldOwner.findMany({
+        where: { entityType: "colorway", entityId: { in: ids }, owner: "MANUAL" },
+        select: { entityId: true, field: true },
+      })
+    );
+    const ownedByColorway = new Map<string, Set<string>>();
+    for (const r of ownerRows) {
+      const set = ownedByColorway.get(r.entityId) ?? new Set<string>();
+      set.add(r.field);
+      ownedByColorway.set(r.entityId, set);
+    }
+
     // Resolve every id up front (existing or freshly minted).
     const resolveStyle = (tfId: string) =>
       styleIdByTf.get(tfId) ?? styleIdByTf.set(tfId, randomUUID()).get(tfId)!;
@@ -273,6 +298,9 @@ export async function syncSeason(
       }
       counts.styles++;
 
+      const styleVendor = deriveVendor(s.gender, s.unisex);
+      const styleProductType = s.category || null;
+
       for (const c of s.colorways) {
         buildColorway(c, {
           styleId,
@@ -280,6 +308,9 @@ export async function syncSeason(
           seasonId,
           manuIdMap,
           withImages,
+          styleVendor,
+          styleProductType,
+          ownedByColorway,
           wasNew: !colorwayIdByTf.has(c.colorway_id),
           colorwayId: resolveColorway(c.colorway_id),
           colorwayCreates,
@@ -381,6 +412,9 @@ interface ColorwayCtx {
   seasonId: string;
   manuIdMap: Map<string, string>;
   withImages: boolean;
+  styleVendor: string;
+  styleProductType: string | null;
+  ownedByColorway: Map<string, Set<string>>;
   wasNew: boolean;
   colorwayId: string;
   colorwayCreates: Prisma.ColorwayCreateManyInput[];
@@ -422,10 +456,23 @@ function buildColorway(c: TFColorway, ctx: ColorwayCtx): void {
       source: "THREADFLOW",
       threadflowId: c.colorway_id,
       ...base,
+      vendor: ctx.styleVendor,
+      productType: ctx.styleProductType,
     });
   } else {
+    // Respect manual edits: only refresh vendor/productType if not locked.
+    const owned = ctx.ownedByColorway.get(ctx.colorwayId);
     ctx.colorwayUpdates.push(
-      prisma.colorway.update({ where: { id: ctx.colorwayId }, data: base })
+      prisma.colorway.update({
+        where: { id: ctx.colorwayId },
+        data: {
+          ...base,
+          ...(owned?.has("vendor") ? {} : { vendor: ctx.styleVendor }),
+          ...(owned?.has("productType")
+            ? {}
+            : { productType: ctx.styleProductType }),
+        },
+      })
     );
   }
 
