@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateColorway, type UpdateColorwayInput } from "@/lib/master/edit";
+import { purgeColorwayBlobs } from "@/lib/master/media";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export async function DELETE(
     );
   }
 
+  await purgeColorwayBlobs([id]); // remove owned Blob objects before cascade
   await prisma.colorway.delete({ where: { id } }); // cascades children
   const remaining = await prisma.colorway.count({ where: { styleId: cw.styleId } });
   if (remaining === 0) await prisma.style.delete({ where: { id: cw.styleId } });

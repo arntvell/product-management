@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
+import { purgeColorwayBlobs } from "./media";
 
 const IMPORT_QUERY = `
   query ImportProducts($first: Int!, $after: String, $query: String) {
@@ -22,6 +23,7 @@ const IMPORT_QUERY = `
           status
           totalInventory
           featuredImage { url }
+          images(first: 20) { edges { node { url } } }
           metafields(first: 25, namespace: "${METAFIELD_NAMESPACE}") {
             edges { node { key value } }
           }
@@ -45,6 +47,7 @@ interface SPProduct {
   status: "ACTIVE" | "DRAFT" | "ARCHIVED";
   totalInventory: number | null;
   featuredImage: { url: string } | null;
+  images: { edges: { node: { url: string } }[] };
   metafields: { edges: { node: { key: string; value: string } }[] };
   variants: {
     edges: {
@@ -220,6 +223,7 @@ export async function runShopifyImport(
   const seasonVariantLinks: Array<{ seasonEntryId: string; variantId: string }> = [];
   const priceCreates: Array<Record<string, unknown>> = [];
   const imageCreates: Array<Record<string, unknown>> = [];
+  const mediaCreates: Array<Record<string, unknown>> = [];
   const pubCreates: Array<Record<string, unknown>> = [];
 
   const usedSkus = new Set(existing.skus);
@@ -302,6 +306,16 @@ export async function runShopifyImport(
         url: p.featuredImage.url,
       });
     }
+    // Full gallery as Shopify-referenced media (adopt-to-Blob on demand).
+    p.images.edges.forEach((e, idx) => {
+      if (e.node.url)
+        mediaCreates.push({
+          colorwayId,
+          url: e.node.url,
+          source: "SHOPIFY",
+          position: idx,
+        });
+    });
     pubCreates.push({
       colorwayId,
       channel: "SHOPIFY",
@@ -324,6 +338,8 @@ export async function runShopifyImport(
     await prisma.price.createMany({ data: priceCreates as never });
   if (imageCreates.length)
     await prisma.seasonImage.createMany({ data: imageCreates as never });
+  if (mediaCreates.length)
+    await prisma.mediaAsset.createMany({ data: mediaCreates as never });
   await prisma.channelPublication.createMany({ data: pubCreates as never });
 
   return {
@@ -364,6 +380,7 @@ export async function removeImportedVendors(
   if (colorways.length === 0) return { removed: 0 };
 
   const styleIds = [...new Set(colorways.map((c) => c.styleId))];
+  await purgeColorwayBlobs(colorways.map((c) => c.id)); // owned Blob objects
   await prisma.colorway.deleteMany({
     where: { id: { in: colorways.map((c) => c.id) } },
   }); // cascades variants, prices, images, publications, entries

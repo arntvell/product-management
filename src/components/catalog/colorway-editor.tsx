@@ -132,6 +132,12 @@ export function ColorwayEditor({
         <span className="font-mono text-sm text-muted-foreground">
           {header.colorwaySku}
         </span>
+        <a
+          href={`/catalog/colorways/${colorwayId}/media`}
+          className="text-sm font-medium underline underline-offset-4"
+        >
+          Manage media →
+        </a>
       </div>
 
       {/* Product properties (always base) */}

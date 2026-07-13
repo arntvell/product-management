@@ -250,12 +250,14 @@ model SeasonImage {
 }
 
 model MediaAsset {
-  id             String   @id @default(cuid())
+  id             String      @id @default(cuid())
   colorwayId     String
-  colorway       Colorway @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
-  url            String // object-storage URL after upload
+  colorway       Colorway    @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  url            String // Blob URL (owned) or external ref (Shopify CDN / Threadflow)
+  source         MediaSource @default(BLOB)
+  blobPathname   String? // set when owned in Blob, so we can delete the object
   alt            String?
-  mediaType      String   @default("IMAGE") // IMAGE | VIDEO | MODEL_3D
+  mediaType      String      @default("IMAGE") // IMAGE | VIDEO | MODEL_3D
   position       Int // sort order for reorder
   shopifyMediaId String? // GID once pushed to Shopify
 
@@ -352,4 +354,11 @@ enum ProductStatus {
   ACTIVE
   DRAFT
   ARCHIVED
+}
+
+enum MediaSource {
+  BLOB // owned in Vercel Blob
+  SHOPIFY // referenced from Shopify CDN
+  THREADFLOW // referenced via the Threadflow image proxy
+  EXTERNAL // any other absolute URL
 }
