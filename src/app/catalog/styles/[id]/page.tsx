@@ -1,12 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getStyleDetail, type StyleDetail } from "@/lib/master/queries";
+import { catalogImageSrc } from "@/lib/catalog-image";
 
 export const dynamic = "force-dynamic";
-
-function tfImage(ref: string | null | undefined): string | null {
-  return ref ? `/api/catalog/tf-image?ref=${encodeURIComponent(ref)}` : null;
-}
 
 type Colorway = StyleDetail["colorways"][number];
 
@@ -59,7 +56,7 @@ export default async function StyleDetailPage({
 
       <div className="mt-4 space-y-4">
         {style.colorways.map((cw) => {
-          const src = tfImage(cw.seasonImages[0]?.url);
+          const src = catalogImageSrc(cw.seasonImages[0]?.url);
           const prices = nokPrices(cw);
           const entry = cw.entries[0];
           return (

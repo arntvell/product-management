@@ -1,11 +1,8 @@
 import Link from "next/link";
 import { listStyles, listSeasons } from "@/lib/master/queries";
+import { catalogImageSrc } from "@/lib/catalog-image";
 
 export const dynamic = "force-dynamic";
-
-function tfImage(ref: string | null): string | null {
-  return ref ? `/api/catalog/tf-image?ref=${encodeURIComponent(ref)}` : null;
-}
 
 export default async function StylesPage({
   searchParams,
@@ -80,7 +77,7 @@ export default async function StylesPage({
             </thead>
             <tbody>
               {styles.map((s) => {
-                const src = tfImage(s.thumbnailRef);
+                const src = catalogImageSrc(s.thumbnailRef);
                 return (
                   <tr
                     key={s.id}

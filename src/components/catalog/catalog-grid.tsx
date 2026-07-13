@@ -11,6 +11,7 @@ import {
   CHANNEL_LABELS,
   PRODUCT_STATUSES,
 } from "@/lib/master/fields";
+import { catalogImageSrc } from "@/lib/catalog-image";
 import type { GridRow } from "@/lib/master/queries";
 import type { BulkChange, EditLayer } from "@/lib/master/edit";
 
@@ -275,10 +276,10 @@ export function CatalogGrid({
                     className="flex shrink-0 items-center gap-2 px-3"
                   >
                     <div className="h-6 w-6 shrink-0 overflow-hidden rounded bg-muted">
-                      {row.thumbnailRef && (
+                      {catalogImageSrc(row.thumbnailRef) && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={`/api/catalog/tf-image?ref=${encodeURIComponent(row.thumbnailRef)}`}
+                          src={catalogImageSrc(row.thumbnailRef)!}
                           alt=""
                           className="h-full w-full object-cover"
                         />

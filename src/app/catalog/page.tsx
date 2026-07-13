@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCatalogCounts, type CatalogCounts } from "@/lib/master/counts";
 import { SyncPanel } from "@/components/catalog/sync-panel";
+import { ImportPanel } from "@/components/catalog/import-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -110,9 +111,10 @@ export default async function CatalogPage() {
         </div>
       )}
 
-      {/* Sync control */}
-      <div className="mt-8">
+      {/* Sync + import controls */}
+      <div className="mt-8 space-y-4">
         <SyncPanel />
+        <ImportPanel />
       </div>
 
       <Link
