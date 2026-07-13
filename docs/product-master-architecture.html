@@ -309,6 +309,7 @@
     <nav>
       <ol>
         <li><a href="#tldr">Summary</a></li>
+        <li><a href="#progress">Build progress</a></li>
         <li><a href="#principles">Guiding principles</a></li>
         <li><a href="#topology">Where this sits</a></li>
         <li><a href="#coexist">Coexistence</a></li>
@@ -356,6 +357,22 @@
         <li><strong>Coexist</strong>: the current live-Shopify screens keep running untouched; the master is built alongside under a new nav section.</li>
         <li>Accept the <strong>one write-back</strong>: per-variant weighted-average cost from Loom &rarr; store &rarr; forward to Shopify.</li>
       </ol>
+    </section>
+
+    <section id="progress">
+      <div class="sec-head"><span class="sec-num">★</span><h2>Build progress</h2></div>
+      <p style="max-width:var(--measure)">Built on branch <code>phase-0-product-master</code> (local commits, not pushed). SS27 synced: <strong>171 styles · 532 colorways · 4,451 variants</strong>. Updated 2026-07-13.</p>
+      <div class="phases" style="max-width:780px">
+        <div class="phase"><span class="phase-tag" style="color:var(--ok);background:color-mix(in srgb, var(--ok) 12%, transparent)">Done · 0</span><div><h4>Foundations</h4><p>Postgres + Prisma 7 (Vercel Postgres/Neon, driver adapter), full schema, migrations, Catalog shell.</p></div></div>
+        <div class="phase"><span class="phase-tag" style="color:var(--ok);background:color-mix(in srgb, var(--ok) 12%, transparent)">Done · 1</span><div><h4>Threadflow ingestion</h4><p>Typed client, bulk idempotent sync (barcode set-once, don't-clobber customs, dropped→cancelled, all currencies, images), manual trigger, browse + season filter, image proxy.</p></div></div>
+        <div class="phase"><span class="phase-tag" style="color:var(--ok);background:color-mix(in srgb, var(--ok) 12%, transparent)">Done · 2</span><div><h4>Enrichment &amp; external products</h4><p>Colorway editor (all metafields, <strong>channel-split content incl. tags</strong>, field ownership, vendor/type from Threadflow) · <strong>bulk grid editor</strong> (virtualized, fill-down) · <strong>brand-template product builder</strong> · <strong>Shopify carry-over importer</strong> (vendor-scoped, dry-run, archived + sold-out-sale exclusions, removal) · <strong>media manager</strong> on Vercel Blob (upload, reorder, adopt-to-Blob).</p></div></div>
+        <div class="phase"><span class="phase-tag" style="color:var(--warn);background:color-mix(in srgb, var(--warn) 13%, transparent)">In progress · 3</span><div><h4>Channels + Shopify push</h4><p>Channel targeting, Publishing overview, and a <strong>Shopify dry-run preview</strong> are built. <strong>The live Shopify write is intentionally not wired yet</strong> — to be done together.</p></div></div>
+        <div class="phase later"><span class="phase-tag">Next · 4–7</span><div><h4>Loom push · Pricing &amp; cost write-back · Scheduling · Retire legacy plumbing</h4><p>Not started.</p></div></div>
+      </div>
+      <div class="call gap">
+        <span class="tag">Known follow-ups</span>
+        <p>Reference pickers (care/fitguide/collection/model — deferred, Shopify-GID-based) · Livid HS-code/customs-description/weight empty from Threadflow (source-side Customs Defaults gap) · mixed row-id scheme (cuid vs uuid, harmless) · <code>SeasonImage</code>↔<code>MediaAsset</code> not yet unified.</p>
+      </div>
     </section>
 
     <section id="principles">

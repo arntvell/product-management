@@ -21,6 +21,25 @@
 
 ---
 
+## Build progress (updated 2026-07-13)
+
+Built on branch `phase-0-product-master` (local commits, not pushed). SS27 synced: 171 styles / 532 colorways / 4,451 variants.
+
+- ✅ **Phase 0 — Foundations.** Postgres + Prisma 7 (Vercel Postgres/Neon, driver adapter), full schema, migrations, Catalog shell.
+- ✅ **Phase 1 — Threadflow ingestion.** Typed client, bulk idempotent sync (barcode set-once, don't-clobber customs, dropped→cancelled, all currencies, images), manual trigger, browse + season filter, image proxy.
+- ✅ **Phase 2 — Enrichment & external products.**
+  - Colorway editor: product props + all `custom.*` metafields, **channel-split content** (Base / Shopify / Loom) incl. **tags**, **field ownership** (sync-respecting), vendor/product-type mapped from Threadflow.
+  - **Bulk grid editor** (virtualized, fill-down, channel-layer toggle, batch save).
+  - **Brand-template product builder** (multi-product, reusable per-brand defaults for external brands).
+  - **Shopify carry-over importer** (vendor-scoped, dry-run preview, archived + sold-out-sale exclusions, per-product & per-vendor removal).
+  - **Media manager** on Vercel Blob (upload, drag-reorder, delete, adopt-external-to-Blob); full gallery on import.
+- 🚧 **Phase 3 — Channels + Shopify push (in progress).** Channel targeting (`ChannelPublication`), Publishing overview, and **Shopify dry-run preview** are built. **The live Shopify write is intentionally not wired yet** — to be done together.
+- ⬜ **Phase 4 — Loom push**, **Phase 5 — Pricing & cost write-back**, **Phase 6 — Scheduling**, **Phase 7 — retire live-Shopify plumbing.**
+
+**Known follow-ups:** reference pickers (care/fitguide/collection/model — deferred, staying Shopify-GID-based); Livid HS-code/customs-description/weight are empty from Threadflow (source-side Customs Defaults gap); mixed row-id scheme (cuid vs uuid, harmless); `SeasonImage`↔`MediaAsset` not yet unified.
+
+---
+
 ## 1. Guiding principles
 
 - **The master owns the truth.** Once a product lives in the master, the master decides what every channel sees. Channels are push targets, not editors.
