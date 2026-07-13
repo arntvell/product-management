@@ -2,6 +2,7 @@
 // per-channel content overrides (§4.3), and records field ownership so a later
 // Threadflow sync skips manually-edited fields (§5.3).
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import {
   CHANNELS,
   SPLIT_FIELD_KEYS,
@@ -25,6 +26,124 @@ function norm(v: string | null | undefined): string | null {
   if (v == null) return null;
   const t = v.trim();
   return t.length ? t : null;
+}
+
+async function runConcurrent(
+  ops: Array<Promise<unknown>>,
+  concurrency = 15
+): Promise<void> {
+  for (let i = 0; i < ops.length; i += concurrency) {
+    await Promise.all(ops.slice(i, i + concurrency));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bulk grid editing: granular per-cell changes across many colorways.
+// ---------------------------------------------------------------------------
+
+export type EditLayer = "BASE" | ChannelKey;
+
+export interface BulkChange {
+  colorwayId: string;
+  field: string; // status | tags | vendor | productType | <SplitFieldKey>
+  layer: EditLayer;
+  value: string | string[] | null;
+}
+
+// Base-layer fields that become MANUAL-owned once edited (§5.3).
+const OWNED_BASE_FIELDS = new Set<string>([...SPLIT_FIELD_KEYS, "vendor", "productType"]);
+
+export async function applyBulkChanges(
+  changes: BulkChange[]
+): Promise<{ colorways: number; changes: number }> {
+  const byColorway = new Map<string, BulkChange[]>();
+  for (const c of changes) {
+    const list = byColorway.get(c.colorwayId) ?? [];
+    list.push(c);
+    byColorway.set(c.colorwayId, list);
+  }
+
+  const ops: Array<Promise<unknown>> = [];
+
+  for (const [colorwayId, list] of byColorway) {
+    const baseData: Record<string, unknown> = {};
+    const ownerFields: string[] = [];
+
+    for (const ch of list) {
+      if (ch.layer === "BASE") {
+        if (ch.field === "status") {
+          baseData.status = ch.value as ProductStatusValue;
+        } else if (ch.field === "tags") {
+          const arr = Array.isArray(ch.value)
+            ? ch.value
+            : String(ch.value ?? "").split(",");
+          baseData.tags = arr.map((t) => t.trim()).filter(Boolean);
+        } else {
+          baseData[ch.field] = norm(
+            typeof ch.value === "string" ? ch.value : null
+          );
+        }
+        if (OWNED_BASE_FIELDS.has(ch.field)) ownerFields.push(ch.field);
+      } else {
+        // Channel override for a split text field.
+        const value = norm(typeof ch.value === "string" ? ch.value : null);
+        if (value !== null) {
+          ops.push(
+            prisma.channelContent.upsert({
+              where: {
+                colorwayId_channel_field: {
+                  colorwayId,
+                  channel: ch.layer,
+                  field: ch.field,
+                },
+              },
+              create: { colorwayId, channel: ch.layer, field: ch.field, value },
+              update: { value },
+            })
+          );
+        } else {
+          ops.push(
+            prisma.channelContent.deleteMany({
+              where: { colorwayId, channel: ch.layer, field: ch.field },
+            })
+          );
+        }
+      }
+    }
+
+    if (Object.keys(baseData).length) {
+      ops.push(
+        prisma.colorway.update({
+          where: { id: colorwayId },
+          data: baseData as Prisma.ColorwayUpdateInput,
+        })
+      );
+    }
+    for (const field of ownerFields) {
+      ops.push(
+        prisma.fieldOwner.upsert({
+          where: {
+            entityType_entityId_field: {
+              entityType: "colorway",
+              entityId: colorwayId,
+              field,
+            },
+          },
+          create: {
+            entityType: "colorway",
+            entityId: colorwayId,
+            field,
+            owner: "MANUAL",
+            lockedAt: new Date(),
+          },
+          update: { owner: "MANUAL", lockedAt: new Date() },
+        })
+      );
+    }
+  }
+
+  await runConcurrent(ops);
+  return { colorways: byColorway.size, changes: changes.length };
 }
 
 export async function updateColorway(

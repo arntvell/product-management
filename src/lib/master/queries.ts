@@ -102,6 +102,73 @@ export async function getStyleDetail(id: string) {
 
 export type StyleDetail = NonNullable<Awaited<ReturnType<typeof getStyleDetail>>>;
 
+export interface GridRow {
+  id: string;
+  styleName: string;
+  colorwaySku: string;
+  name: string;
+  thumbnailRef: string | null;
+  status: string;
+  tags: string[];
+  vendor: string;
+  productType: string;
+  base: Record<string, string>;
+  overrides: { SHOPIFY: Record<string, string>; LOOM: Record<string, string> };
+}
+
+const GRID_TEXT_FIELDS = [
+  "shortDescription",
+  "fullDescription",
+  "details",
+  "styleTagline",
+  "styleName",
+] as const;
+
+export async function listColorwaysForEdit(
+  seasonCode?: string
+): Promise<GridRow[]> {
+  const rows = await prisma.colorway.findMany({
+    where: seasonCode
+      ? { entries: { some: { season: { code: seasonCode } } } }
+      : {},
+    orderBy: [{ style: { styleName: "asc" } }, { name: "asc" }],
+    include: {
+      style: { select: { styleName: true } },
+      channelContent: true,
+      seasonImages: { where: { slot: "MAIN" }, take: 1 },
+    },
+  });
+
+  return rows.map((cw) => {
+    const overrides = {
+      SHOPIFY: {} as Record<string, string>,
+      LOOM: {} as Record<string, string>,
+    };
+    for (const c of cw.channelContent) {
+      if (c.channel === "SHOPIFY" || c.channel === "LOOM") {
+        overrides[c.channel][c.field] = c.value;
+      }
+    }
+    const base: Record<string, string> = {};
+    for (const f of GRID_TEXT_FIELDS) {
+      base[f] = (cw[f as keyof typeof cw] as string | null) ?? "";
+    }
+    return {
+      id: cw.id,
+      styleName: cw.style.styleName,
+      colorwaySku: cw.colorwaySku,
+      name: cw.name,
+      thumbnailRef: cw.seasonImages[0]?.url ?? null,
+      status: cw.status,
+      tags: cw.tags,
+      vendor: cw.vendor ?? "",
+      productType: cw.productType ?? "",
+      base,
+      overrides,
+    };
+  });
+}
+
 export async function getColorwayForEdit(id: string) {
   return prisma.colorway.findUnique({
     where: { id },
