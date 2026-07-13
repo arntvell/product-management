@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCatalogCounts, type CatalogCounts } from "@/lib/master/counts";
+import { SyncPanel } from "@/components/catalog/sync-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -62,38 +63,48 @@ export default async function CatalogPage() {
       {/* Entity counts */}
       {counts && (
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {ENTITIES.map(({ key, label }) => (
-            <div key={key} className="rounded-lg border p-4">
-              <div className="text-2xl font-semibold tabular-nums">
-                {counts![key]}
+          {ENTITIES.map(({ key, label }) => {
+            const card = (
+              <>
+                <div className="text-2xl font-semibold tabular-nums">
+                  {counts![key]}
+                </div>
+                <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+                  {label}
+                </div>
+              </>
+            );
+            return key === "styles" ? (
+              <Link
+                key={key}
+                href="/catalog/styles"
+                className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+              >
+                {card}
+                <span className="mt-2 block text-xs font-medium underline underline-offset-4">
+                  Browse →
+                </span>
+              </Link>
+            ) : (
+              <div key={key} className="rounded-lg border p-4">
+                {card}
               </div>
-              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
-                {label}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* What's next */}
-      <div className="mt-10 rounded-lg border bg-muted/30 p-5">
-        <h2 className="text-sm font-semibold">Phase 0 complete — foundations</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Postgres + Prisma schema (Style → Colorway → Variant, seasons,
-          channels, lifecycle, customs) is live and migrated. The catalogue is
-          empty until Phase 1 wires up the Threadflow sync.
-        </p>
-        <p className="mt-3 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Next (Phase 1):</span>{" "}
-          pull SS27 from Threadflow into the master and browse it here.
-        </p>
-        <Link
-          href="/"
-          className="mt-4 inline-block text-sm font-medium underline underline-offset-4"
-        >
-          ← Back to the live-Shopify editor
-        </Link>
+      {/* Sync control */}
+      <div className="mt-8">
+        <SyncPanel />
       </div>
+
+      <Link
+        href="/"
+        className="mt-8 inline-block text-sm font-medium underline underline-offset-4"
+      >
+        ← Back to the live-Shopify editor
+      </Link>
     </div>
   );
 }
