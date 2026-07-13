@@ -7,6 +7,24 @@ export interface SeasonOption {
   code: string;
 }
 
+export async function listBrands(): Promise<
+  { id: string; name: string; isLivid: boolean }[]
+> {
+  return prisma.brand.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, isLivid: true },
+  });
+}
+
+export async function listManufacturers(): Promise<
+  { id: string; name: string }[]
+> {
+  return prisma.manufacturer.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+}
+
 export async function listSeasons(): Promise<SeasonOption[]> {
   const seasons = await prisma.season.findMany({
     orderBy: [{ sortOrder: "asc" }, { code: "asc" }],

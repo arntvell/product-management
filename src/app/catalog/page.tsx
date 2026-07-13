@@ -25,11 +25,19 @@ export default async function CatalogPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">Catalog</h1>
-        <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-          Product Master
-        </span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold">Catalog</h1>
+          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+            Product Master
+          </span>
+        </div>
+        <Link
+          href="/catalog/products/new"
+          className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
+        >
+          + New product
+        </Link>
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         The single source of truth for product data — Livid products synced from
