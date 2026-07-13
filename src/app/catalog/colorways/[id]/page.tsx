@@ -4,6 +4,7 @@ import {
   ColorwayEditor,
   type ColorwayEditorProps,
 } from "@/components/catalog/colorway-editor";
+import { ChannelsPanel } from "@/components/catalog/channels-panel";
 import {
   CHANNELS,
   OVERRIDE_FIELD_KEYS,
@@ -40,24 +41,35 @@ export default async function ColorwayEditPage({
     }
   }
 
+  const initialPublications = cw.publications.map((p) => ({
+    channel: p.channel,
+    published: p.published,
+    externalId: p.externalId,
+    lastPushedAt: p.lastPushedAt?.toISOString() ?? null,
+    lastPushStatus: p.lastPushStatus,
+  }));
+
   return (
-    <ColorwayEditor
-      colorwayId={cw.id}
-      source={cw.source}
-      header={{
-        name: cw.name,
-        colorwaySku: cw.colorwaySku,
-        styleName: cw.style.styleName,
-        styleId: cw.style.id,
-      }}
-      initialProps={{
-        status: cw.status as ProductStatusValue,
-        tags: cw.tags,
-        vendor: cw.vendor ?? "",
-        productType: cw.productType ?? "",
-      }}
-      initialBase={initialBase}
-      initialOverrides={initialOverrides}
-    />
+    <>
+      <ColorwayEditor
+        colorwayId={cw.id}
+        source={cw.source}
+        header={{
+          name: cw.name,
+          colorwaySku: cw.colorwaySku,
+          styleName: cw.style.styleName,
+          styleId: cw.style.id,
+        }}
+        initialProps={{
+          status: cw.status as ProductStatusValue,
+          tags: cw.tags,
+          vendor: cw.vendor ?? "",
+          productType: cw.productType ?? "",
+        }}
+        initialBase={initialBase}
+        initialOverrides={initialOverrides}
+      />
+      <ChannelsPanel colorwayId={cw.id} initialPublications={initialPublications} />
+    </>
   );
 }

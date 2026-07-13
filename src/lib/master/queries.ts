@@ -199,6 +199,7 @@ export async function getColorwayForEdit(id: string) {
     include: {
       style: { select: { id: true, styleName: true, styleSku: true } },
       channelContent: true,
+      publications: true,
     },
   });
 }
