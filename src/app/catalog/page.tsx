@@ -46,6 +46,12 @@ export default async function CatalogPage() {
             Bulk editor
           </Link>
           <Link
+            href="/catalog/publishing"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            Publishing
+          </Link>
+          <Link
             href="/catalog/products/new"
             className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
           >

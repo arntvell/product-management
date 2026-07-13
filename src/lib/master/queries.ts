@@ -31,6 +31,46 @@ export async function listManufacturers(): Promise<
   });
 }
 
+export interface PublishingRow {
+  id: string;
+  name: string;
+  styleName: string;
+  thumbnailRef: string | null;
+  shopify: { targeted: boolean; published: boolean };
+  loom: { targeted: boolean; published: boolean };
+}
+
+export async function listColorwaysForPublishing(
+  seasonCode?: string
+): Promise<PublishingRow[]> {
+  const rows = await prisma.colorway.findMany({
+    where: seasonCode
+      ? { entries: { some: { season: { code: seasonCode } } } }
+      : {},
+    orderBy: [{ style: { styleName: "asc" } }, { name: "asc" }],
+    include: {
+      style: { select: { styleName: true } },
+      publications: true,
+      seasonImages: { where: { slot: "MAIN" }, take: 1 },
+    },
+  });
+
+  return rows.map((cw) => {
+    const pub = (ch: "SHOPIFY" | "LOOM") => {
+      const p = cw.publications.find((x) => x.channel === ch);
+      return { targeted: !!p, published: !!p?.published };
+    };
+    return {
+      id: cw.id,
+      name: cw.name,
+      styleName: cw.style.styleName,
+      thumbnailRef: cw.seasonImages[0]?.url ?? null,
+      shopify: pub("SHOPIFY"),
+      loom: pub("LOOM"),
+    };
+  });
+}
+
 export async function getBrandTemplate(brandId: string) {
   const t = await prisma.brandTemplate.findUnique({ where: { brandId } });
   if (!t) return null;
