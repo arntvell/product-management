@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getCatalogCounts, type CatalogCounts } from "@/lib/master/counts";
+import { listImportedVendors } from "@/lib/master/import-shopify";
 import { SyncPanel } from "@/components/catalog/sync-panel";
 import { ImportPanel } from "@/components/catalog/import-panel";
 
@@ -17,9 +18,13 @@ const ENTITIES: Array<{ key: keyof CatalogCounts; label: string }> = [
 export default async function CatalogPage() {
   let counts: CatalogCounts | null = null;
   let dbError: string | null = null;
+  let importedVendors: { vendor: string; count: number }[] = [];
 
   try {
-    counts = await getCatalogCounts();
+    [counts, importedVendors] = await Promise.all([
+      getCatalogCounts(),
+      listImportedVendors(),
+    ]);
   } catch (err) {
     dbError = err instanceof Error ? err.message : "Unknown database error";
   }
@@ -114,7 +119,7 @@ export default async function CatalogPage() {
       {/* Sync + import controls */}
       <div className="mt-8 space-y-4">
         <SyncPanel />
-        <ImportPanel />
+        <ImportPanel importedVendors={importedVendors} />
       </div>
 
       <Link

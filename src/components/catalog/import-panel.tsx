@@ -9,14 +9,20 @@ interface Preview {
   total: number;
   toImport: number;
   skipped: number;
+  excluded: number;
   byVendor: { vendor: string; count: number }[];
 }
 
-export function ImportPanel() {
+export function ImportPanel({
+  importedVendors,
+}: {
+  importedVendors: { vendor: string; count: number }[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [removeSel, setRemoveSel] = useState<Set<string>>(new Set());
 
   const selectedCount = preview
     ? preview.byVendor
@@ -73,6 +79,38 @@ export function ImportPanel() {
     }
   }
 
+  function toggleRemove(vendor: string) {
+    setRemoveSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(vendor)) next.delete(vendor);
+      else next.add(vendor);
+      return next;
+    });
+  }
+
+  async function runRemove() {
+    if (removeSel.size === 0) return;
+    if (!confirm(`Remove all imported products for ${removeSel.size} vendor(s)?`))
+      return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/catalog/import/shopify/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vendors: [...removeSel] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Failed (${res.status})`);
+      toast.success(`Removed ${data.removed} products`);
+      setRemoveSel(new Set());
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Remove failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="rounded-lg border p-5">
       <h2 className="text-sm font-semibold">Import carry-over from Shopify</h2>
@@ -97,7 +135,8 @@ export function ImportPanel() {
         <div className="mt-4 rounded-md border bg-muted/30 p-3 text-sm">
           <p className="tabular-nums">
             {preview.total} in Shopify · <b>{preview.toImport}</b> not in master
-            · {preview.skipped} already here
+            · {preview.skipped} already here · {preview.excluded} excluded
+            (archived / sold-out sale)
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Pick vendors to import (the Shopify catalogue also contains vintage
@@ -115,6 +154,46 @@ export function ImportPanel() {
                   onChange={() => toggle(v.vendor)}
                 />
                 <span className="truncate">{v.vendor || "(no vendor)"}</span>
+                <span className="ml-auto tabular-nums text-muted-foreground">
+                  {v.count}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Remove previously-imported vendors */}
+      {importedVendors.length > 0 && (
+        <div className="mt-5 border-t pt-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Imported from Shopify
+            </h3>
+            {removeSel.size > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={runRemove}
+                disabled={busy}
+                className="text-destructive"
+              >
+                Remove {removeSel.size} vendor(s)
+              </Button>
+            )}
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
+            {importedVendors.map((v) => (
+              <label
+                key={v.vendor}
+                className="flex items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/50"
+              >
+                <input
+                  type="checkbox"
+                  checked={removeSel.has(v.vendor)}
+                  onChange={() => toggleRemove(v.vendor)}
+                />
+                <span className="truncate">{v.vendor}</span>
                 <span className="ml-auto tabular-nums text-muted-foreground">
                   {v.count}
                 </span>

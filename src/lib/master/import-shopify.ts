@@ -20,6 +20,7 @@ const IMPORT_QUERY = `
           productType
           tags
           status
+          totalInventory
           featuredImage { url }
           metafields(first: 25, namespace: "${METAFIELD_NAMESPACE}") {
             edges { node { key value } }
@@ -42,6 +43,7 @@ interface SPProduct {
   productType: string;
   tags: string[];
   status: "ACTIVE" | "DRAFT" | "ARCHIVED";
+  totalInventory: number | null;
   featuredImage: { url: string } | null;
   metafields: { edges: { node: { key: string; value: string } }[] };
   variants: {
@@ -64,6 +66,18 @@ interface QueryResult {
   };
 }
 
+// Archived products are always excluded at the query level.
+const DEFAULT_FILTER = "NOT status:archived";
+// Tags that mark a product as on-sale (English + Norwegian). Matched as a
+// substring because Livid's tags concatenate the marker, e.g. "SALE_FW25",
+// "FW22SALE_U", "SALESS23_M", "Sale_Shoe_men". Sold-out sale items are excluded.
+const SALE_TAG_RE = /sale|salg|outlet|clearance|tilbud/i;
+
+function isSoldOutSale(p: SPProduct): boolean {
+  const soldOut = (p.totalInventory ?? 0) <= 0;
+  return soldOut && p.tags.some((t) => SALE_TAG_RE.test(t));
+}
+
 async function fetchAllShopifyProducts(filter?: string): Promise<SPProduct[]> {
   const all: SPProduct[] = [];
   let after: string | null = null;
@@ -72,7 +86,7 @@ async function fetchAllShopifyProducts(filter?: string): Promise<SPProduct[]> {
     const data: QueryResult = await shopifyGraphQL<QueryResult>(IMPORT_QUERY, {
       first: 100,
       after,
-      query: filter ?? "NOT status:archived",
+      query: filter ?? DEFAULT_FILTER,
     });
     all.push(...data.products.edges.map((e) => e.node));
     hasNext = data.products.pageInfo.hasNextPage;
@@ -93,23 +107,29 @@ function classify(
   products: SPProduct[],
   existingHandles: Set<string>,
   existingSkus: Set<string>
-): { toImport: SPProduct[]; skipped: SPProduct[] } {
+): { toImport: SPProduct[]; skipped: SPProduct[]; excluded: SPProduct[] } {
   const toImport: SPProduct[] = [];
   const skipped: SPProduct[] = [];
+  const excluded: SPProduct[] = [];
   for (const p of products) {
+    if (isSoldOutSale(p)) {
+      excluded.push(p); // sold-out sale item — not worth importing
+      continue;
+    }
     const skus = p.variants.edges.map((v) => v.node.sku).filter(Boolean) as string[];
     const collides =
       existingHandles.has(p.handle) || skus.some((s) => existingSkus.has(s));
     if (collides) skipped.push(p);
     else toImport.push(p);
   }
-  return { toImport, skipped };
+  return { toImport, skipped, excluded };
 }
 
 export interface ImportPreview {
   total: number;
   toImport: number;
   skipped: number;
+  excluded: number;
   byVendor: { vendor: string; count: number }[];
 }
 
@@ -131,13 +151,18 @@ export async function previewShopifyImport(
     fetchAllShopifyProducts(filter),
     loadExisting(),
   ]);
-  const { toImport, skipped } = classify(products, existing.handles, existing.skus);
+  const { toImport, skipped, excluded } = classify(
+    products,
+    existing.handles,
+    existing.skus
+  );
   const counts = new Map<string, number>();
   for (const p of toImport) counts.set(p.vendor, (counts.get(p.vendor) ?? 0) + 1);
   return {
     total: products.length,
     toImport: toImport.length,
     skipped: skipped.length,
+    excluded: excluded.length,
     byVendor: [...counts.entries()]
       .map(([vendor, count]) => ({ vendor, count }))
       .sort((a, b) => b.count - a.count),
@@ -306,4 +331,62 @@ export async function runShopifyImport(
     skipped: skipped.length,
     brands: brandNames.length,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Undo: remove previously-imported products
+// ---------------------------------------------------------------------------
+
+export async function listImportedVendors(): Promise<
+  { vendor: string; count: number }[]
+> {
+  const rows = await prisma.colorway.findMany({
+    where: { source: "SHOPIFY_IMPORT" },
+    select: { vendor: true },
+  });
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    const v = r.vendor ?? "(no vendor)";
+    counts.set(v, (counts.get(v) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([vendor, count]) => ({ vendor, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export async function removeImportedVendors(
+  vendors: string[]
+): Promise<{ removed: number }> {
+  const colorways = await prisma.colorway.findMany({
+    where: { source: "SHOPIFY_IMPORT", vendor: { in: vendors } },
+    select: { id: true, styleId: true },
+  });
+  if (colorways.length === 0) return { removed: 0 };
+
+  const styleIds = [...new Set(colorways.map((c) => c.styleId))];
+  await prisma.colorway.deleteMany({
+    where: { id: { in: colorways.map((c) => c.id) } },
+  }); // cascades variants, prices, images, publications, entries
+
+  // Drop any now-empty imported styles.
+  const styles = await prisma.style.findMany({
+    where: { id: { in: styleIds } },
+    select: { id: true, _count: { select: { colorways: true } } },
+  });
+  const emptyStyleIds = styles.filter((s) => s._count.colorways === 0).map((s) => s.id);
+  if (emptyStyleIds.length)
+    await prisma.style.deleteMany({ where: { id: { in: emptyStyleIds } } });
+
+  // Drop non-Livid brands left with no styles/colorways.
+  const brands = await prisma.brand.findMany({
+    where: { name: { in: vendors }, isLivid: false },
+    select: { id: true, _count: { select: { styles: true, colorways: true } } },
+  });
+  const emptyBrandIds = brands
+    .filter((b) => b._count.styles === 0 && b._count.colorways === 0)
+    .map((b) => b.id);
+  if (emptyBrandIds.length)
+    await prisma.brand.deleteMany({ where: { id: { in: emptyBrandIds } } });
+
+  return { removed: colorways.length };
 }

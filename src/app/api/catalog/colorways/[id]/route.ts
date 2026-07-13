@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateColorway, type UpdateColorwayInput } from "@/lib/master/edit";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -24,4 +25,29 @@ export async function PATCH(
     const status = message === "Colorway not found" ? 404 : 500;
     return NextResponse.json({ error: message }, { status });
   }
+}
+
+// DELETE /api/catalog/colorways/[id] — remove an imported/external product.
+// Threadflow-synced products are protected (they'd return on the next sync).
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const cw = await prisma.colorway.findUnique({
+    where: { id },
+    select: { source: true, styleId: true },
+  });
+  if (!cw) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (cw.source === "THREADFLOW") {
+    return NextResponse.json(
+      { error: "Threadflow products can't be deleted — they return on the next sync." },
+      { status: 400 }
+    );
+  }
+
+  await prisma.colorway.delete({ where: { id } }); // cascades children
+  const remaining = await prisma.colorway.count({ where: { styleId: cw.styleId } });
+  if (remaining === 0) await prisma.style.delete({ where: { id: cw.styleId } });
+  return NextResponse.json({ ok: true });
 }

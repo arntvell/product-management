@@ -24,6 +24,7 @@ type Layer = "BASE" | ChannelKey;
 
 export interface ColorwayEditorProps {
   colorwayId: string;
+  source: string;
   header: { name: string; colorwaySku: string; styleName: string; styleId: string };
   initialProps: {
     status: ProductStatusValue;
@@ -37,12 +38,31 @@ export interface ColorwayEditorProps {
 
 export function ColorwayEditor({
   colorwayId,
+  source,
   header,
   initialProps,
   initialBase,
   initialOverrides,
 }: ColorwayEditorProps) {
   const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+
+  async function remove() {
+    if (!confirm(`Delete "${header.name}"? This can't be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/catalog/colorways/${colorwayId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `Delete failed (${res.status})`);
+      toast.success("Product removed");
+      router.push("/catalog/styles");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+      setDeleting(false);
+    }
+  }
   const [status, setStatus] = useState(initialProps.status);
   const [vendor, setVendor] = useState(initialProps.vendor);
   const [productType, setProductType] = useState(initialProps.productType);
@@ -226,9 +246,19 @@ export function ColorwayEditor({
       </section>
 
       <div className="mt-6 flex items-center gap-3">
-        <Button onClick={save} disabled={saving}>
+        <Button onClick={save} disabled={saving || deleting}>
           {saving ? "Saving…" : "Save"}
         </Button>
+        {source !== "THREADFLOW" && (
+          <Button
+            variant="outline"
+            onClick={remove}
+            disabled={saving || deleting}
+            className="ml-auto text-destructive"
+          >
+            {deleting ? "Removing…" : "Remove product"}
+          </Button>
+        )}
       </div>
     </div>
   );

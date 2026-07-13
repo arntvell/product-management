@@ -43,6 +43,7 @@ export default async function ColorwayEditPage({
   return (
     <ColorwayEditor
       colorwayId={cw.id}
+      source={cw.source}
       header={{
         name: cw.name,
         colorwaySku: cw.colorwaySku,
