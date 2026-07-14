@@ -12,6 +12,46 @@ export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [busy, setBusy] = useState(false);
+  const [pushing, setPushing] = useState(false);
+
+  async function pushSelected() {
+    if (selected.size === 0) return;
+    if (!confirm(`Push ${selected.size} product(s) to Shopify now? Creates/updates the live Shopify products.`))
+      return;
+    setPushing(true);
+    const ids = [...selected];
+    try {
+      const res = await fetch("/api/catalog/push/shopify/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colorwayIds: ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Bulk push failed");
+      const okIds = new Set(
+        (data.results as { colorwayId: string; ok: boolean }[])
+          .filter((r) => r.ok)
+          .map((r) => r.colorwayId)
+      );
+      setItems((prev) =>
+        prev.map((r) =>
+          okIds.has(r.id)
+            ? { ...r, shopify: { ...r.shopify, targeted: true, published: true } }
+            : r
+        )
+      );
+      if (data.failed > 0) {
+        const firstErr = (data.results as { ok: boolean; error?: string }[]).find((r) => !r.ok)?.error;
+        toast.error(`Pushed ${data.ok}/${data.total}. ${data.failed} failed — e.g. ${firstErr ?? ""}`);
+      } else {
+        toast.success(`Pushed ${data.ok} product(s) to Shopify`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk push failed");
+    } finally {
+      setPushing(false);
+    }
+  }
 
   const visible = items.filter((r) =>
     droppedFilter === "active" ? !r.dropped : droppedFilter === "dropped" ? r.dropped : true
@@ -146,6 +186,10 @@ export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
           </Button>
           <Button size="sm" variant="ghost" disabled={busy || !selected.size} onClick={() => bulk("LOOM", "untarget")} className="text-muted-foreground">
             Untarget Loom
+          </Button>
+          <div className="mx-1 w-px self-stretch bg-border" />
+          <Button size="sm" disabled={pushing || !selected.size} onClick={pushSelected}>
+            {pushing ? "Pushing…" : `Push ${selected.size || ""} to Shopify`.replace("  ", " ")}
           </Button>
         </div>
       </div>

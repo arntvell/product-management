@@ -252,3 +252,34 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
     adminUrl: `https://${store}/admin/products/${numericId}`,
   };
 }
+
+export interface BulkPushRow {
+  colorwayId: string;
+  ok: boolean;
+  action?: "create" | "update";
+  variants?: number;
+  warnings?: string[];
+  error?: string;
+}
+
+// Push many colorways with bounded concurrency (Shopify throttling is handled
+// in the client). One product's failure never blocks the rest.
+export async function bulkPushToShopify(ids: string[]): Promise<BulkPushRow[]> {
+  const CONCURRENCY = 3;
+  const results: BulkPushRow[] = [];
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    const batch = ids.slice(i, i + CONCURRENCY);
+    const rows = await Promise.all(
+      batch.map(async (colorwayId): Promise<BulkPushRow> => {
+        try {
+          const r = await pushColorwayToShopify(colorwayId);
+          return { colorwayId, ok: true, action: r.action, variants: r.variants, warnings: r.warnings };
+        } catch (err) {
+          return { colorwayId, ok: false, error: err instanceof Error ? err.message : "Push failed" };
+        }
+      })
+    );
+    results.push(...rows);
+  }
+  return results;
+}
