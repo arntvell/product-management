@@ -10,9 +10,14 @@ import type { PublishingRow, ChannelCellState } from "@/lib/master/queries";
 export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
   const [items, setItems] = useState<PublishingRow[]>(rows);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [busy, setBusy] = useState(false);
 
-  const allSelected = items.length > 0 && selected.size === items.length;
+  const visible = items.filter((r) =>
+    droppedFilter === "active" ? !r.dropped : droppedFilter === "dropped" ? r.dropped : true
+  );
+  const droppedCount = items.filter((r) => r.dropped).length;
+  const allSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -23,10 +28,10 @@ export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
     });
   }
   function selectAll() {
-    setSelected(allSelected ? new Set() : new Set(items.map((i) => i.id)));
+    setSelected(allSelected ? new Set() : new Set(visible.map((i) => i.id)));
   }
   function selectReady(channel: "shopify" | "loom") {
-    setSelected(new Set(items.filter((i) => i[channel].ready).map((i) => i.id)));
+    setSelected(new Set(visible.filter((i) => i[channel].ready).map((i) => i.id)));
   }
 
   async function bulk(channel: "SHOPIFY" | "LOOM", action: "target" | "untarget") {
@@ -95,6 +100,23 @@ export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
         {counts.shopifyReady} Shopify-ready · {counts.loomReady} Loom-ready.
       </p>
 
+      <div className="mt-3 flex gap-1" title="Filter by Threadflow dropped status">
+        {(["all", "active", "dropped"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setDroppedFilter(f)}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors",
+              droppedFilter === f
+                ? "border-foreground bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {f === "dropped" ? `Dropped (${droppedCount})` : f}
+          </button>
+        ))}
+      </div>
+
       {/* Bulk toolbar */}
       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
         <span className="px-1 text-xs text-muted-foreground tabular-nums">
@@ -142,7 +164,7 @@ export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {items.map((r) => {
+            {visible.map((r) => {
               const src = catalogImageSrc(r.thumbnailRef);
               return (
                 <tr key={r.id} className={cn("border-b last:border-0 hover:bg-muted/20", selected.has(r.id) && "bg-muted/30")}>
@@ -159,6 +181,14 @@ export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
                   </td>
                   <td className="p-3">
                     <a href={`/catalog/colorways/${r.id}`} className="font-medium hover:underline">
+                      {r.dropped && (
+                        <span
+                          title="Dropped from Threadflow for this season"
+                          className="mr-1.5 rounded bg-amber-500/20 px-1 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-500"
+                        >
+                          dropped
+                        </span>
+                      )}
                       {r.name}
                     </a>
                     <div className="text-xs text-muted-foreground">{r.styleName}</div>

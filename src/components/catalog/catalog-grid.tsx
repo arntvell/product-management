@@ -55,6 +55,7 @@ export function CatalogGrid({
   const [layer, setLayer] = useState<EditLayer>("BASE");
   const [dirty, setDirty] = useState<Map<string, string>>(new Map());
   const [search, setSearch] = useState("");
+  const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -65,14 +66,19 @@ export function CatalogGrid({
 
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      if (droppedFilter === "active" && r.dropped) return false;
+      if (droppedFilter === "dropped" && !r.dropped) return false;
+      if (!q) return true;
+      return (
         r.name.toLowerCase().includes(q) ||
         r.styleName.toLowerCase().includes(q) ||
         r.colorwaySku.toLowerCase().includes(q)
-    );
-  }, [rows, search]);
+      );
+    });
+  }, [rows, search, droppedFilter]);
+
+  const droppedCount = rows.filter((r) => r.dropped).length;
 
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -207,6 +213,22 @@ export function CatalogGrid({
           placeholder="Filter by style, colorway, SKU…"
           className="h-8 w-64"
         />
+        <div className="flex gap-1" title="Filter by Threadflow dropped status">
+          {(["all", "active", "dropped"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setDroppedFilter(f)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium capitalize transition-colors",
+                droppedFilter === f
+                  ? "border-foreground bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              {f === "dropped" ? `Dropped (${droppedCount})` : f}
+            </button>
+          ))}
+        </div>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-xs text-muted-foreground tabular-nums">
             {visibleRows.length} rows · {dirty.size} unsaved
@@ -290,6 +312,14 @@ export function CatalogGrid({
                         href={`/catalog/colorways/${row.id}`}
                         className="block truncate text-xs font-medium hover:underline"
                       >
+                        {row.dropped && (
+                          <span
+                            title="Dropped from Threadflow for this season"
+                            className="mr-1 rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-700 dark:text-amber-500"
+                          >
+                            dropped
+                          </span>
+                        )}
                         {row.name}
                       </a>
                       <span className="block truncate text-[10px] text-muted-foreground">

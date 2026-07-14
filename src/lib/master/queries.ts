@@ -43,6 +43,7 @@ export interface PublishingRow {
   name: string;
   styleName: string;
   thumbnailRef: string | null;
+  dropped: boolean;
   shopify: ChannelCellState;
   loom: ChannelCellState;
 }
@@ -72,6 +73,7 @@ export async function listColorwaysForPublishing(
       publications: true,
       prices: { where: { currency: "NOK", priceType: "MSRP" }, take: 1 },
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
+      entries: { select: { cancelled: true, season: { select: { code: true } } } },
       _count: { select: { variants: true } },
     },
   });
@@ -113,6 +115,7 @@ export async function listColorwaysForPublishing(
       name: cw.name,
       styleName: cw.style.styleName,
       thumbnailRef: cw.seasonImages[0]?.url ?? null,
+      dropped: isDropped(cw.entries, seasonCode),
       shopify,
       loom,
     };
@@ -224,8 +227,20 @@ export interface GridRow {
   tags: string[];
   vendor: string;
   productType: string;
+  dropped: boolean;
   base: Record<string, string>;
   overrides: { SHOPIFY: Record<string, string>; LOOM: Record<string, string> };
+}
+
+// Dropped is per-season (SeasonEntry.cancelled, from Threadflow "dropped").
+// With a season selected, use that season's flag; otherwise dropped-in-any.
+function isDropped(
+  entries: { cancelled: boolean; season: { code: string } }[],
+  seasonCode?: string
+): boolean {
+  if (seasonCode)
+    return entries.find((e) => e.season.code === seasonCode)?.cancelled ?? false;
+  return entries.some((e) => e.cancelled);
 }
 
 const GRID_TEXT_FIELDS = [
@@ -248,6 +263,7 @@ export async function listColorwaysForEdit(
       style: { select: { styleName: true } },
       channelContent: true,
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
+      entries: { select: { cancelled: true, season: { select: { code: true } } } },
     },
   });
 
@@ -275,6 +291,7 @@ export async function listColorwaysForEdit(
       tags: cw.tags,
       vendor: cw.vendor ?? "",
       productType: cw.productType ?? "",
+      dropped: isDropped(cw.entries, seasonCode),
       base,
       overrides,
     };
