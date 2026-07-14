@@ -6,7 +6,7 @@
 // GID resolution (see the preview warnings).
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
-import { PRODUCT_SET_MUTATION } from "@/lib/shopify/mutations";
+import { PRODUCT_SET_MUTATION, FILE_CREATE_MUTATION } from "@/lib/shopify/mutations";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
 
@@ -135,6 +135,65 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
     ...(v.barcode ? { barcode: v.barcode } : {}),
   }));
 
+  // --- Media (pass 2) ---
+  // Only public URLs (Blob / Shopify CDN) can push; Threadflow refs must be
+  // adopted to Blob first. Routing depends on unisex (see the media rule):
+  //   non-unisex: gallery -> product media; flat -> custom.flat
+  //   unisex:     flat -> product media; men/women -> custom.men_images/women_images; flat -> custom.flat
+  const isPublic = (u: string) => /^https?:\/\//i.test(u);
+  const urlsFor = (role: string) =>
+    cw.media.filter((m) => m.role === role && isPublic(m.url)).map((m) => m.url);
+  const galleryUrls = [
+    ...urlsFor("GALLERY"),
+    ...cw.seasonImages.filter((s) => isPublic(s.url)).map((s) => s.url),
+  ];
+  const flatUrls = urlsFor("FLAT");
+  const menUrls = urlsFor("MEN");
+  const womenUrls = urlsFor("WOMEN");
+  const nonPublic = [...cw.media, ...cw.seasonImages].filter((m) => !isPublic(m.url)).length;
+  if (nonPublic > 0)
+    warnings.push(`${nonPublic} image(s) are Threadflow refs — adopt them into Blob before they can push.`);
+
+  const productMediaUrls = preview.unisex ? flatUrls : galleryUrls;
+
+  // Create Shopify files for every image we need (product media + role file
+  // metafields), then reference them by GID. Best-effort: if the token lacks
+  // the write_files scope (or any file error), skip media and keep pushing the
+  // rest. Requires the `write_files` scope on the Shopify token.
+  const allMediaUrls = [...new Set([...productMediaUrls, ...flatUrls, ...menUrls, ...womenUrls])];
+  const gidByUrl = new Map<string, string>();
+  if (allMediaUrls.length) {
+    try {
+      const fc = await shopifyGraphQL<{
+        fileCreate: { files: { id: string }[]; userErrors: { message: string }[] };
+      }>(FILE_CREATE_MUTATION, {
+        files: allMediaUrls.map((u) => ({ originalSource: u, contentType: "IMAGE" })),
+      });
+      if (fc.fileCreate.userErrors.length)
+        warnings.push(`media: ${fc.fileCreate.userErrors.map((e) => e.message).join(", ")}`);
+      allMediaUrls.forEach((u, i) => {
+        const g = fc.fileCreate.files[i]?.id;
+        if (g) gidByUrl.set(u, g);
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      warnings.push(
+        /write_files|Access denied/i.test(msg)
+          ? "Media skipped — the Shopify token needs the write_files scope."
+          : `Media skipped — ${msg}`
+      );
+    }
+  }
+  const mediaFileIds = (urls: string[]) =>
+    urls.map((u) => gidByUrl.get(u)).filter(Boolean) as string[];
+  const flatGid = mediaFileIds(flatUrls);
+  const menGids = mediaFileIds(menUrls);
+  const womenGids = mediaFileIds(womenUrls);
+  const productMediaGids = mediaFileIds(productMediaUrls);
+  if (flatGid[0]) metafields.push({ namespace: METAFIELD_NAMESPACE, key: "flat", type: "file_reference", value: flatGid[0] });
+  if (menGids.length) metafields.push({ namespace: METAFIELD_NAMESPACE, key: "men_images", type: "list.file_reference", value: JSON.stringify(menGids) });
+  if (womenGids.length) metafields.push({ namespace: METAFIELD_NAMESPACE, key: "women_images", type: "list.file_reference", value: JSON.stringify(womenGids) });
+
   const input: Record<string, unknown> = {
     ...(existing?.externalId ? { id: existing.externalId } : {}),
     title: preview.product.title,
@@ -144,6 +203,9 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
     tags: preview.product.tags,
     status: preview.product.status,
     metafields,
+    ...(productMediaGids.length
+      ? { files: productMediaGids.map((gid) => ({ id: gid })) }
+      : {}),
     ...(hasVariants
       ? {
           productOptions: [
