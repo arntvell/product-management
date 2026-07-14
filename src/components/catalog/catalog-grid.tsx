@@ -55,6 +55,7 @@ const COLUMNS: ColDef[] = [
   { key: "styleName", label: "Style name", width: 150, kind: "text", split: true },
 ];
 
+const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
 const ROW_H = 40;
 
@@ -89,6 +90,8 @@ export function CatalogGrid({
   const [search, setSearch] = useState("");
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [saving, setSaving] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const lastClickedRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // References view edits land on the BASE layer (references aren't channel-split).
@@ -114,6 +117,7 @@ export function CatalogGrid({
     ? [...REF_SINGLE, ...REF_MULTI].reduce((s, c) => s + c.width, 0)
     : 0;
   const totalWidth =
+    SELECT_W +
     LABEL_W +
     FIXED_W +
     (isRefs ? refWidth : columns.reduce((sum, c) => sum + c.width, 0));
@@ -133,6 +137,40 @@ export function CatalogGrid({
   }, [rows, search, droppedFilter]);
 
   const droppedCount = rows.filter((r) => r.dropped).length;
+
+  // Bulk operations target the selection when one exists, else all filtered rows.
+  const targetRows = useMemo(
+    () => (selected.size > 0 ? visibleRows.filter((r) => selected.has(r.id)) : visibleRows),
+    [selected, visibleRows]
+  );
+  const allVisibleSelected =
+    visibleRows.length > 0 && visibleRows.every((r) => selected.has(r.id));
+
+  function toggleRow(index: number, shiftKey: boolean) {
+    const id = visibleRows[index].id;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastClickedRef.current !== null) {
+        const [lo, hi] = [lastClickedRef.current, index].sort((a, b) => a - b);
+        const select = !next.has(id); // match the clicked row's resulting state
+        for (let i = lo; i <= hi; i++) {
+          const rid = visibleRows[i].id;
+          if (select) next.add(rid);
+          else next.delete(rid);
+        }
+      } else {
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+    lastClickedRef.current = index;
+  }
+
+  function toggleSelectAll() {
+    setSelected(allVisibleSelected ? new Set() : new Set(visibleRows.map((r) => r.id)));
+    lastClickedRef.current = null;
+  }
 
   const virtualizer = useVirtualizer({
     count: visibleRows.length,
@@ -178,39 +216,39 @@ export function CatalogGrid({
 
   // ---- fill down: copy the top visible row's value to all visible rows ----
   function fillDown(field: string) {
-    if (visibleRows.length === 0) return;
-    const source = visibleRows[0];
+    if (targetRows.length === 0) return;
+    const source = targetRows[0];
     const value = cellValue(source, layer, field);
     setDirty((prev) => {
       const next = new Map(prev);
-      for (const row of visibleRows) {
+      for (const row of targetRows) {
         const key = dkey(row.id, layer, field);
         if (value === originalValue(row, layer, field)) next.delete(key);
         else next.set(key, value);
       }
       return next;
     });
-    toast.success(`Filled "${field}" to ${visibleRows.length} rows`);
+    toast.success(`Filled "${field}" to ${targetRows.length} rows`);
   }
 
   // ---- bulk reference apply (over visible rows) ----
   function applySingleRef(field: string, value: string) {
     setDirty((prev) => {
       const next = new Map(prev);
-      for (const row of visibleRows) {
+      for (const row of targetRows) {
         const key = dkey(row.id, "BASE", field);
         if (value === originalValue(row, "BASE", field)) next.delete(key);
         else next.set(key, value);
       }
       return next;
     });
-    toast.success(`Applied to ${visibleRows.length} rows`);
+    toast.success(`Applied to ${targetRows.length} rows`);
   }
 
   function applyMultiRef(field: string, ids: string[], mode: "add" | "replace") {
     setDirty((prev) => {
       const next = new Map(prev);
-      for (const row of visibleRows) {
+      for (const row of targetRows) {
         const key = dkey(row.id, "BASE", field);
         const cur = next.get(key) ?? originalValue(row, "BASE", field);
         let arr: string[] = [];
@@ -227,7 +265,7 @@ export function CatalogGrid({
       }
       return next;
     });
-    toast.success(`${mode === "add" ? "Added to" : "Replaced on"} ${visibleRows.length} rows`);
+    toast.success(`${mode === "add" ? "Added to" : "Replaced on"} ${targetRows.length} rows`);
   }
 
   // ---- save ----
@@ -339,7 +377,16 @@ export function CatalogGrid({
           ))}
         </div>
         <div className="ml-auto flex items-center gap-3">
+          {selected.size > 0 && (
+            <button
+              onClick={() => setSelected(new Set())}
+              className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+            >
+              Clear {selected.size} selected
+            </button>
+          )}
           <span className="text-xs text-muted-foreground tabular-nums">
+            {selected.size > 0 && `${selected.size} selected · `}
             {visibleRows.length} rows · {dirty.size} unsaved
           </span>
           <Button size="sm" onClick={save} disabled={saving || dirty.size === 0}>
@@ -348,6 +395,12 @@ export function CatalogGrid({
         </div>
       </div>
 
+      {selected.size > 0 && (
+        <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+          {selected.size} selected — fill-down (↓) and bulk actions apply to these
+          rows. Shift-click a checkbox to select a range.
+        </p>
+      )}
       {!isBase && !isRefs && (
         <p className="mt-2 text-xs text-muted-foreground">
           Editing <b>{CHANNEL_LABELS[layer as "SHOPIFY" | "LOOM"]}</b> overrides.
@@ -357,13 +410,14 @@ export function CatalogGrid({
       {isRefs && (
         <div className="mt-2 space-y-2">
           <p className="text-xs text-muted-foreground">
-            References. Edit inline, fill-down (↓), or use the bulk bar to search
-            a value and apply it to all {visibleRows.length} filtered rows.
+            References. Edit inline, fill-down (↓), or use the bulk bar. Bulk
+            actions apply to {selected.size > 0 ? `the ${selected.size} selected` : `all ${visibleRows.length} filtered`} rows.
           </p>
           <BulkRefApply
             refOptions={refOptions}
             colorwayOptions={colorwayOptions}
-            visibleCount={visibleRows.length}
+            targetCount={targetRows.length}
+            scope={selected.size > 0 ? "selected" : "filtered"}
             onApplySingle={applySingleRef}
             onApplyMulti={applyMultiRef}
           />
@@ -381,7 +435,18 @@ export function CatalogGrid({
             className="sticky top-0 z-10 flex border-b bg-muted/60 text-xs font-medium text-muted-foreground backdrop-blur"
             style={{ width: totalWidth }}
           >
-            <div style={{ width: LABEL_W }} className="shrink-0 px-3 py-2">
+            <div
+              style={{ width: SELECT_W }}
+              className="flex shrink-0 items-center justify-center"
+            >
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleSelectAll}
+                title="Select all filtered rows"
+              />
+            </div>
+            <div style={{ width: LABEL_W }} className="shrink-0 border-l px-3 py-2">
               Style · Colorway
             </div>
             {FIXED_COLS.map((c) => (
@@ -415,20 +480,36 @@ export function CatalogGrid({
           <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
             {virtualizer.getVirtualItems().map((vi) => {
               const row = visibleRows[vi.index];
+              const isSel = selected.has(row.id);
               return (
                 <div
                   key={row.id}
-                  className="absolute left-0 flex border-b hover:bg-muted/20"
+                  className={cn(
+                    "absolute left-0 flex border-b hover:bg-muted/20",
+                    isSel && "bg-blue-500/10 hover:bg-blue-500/15"
+                  )}
                   style={{
                     top: vi.start,
                     height: ROW_H,
                     width: totalWidth,
                   }}
                 >
+                  <div
+                    style={{ width: SELECT_W }}
+                    className="flex shrink-0 items-center justify-center"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={() => {}}
+                      onClick={(e) => toggleRow(vi.index, e.shiftKey)}
+                      title="Select (shift-click for range)"
+                    />
+                  </div>
                   {/* Frozen-ish label block */}
                   <div
                     style={{ width: LABEL_W }}
-                    className="flex shrink-0 items-center gap-2 px-3"
+                    className="flex shrink-0 items-center gap-2 border-l px-3"
                   >
                     <div className="h-6 w-6 shrink-0 overflow-hidden rounded bg-muted">
                       {catalogImageSrc(row.thumbnailRef) && (
@@ -635,13 +716,15 @@ const REF_FIELDS: RefField[] = [
 function BulkRefApply({
   refOptions,
   colorwayOptions,
-  visibleCount,
+  targetCount,
+  scope,
   onApplySingle,
   onApplyMulti,
 }: {
   refOptions: Record<"care" | "fitguide" | "collection" | "model", { id: string; label: string }[]>;
   colorwayOptions: { id: string; label: string }[];
-  visibleCount: number;
+  targetCount: number;
+  scope: "selected" | "filtered";
   onApplySingle: (field: string, value: string) => void;
   onApplyMulti: (field: string, ids: string[], mode: "add" | "replace") => void;
 }) {
@@ -754,7 +837,7 @@ function BulkRefApply({
           else if (field.kind === "multi" && ids.length) onApplyMulti(field.key, ids, mode);
         }}
       >
-        Apply to {visibleCount}
+        Apply to {targetCount} {scope}
       </Button>
       <Button
         size="sm"
@@ -766,7 +849,7 @@ function BulkRefApply({
             : onApplyMulti(field.key, [], "replace")
         }
       >
-        Clear on {visibleCount}
+        Clear on {targetCount} {scope}
       </Button>
     </div>
   );
