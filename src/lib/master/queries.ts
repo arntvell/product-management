@@ -31,13 +31,24 @@ export async function listManufacturers(): Promise<
   });
 }
 
+export interface ChannelCellState {
+  targeted: boolean;
+  published: boolean;
+  ready: boolean;
+  missing: string[];
+}
+
 export interface PublishingRow {
   id: string;
   name: string;
   styleName: string;
   thumbnailRef: string | null;
-  shopify: { targeted: boolean; published: boolean };
-  loom: { targeted: boolean; published: boolean };
+  shopify: ChannelCellState;
+  loom: ChannelCellState;
+}
+
+function has(v: string | null | undefined): boolean {
+  return typeof v === "string" && v.trim().length > 0;
 }
 
 export async function listColorwaysForPublishing(
@@ -49,24 +60,61 @@ export async function listColorwaysForPublishing(
       : {},
     orderBy: [{ style: { styleName: "asc" } }, { name: "asc" }],
     include: {
-      style: { select: { styleName: true } },
+      style: {
+        select: {
+          styleName: true,
+          hsCode: true,
+          customsDescription: true,
+          weightKg: true,
+          fiberComposition: true,
+        },
+      },
       publications: true,
+      prices: { where: { currency: "NOK", priceType: "MSRP" }, take: 1 },
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
+      _count: { select: { variants: true } },
     },
   });
 
   return rows.map((cw) => {
-    const pub = (ch: "SHOPIFY" | "LOOM") => {
+    const pub = (ch: "SHOPIFY" | "LOOM"): ChannelCellState => {
       const p = cw.publications.find((x) => x.channel === ch);
-      return { targeted: !!p, published: !!p?.published };
+      return { targeted: !!p, published: !!p?.published, ready: false, missing: [] };
     };
+
+    // Readiness — mirrors the push preview's required fields.
+    const hasVariants = cw._count.variants > 0;
+    const shopifyMissing: string[] = [];
+    if (!hasVariants) shopifyMissing.push("variants");
+    if (cw.prices.length === 0) shopifyMissing.push("price");
+
+    const hs = cw.hsCodeOverride ?? cw.style.hsCode;
+    const cdesc = cw.customsDescriptionOverride ?? cw.style.customsDescription;
+    const weight = cw.weightKgOverride ?? cw.style.weightKg;
+    const fiber = cw.fiberCompositionOverride ?? cw.style.fiberComposition;
+    const loomMissing: string[] = [];
+    if (!hasVariants) loomMissing.push("variants");
+    if (!has(hs)) loomMissing.push("HS code");
+    if (!has(cdesc)) loomMissing.push("customs desc");
+    if (weight == null) loomMissing.push("weight");
+    if (!has(fiber)) loomMissing.push("fibre");
+    if (!has(cw.countryOfOrigin)) loomMissing.push("origin");
+    if (!cw.manufacturerId) loomMissing.push("manufacturer");
+
+    const shopify = pub("SHOPIFY");
+    shopify.missing = shopifyMissing;
+    shopify.ready = shopifyMissing.length === 0;
+    const loom = pub("LOOM");
+    loom.missing = loomMissing;
+    loom.ready = loomMissing.length === 0;
+
     return {
       id: cw.id,
       name: cw.name,
       styleName: cw.style.styleName,
       thumbnailRef: cw.seasonImages[0]?.url ?? null,
-      shopify: pub("SHOPIFY"),
-      loom: pub("LOOM"),
+      shopify,
+      loom,
     };
   });
 }
