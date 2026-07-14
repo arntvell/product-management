@@ -44,7 +44,7 @@ export default async function PublishingPage({
         })}
       </div>
 
-      <PublishingTable rows={rows} />
+      <PublishingTable rows={rows} season={season} />
     </div>
   );
 }

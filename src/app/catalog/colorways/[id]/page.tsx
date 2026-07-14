@@ -87,7 +87,11 @@ export default async function ColorwayEditPage({
           styleWithUnisexDame: cw.styleWithUnisexDame,
         }}
       />
-      <ChannelsPanel colorwayId={cw.id} initialPublications={initialPublications} />
+      <ChannelsPanel
+        colorwayId={cw.id}
+        initialPublications={initialPublications}
+        seasonCodes={cw.entries.map((e) => e.season.code)}
+      />
     </>
   );
 }

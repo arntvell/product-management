@@ -7,12 +7,49 @@ import { catalogImageSrc } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 import type { PublishingRow, ChannelCellState } from "@/lib/master/queries";
 
-export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
+export function PublishingTable({
+  rows,
+  season,
+}: {
+  rows: PublishingRow[];
+  season?: string;
+}) {
   const [items, setItems] = useState<PublishingRow[]>(rows);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [busy, setBusy] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [pushingLoom, setPushingLoom] = useState(false);
+
+  async function pushLoomSelected() {
+    if (selected.size === 0) return;
+    if (!season) {
+      toast.error("Pick a season first — Loom pushes are per-season.");
+      return;
+    }
+    if (!confirm(`Push ${selected.size} product(s) to Loom for ${season}?`)) return;
+    setPushingLoom(true);
+    try {
+      const res = await fetch("/api/catalog/push/loom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colorwayIds: [...selected], seasonCode: season }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false)
+        throw new Error(data.error ?? data.raw ?? "Loom push failed");
+      setItems((prev) =>
+        prev.map((r) =>
+          selected.has(r.id) ? { ...r, loom: { ...r.loom, targeted: true, published: true } } : r
+        )
+      );
+      toast.success(`Pushed ${selected.size} product(s) to Loom (${season})`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Loom push failed");
+    } finally {
+      setPushingLoom(false);
+    }
+  }
 
   async function pushSelected() {
     if (selected.size === 0) return;
@@ -190,6 +227,14 @@ export function PublishingTable({ rows }: { rows: PublishingRow[] }) {
           <div className="mx-1 w-px self-stretch bg-border" />
           <Button size="sm" disabled={pushing || !selected.size} onClick={pushSelected}>
             {pushing ? "Pushing…" : `Push ${selected.size || ""} to Shopify`.replace("  ", " ")}
+          </Button>
+          <Button
+            size="sm"
+            disabled={pushingLoom || !selected.size}
+            onClick={pushLoomSelected}
+            title={season ? `Push to Loom for ${season}` : "Select a season to push to Loom"}
+          >
+            {pushingLoom ? "Pushing…" : `Push ${selected.size || ""} to Loom`.replace("  ", " ")}
           </Button>
         </div>
       </div>

@@ -363,6 +363,7 @@ export async function getColorwayForEdit(id: string) {
       style: { select: { id: true, styleName: true, styleSku: true } },
       channelContent: true,
       publications: true,
+      entries: { include: { season: { select: { code: true } } } },
     },
   });
 }

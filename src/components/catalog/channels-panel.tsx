@@ -35,9 +35,11 @@ interface Preview {
 export function ChannelsPanel({
   colorwayId,
   initialPublications,
+  seasonCodes = [],
 }: {
   colorwayId: string;
   initialPublications: Publication[];
+  seasonCodes?: string[];
 }) {
   const [pubs, setPubs] = useState<Publication[]>(initialPublications);
   const [saving, setSaving] = useState(false);
@@ -95,6 +97,34 @@ export function ChannelsPanel({
       toast.error(err instanceof Error ? err.message : "Push failed");
     } finally {
       setPushing(false);
+    }
+  }
+
+  const [pushingLoom, setPushingLoom] = useState(false);
+  async function pushToLoom() {
+    if (seasonCodes.length === 0) {
+      toast.error("This product isn't in any season — can't push to Loom.");
+      return;
+    }
+    if (!confirm(`Push to Loom for season(s): ${seasonCodes.join(", ")}?`)) return;
+    setPushingLoom(true);
+    try {
+      for (const seasonCode of seasonCodes) {
+        const res = await fetch(`/api/catalog/push/loom`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ colorwayIds: [colorwayId], seasonCode }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.ok === false)
+          throw new Error(data.error ?? data.raw ?? "Loom push failed");
+      }
+      setPubs((prev) => prev.map((p) => (p.channel === "LOOM" ? { ...p, published: true } : p)));
+      toast.success(`Pushed to Loom (${seasonCodes.join(", ")})`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Loom push failed");
+    } finally {
+      setPushingLoom(false);
     }
   }
 
@@ -165,6 +195,17 @@ export function ChannelsPanel({
                 </a>
               </p>
             )}
+          </div>
+        )}
+
+        {targeted("LOOM") && (
+          <div className="mt-4 border-t pt-4">
+            <Button size="sm" onClick={pushToLoom} disabled={pushingLoom}>
+              {pushingLoom ? "Pushing…" : "Push to Loom"}
+            </Button>
+            <span className="ml-2 text-xs text-muted-foreground">
+              Pushes to Loom for season(s): {seasonCodes.join(", ") || "—"} (B2B).
+            </span>
           </div>
         )}
 
