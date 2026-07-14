@@ -98,12 +98,22 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
   add("style_name", "single_line_text_field", resolveShopify(cw, "styleName", cw.styleName));
   add("color_hex", "color", cw.swatchHex);
 
-  // Reference metafields (GID lists / single GIDs), kept as-is.
+  // Reference metafields. Single refs (care/fitguide/collection/model) hold
+  // Shopify GIDs. Product refs hold master colorway ids, resolved to Shopify
+  // product GIDs at push time.
+  let productRefCount = 0;
   for (const f of LIST_REFERENCE_FIELDS) {
     const ids = f.get(cw);
-    if (ids.length) add(f.key, "list.product_reference", JSON.stringify(ids));
+    if (ids.length) {
+      add(f.key, "list.product_reference", JSON.stringify(ids));
+      productRefCount += ids.length;
+    }
   }
   for (const f of SINGLE_REFERENCE_FIELDS) add(f.key, f.type, f.get(cw));
+  if (productRefCount > 0)
+    warnings.push(
+      `${productRefCount} product reference(s) are master ids — resolved to Shopify product GIDs on push (targets not yet on Shopify are skipped).`
+    );
 
   // Tags: Shopify-resolved (override comma string -> base array).
   const tagOverride = cw.channelContent.find((c) => c.channel === "SHOPIFY" && c.field === "tags");

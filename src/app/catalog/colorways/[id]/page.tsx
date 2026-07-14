@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { getColorwayForEdit } from "@/lib/master/queries";
+import { getColorwayForEdit, listColorwayOptions } from "@/lib/master/queries";
 import {
   ColorwayEditor,
   type ColorwayEditorProps,
 } from "@/components/catalog/colorway-editor";
 import { ChannelsPanel } from "@/components/catalog/channels-panel";
+import { ReferencesPanel } from "@/components/catalog/references-panel";
 import {
   CHANNELS,
   OVERRIDE_FIELD_KEYS,
@@ -22,7 +23,10 @@ export default async function ColorwayEditPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const cw = await getColorwayForEdit(id);
+  const [cw, colorwayOptions] = await Promise.all([
+    getColorwayForEdit(id),
+    listColorwayOptions(),
+  ]);
   if (!cw) notFound();
 
   const initialBase = Object.fromEntries(
@@ -68,6 +72,20 @@ export default async function ColorwayEditPage({
         }}
         initialBase={initialBase}
         initialOverrides={initialOverrides}
+      />
+      <ReferencesPanel
+        colorwayId={cw.id}
+        colorwayOptions={colorwayOptions.filter((o) => o.id !== cw.id)}
+        initial={{
+          carePageId: cw.carePageId,
+          fitguidePageId: cw.fitguidePageId,
+          recommendedCollectionId: cw.recommendedCollectionId,
+          modelInfoId: cw.modelInfoId,
+          sameProduct: cw.sameProduct,
+          styleWith: cw.styleWith,
+          styleWithUnisexHerre: cw.styleWithUnisexHerre,
+          styleWithUnisexDame: cw.styleWithUnisexDame,
+        }}
       />
       <ChannelsPanel colorwayId={cw.id} initialPublications={initialPublications} />
     </>

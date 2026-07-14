@@ -122,6 +122,24 @@ export async function listColorwaysForPublishing(
   });
 }
 
+export interface ColorwayOption {
+  id: string;
+  label: string; // "Style — Colorway (SKU)"
+}
+
+// Lightweight list of all colorways for the product-reference pickers
+// (same_product / style_with / unisex). Small enough to search client-side.
+export async function listColorwayOptions(): Promise<ColorwayOption[]> {
+  const rows = await prisma.colorway.findMany({
+    orderBy: [{ style: { styleName: "asc" } }, { name: "asc" }],
+    select: { id: true, name: true, colorwaySku: true, style: { select: { styleName: true } } },
+  });
+  return rows.map((c) => ({
+    id: c.id,
+    label: `${c.style.styleName} — ${c.name} (${c.colorwaySku})`,
+  }));
+}
+
 export async function getBrandTemplate(brandId: string) {
   const t = await prisma.brandTemplate.findUnique({ where: { brandId } });
   if (!t) return null;
