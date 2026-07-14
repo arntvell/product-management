@@ -7,7 +7,90 @@
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { PRODUCT_SET_MUTATION } from "@/lib/shopify/mutations";
+import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
+
+type PublishColorway = NonNullable<Awaited<ReturnType<typeof getColorwayForPublish>>>;
+type Metafield = { namespace: string; key: string; value: string; type: string };
+
+/** Resolve master colorway ids -> the Shopify product GIDs of those already pushed. */
+async function resolveProductGids(masterIds: string[]): Promise<{ gids: string[]; skipped: number }> {
+  if (masterIds.length === 0) return { gids: [], skipped: 0 };
+  const pubs = await prisma.channelPublication.findMany({
+    where: { colorwayId: { in: masterIds }, channel: "SHOPIFY", NOT: { externalId: null } },
+    select: { colorwayId: true, externalId: true },
+  });
+  const byId = new Map(pubs.map((p) => [p.colorwayId, p.externalId!]));
+  const gids = masterIds.map((id) => byId.get(id)).filter(Boolean) as string[];
+  return { gids, skipped: masterIds.length - gids.length };
+}
+
+/** model_info is a text metafield: resolve the metaobject id -> "Model is X tall …". */
+async function resolveModelText(metaobjectGid: string): Promise<string | null> {
+  try {
+    const res = await shopifyGraphQL<{
+      metaobject: { fields: { key: string; value: string }[] } | null;
+    }>(
+      `query M($id: ID!) { metaobject(id: $id) { fields { key value } } }`,
+      { id: metaobjectGid }
+    );
+    const fields = res.metaobject?.fields ?? [];
+    const get = (k: string) => fields.find((f) => f.key === k)?.value ?? "";
+    const height = get("height");
+    const size = get("size_worn");
+    if (!height && !size) return null;
+    return `Model is ${height} tall and wearing a size ${size}`.replace(/\s+/g, " ").trim();
+  } catch {
+    return null;
+  }
+}
+
+/** Build the full custom.* metafield set (free-text, refs, links, model). */
+async function buildMetafields(
+  cw: PublishColorway,
+  warnings: string[]
+): Promise<Metafield[]> {
+  const ns = METAFIELD_NAMESPACE;
+  const mf: Metafield[] = [];
+  const add = (key: string, type: string, value: string | null | undefined) => {
+    if (value && String(value).trim()) mf.push({ namespace: ns, key, value: String(value), type });
+  };
+  // Shopify-resolved free text (override -> base).
+  const rs = (field: string, base: string | null) => {
+    const o = cw.channelContent.find((c) => c.channel === "SHOPIFY" && c.field === field);
+    return o ? o.value : base;
+  };
+  add("short_description", "multi_line_text_field", rs("shortDescription", cw.shortDescription));
+  add("full_description", "multi_line_text_field", rs("fullDescription", cw.fullDescription));
+  add("details", "multi_line_text_field", rs("details", cw.details));
+  add("style_tagline", "multi_line_text_field", rs("styleTagline", cw.styleTagline));
+  add("style_name", "single_line_text_field", rs("styleName", cw.styleName));
+  add("color_hex", "color", cw.swatchHex);
+
+  // Reference metafields (Shopify GIDs, stored directly).
+  add("care_page", "page_reference", cw.carePageId);
+  add("fitguide", "page_reference", cw.fitguidePageId);
+  add("recommended_product_from_collection", "collection_reference", cw.recommendedCollectionId);
+
+  // model_info is text on Shopify — resolve the picked model to a sentence.
+  if (cw.modelInfoId) add("model_info", "multi_line_text_field", await resolveModelText(cw.modelInfoId));
+
+  // Product links: master ids -> Shopify product GIDs (skip not-yet-pushed).
+  const links: [string, string[]][] = [
+    ["same_product", cw.sameProduct],
+    ["style_with", cw.styleWith],
+    ["style_with_unisex_herre", cw.styleWithUnisexHerre],
+    ["style_with_unisex_dame", cw.styleWithUnisexDame],
+  ];
+  for (const [key, ids] of links) {
+    if (ids.length === 0) continue;
+    const { gids, skipped } = await resolveProductGids(ids);
+    if (gids.length) add(key, "list.product_reference", JSON.stringify(gids));
+    if (skipped > 0)
+      warnings.push(`${key}: ${skipped} linked product(s) not yet on Shopify — skipped.`);
+  }
+  return mf;
+}
 
 interface ProductSetResult {
   productSet: {
@@ -27,17 +110,9 @@ export interface PushResult {
   handle: string | null;
   variants: number;
   metafields: number;
+  warnings: string[];
   adminUrl: string;
 }
-
-const FREE_TEXT_KEYS = new Set([
-  "short_description",
-  "full_description",
-  "details",
-  "style_tagline",
-  "style_name",
-  "color_hex",
-]);
 
 export async function pushColorwayToShopify(id: string): Promise<PushResult> {
   const cw = await getColorwayForPublish(id);
@@ -47,9 +122,8 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
   const existing = cw.publications.find((p) => p.channel === "SHOPIFY");
   const action: "create" | "update" = existing?.externalId ? "update" : "create";
 
-  const metafields = preview.metafields
-    .filter((m) => FREE_TEXT_KEYS.has(m.key))
-    .map((m) => ({ namespace: m.namespace, key: m.key, value: m.value, type: m.type }));
+  const warnings: string[] = [];
+  const metafields = await buildMetafields(cw, warnings);
 
   // One "Size" option; one variant per master variant (deduped size labels).
   const sizes = [...new Set(preview.variants.map((v) => v.size))];
@@ -112,6 +186,7 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
     handle: product.handle,
     variants: product.variants.edges.length,
     metafields: metafields.length,
+    warnings,
     adminUrl: `https://${store}/admin/products/${numericId}`,
   };
 }
