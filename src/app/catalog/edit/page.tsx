@@ -13,5 +13,13 @@ export default async function CatalogEditPage({
     listColorwaysForEdit(season),
     listSeasons(),
   ]);
-  return <CatalogGrid initialRows={rows} seasons={seasons} season={season} />;
+  const seasonId = season ? seasons.find((s) => s.code === season)?.id : undefined;
+  return (
+    <CatalogGrid
+      initialRows={rows}
+      seasons={seasons}
+      season={season}
+      seasonId={seasonId}
+    />
+  );
 }

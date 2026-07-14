@@ -16,6 +16,7 @@ interface Publication {
 interface Preview {
   action: "create" | "update";
   externalId: string | null;
+  unisex: boolean;
   product: {
     title: string;
     handle: string;
@@ -166,12 +167,13 @@ export function ChannelsPanel({
                 {preview.variants.slice(0, 8).map((v) => `${v.size}${v.price ? ` @${v.price}` : ""}`).join("  ")}
                 {preview.variants.length > 8 ? " …" : ""}
               </div>
-              {(preview.roleMedia.flat.length + preview.roleMedia.men.length + preview.roleMedia.women.length) > 0 && (
-                <div className="mt-1 text-muted-foreground">
-                  File metafields from media roles → custom.flat ({preview.roleMedia.flat.length}),
-                  men_images ({preview.roleMedia.men.length}), women_images ({preview.roleMedia.women.length})
-                </div>
-              )}
+              <div className="mt-1 text-muted-foreground">
+                {preview.unisex ? (
+                  <>Unisex routing: media section = flat only; gallery → men_images ({preview.roleMedia.men.length}) / women_images ({preview.roleMedia.women.length}); custom.flat ({preview.roleMedia.flat.length}).</>
+                ) : (
+                  <>Men/Women routing: gallery → media section; custom.flat ({preview.roleMedia.flat.length}).</>
+                )}
+              </div>
             </div>
           </div>
         )}

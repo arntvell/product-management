@@ -227,6 +227,9 @@ export interface GridRow {
   tags: string[];
   vendor: string;
   productType: string;
+  swatchHex: string;
+  priceNok: string;
+  mediaCount: number;
   dropped: boolean;
   base: Record<string, string>;
   overrides: { SHOPIFY: Record<string, string>; LOOM: Record<string, string> };
@@ -264,6 +267,15 @@ export async function listColorwaysForEdit(
       channelContent: true,
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
       entries: { select: { cancelled: true, season: { select: { code: true } } } },
+      prices: {
+        where: {
+          currency: "NOK",
+          priceType: "MSRP",
+          ...(seasonCode ? { season: { code: seasonCode } } : {}),
+        },
+        take: 1,
+      },
+      _count: { select: { media: true } },
     },
   });
 
@@ -291,6 +303,9 @@ export async function listColorwaysForEdit(
       tags: cw.tags,
       vendor: cw.vendor ?? "",
       productType: cw.productType ?? "",
+      swatchHex: cw.swatchHex ?? "",
+      priceNok: cw.prices[0]?.amount.toString() ?? "",
+      mediaCount: cw._count.media,
       dropped: isDropped(cw.entries, seasonCode),
       base,
       overrides,

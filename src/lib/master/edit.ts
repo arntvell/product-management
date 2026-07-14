@@ -47,9 +47,10 @@ export type EditLayer = "BASE" | ChannelKey;
 
 export interface BulkChange {
   colorwayId: string;
-  field: string; // status | tags | vendor | productType | <SplitFieldKey>
+  field: string; // status | tags | vendor | productType | swatchHex | priceNok | <SplitFieldKey>
   layer: EditLayer;
   value: string | string[] | null;
+  seasonId?: string; // required for field "priceNok" (prices are per-season)
 }
 
 // Base-layer fields that become MANUAL-owned once edited (§5.3).
@@ -72,6 +73,36 @@ export async function applyBulkChanges(
     const ownerFields: string[] = [];
 
     for (const ch of list) {
+      // Price is a per-season Price row, not a Colorway field.
+      if (ch.field === "priceNok") {
+        const raw = typeof ch.value === "string" ? ch.value.trim() : "";
+        if (ch.seasonId && raw) {
+          const amount = Number(raw);
+          if (!Number.isNaN(amount)) {
+            ops.push(
+              prisma.price.upsert({
+                where: {
+                  seasonId_colorwayId_currency_priceType: {
+                    seasonId: ch.seasonId,
+                    colorwayId,
+                    currency: "NOK",
+                    priceType: "MSRP",
+                  },
+                },
+                create: {
+                  seasonId: ch.seasonId,
+                  colorwayId,
+                  currency: "NOK",
+                  priceType: "MSRP",
+                  amount,
+                },
+                update: { amount },
+              })
+            );
+          }
+        }
+        continue;
+      }
       if (ch.layer === "BASE") {
         if (ch.field === "status") {
           baseData.status = ch.value as ProductStatusValue;

@@ -42,14 +42,24 @@ function dkey(id: string, layer: EditLayer, field: string) {
   return `${id}|${layer}|${field}`;
 }
 
+// Always-visible columns (every layer), left of the layer-specific columns.
+const FIXED_COLS: { key: string; label: string; width: number }[] = [
+  { key: "swatchHex", label: "Swatch", width: 76 },
+  { key: "priceNok", label: "NOK", width: 84 },
+  { key: "media", label: "Media", width: 78 },
+];
+const FIXED_W = FIXED_COLS.reduce((s, c) => s + c.width, 0);
+
 export function CatalogGrid({
   initialRows,
   seasons,
   season,
+  seasonId,
 }: {
   initialRows: GridRow[];
   seasons: { code: string }[];
   season?: string;
+  seasonId?: string;
 }) {
   const [rows, setRows] = useState<GridRow[]>(initialRows);
   const [layer, setLayer] = useState<EditLayer>("BASE");
@@ -62,7 +72,7 @@ export function CatalogGrid({
   const isBase = layer === "BASE";
   const columns = isBase ? COLUMNS : COLUMNS.filter((c) => c.split);
   const totalWidth =
-    LABEL_W + columns.reduce((sum, c) => sum + c.width, 0);
+    LABEL_W + FIXED_W + columns.reduce((sum, c) => sum + c.width, 0);
 
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -94,6 +104,8 @@ export function CatalogGrid({
       if (field === "tags") return row.tags.join(", ");
       if (field === "vendor") return row.vendor;
       if (field === "productType") return row.productType;
+      if (field === "swatchHex") return row.swatchHex;
+      if (field === "priceNok") return row.priceNok;
       return row.base[field] ?? "";
     }
     return row.overrides[l][field] ?? "";
@@ -104,11 +116,11 @@ export function CatalogGrid({
     return d !== undefined ? d : originalValue(row, l, field);
   }
 
-  function setCell(row: GridRow, field: string, value: string) {
+  function setCell(row: GridRow, field: string, value: string, atLayer: EditLayer = layer) {
     setDirty((prev) => {
       const next = new Map(prev);
-      const key = dkey(row.id, layer, field);
-      if (value === originalValue(row, layer, field)) next.delete(key);
+      const key = dkey(row.id, atLayer, field);
+      if (value === originalValue(row, atLayer, field)) next.delete(key);
       else next.set(key, value);
       return next;
     });
@@ -138,7 +150,13 @@ export function CatalogGrid({
     const changes: BulkChange[] = [];
     for (const [key, value] of dirty) {
       const [id, l, field] = key.split("|") as [string, EditLayer, string];
-      changes.push({ colorwayId: id, field, layer: l, value });
+      changes.push({
+        colorwayId: id,
+        field,
+        layer: l,
+        value,
+        ...(field === "priceNok" && seasonId ? { seasonId } : {}),
+      });
     }
     try {
       const res = await fetch("/api/catalog/colorways/bulk", {
@@ -260,6 +278,15 @@ export function CatalogGrid({
             <div style={{ width: LABEL_W }} className="shrink-0 px-3 py-2">
               Style · Colorway
             </div>
+            {FIXED_COLS.map((c) => (
+              <div
+                key={c.key}
+                style={{ width: c.width }}
+                className="shrink-0 border-l px-2 py-2"
+              >
+                {c.label}
+              </div>
+            ))}
             {columns.map((c) => (
               <div
                 key={c.key}
@@ -328,6 +355,50 @@ export function CatalogGrid({
                     </div>
                   </div>
 
+                  {/* Always-visible: swatch, price, media */}
+                  <div
+                    style={{ width: FIXED_COLS[0].width }}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1 border-l px-1",
+                      dirty.has(dkey(row.id, "BASE", "swatchHex")) && "bg-amber-500/10"
+                    )}
+                  >
+                    <span
+                      className="h-4 w-4 shrink-0 rounded border"
+                      style={{ backgroundColor: cellValue(row, "BASE", "swatchHex") || "transparent" }}
+                    />
+                    <input
+                      value={cellValue(row, "BASE", "swatchHex")}
+                      placeholder="#hex"
+                      onChange={(e) => setCell(row, "swatchHex", e.target.value, "BASE")}
+                      className="w-full bg-transparent text-xs outline-none focus:bg-background"
+                    />
+                  </div>
+                  <div
+                    style={{ width: FIXED_COLS[1].width }}
+                    className={cn(
+                      "shrink-0 border-l",
+                      dirty.has(dkey(row.id, "BASE", "priceNok")) && "bg-amber-500/10"
+                    )}
+                  >
+                    <input
+                      value={cellValue(row, "BASE", "priceNok")}
+                      disabled={!seasonId}
+                      placeholder={seasonId ? "NOK" : "season"}
+                      onChange={(e) => setCell(row, "priceNok", e.target.value, "BASE")}
+                      title={seasonId ? "NOK MSRP for this season" : "Select a season to edit price"}
+                      className="h-full w-full bg-transparent px-2 text-xs tabular-nums outline-none focus:bg-background disabled:opacity-40"
+                    />
+                  </div>
+                  <a
+                    href={`/catalog/colorways/${row.id}/media`}
+                    style={{ width: FIXED_COLS[2].width }}
+                    className="flex shrink-0 items-center justify-center gap-1 border-l text-xs text-muted-foreground hover:bg-muted hover:underline"
+                    title="Manage media"
+                  >
+                    ▦ {row.mediaCount}
+                  </a>
+
                   {/* Editable cells */}
                   {columns.map((c) => {
                     const disabled = !isBase && !c.split;
@@ -388,12 +459,15 @@ function applyChanges(rows: GridRow[], changes: BulkChange[]): GridRow[] {
     const row = byId.get(ch.colorwayId);
     if (!row) continue;
     const v = typeof ch.value === "string" ? ch.value : "";
-    if (ch.layer === "BASE") {
+    if (ch.field === "priceNok") {
+      row.priceNok = v;
+    } else if (ch.layer === "BASE") {
       if (ch.field === "status") row.status = v;
       else if (ch.field === "tags")
         row.tags = v.split(",").map((t) => t.trim()).filter(Boolean);
       else if (ch.field === "vendor") row.vendor = v;
       else if (ch.field === "productType") row.productType = v;
+      else if (ch.field === "swatchHex") row.swatchHex = v;
       else row.base[ch.field] = v;
     } else {
       if (v.trim()) row.overrides[ch.layer][ch.field] = v;

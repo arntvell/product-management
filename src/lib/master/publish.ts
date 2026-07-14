@@ -35,6 +35,7 @@ export interface ShopifyMetafieldPreview {
 export interface ShopifyPreview {
   action: "create" | "update";
   externalId: string | null;
+  unisex: boolean;
   product: {
     title: string;
     handle: string;
@@ -125,25 +126,47 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
       `${nonPublicMedia} image(s) are Threadflow refs — adopt them into Blob before pushing (Shopify can't fetch the proxy).`
     );
 
-  // Gallery media (role GALLERY) + per-season images (Threadflow main),
-  // de-duplicated. Role-tagged media map to file metafields instead.
-  const galleryMedia = cw.media.filter((m) => m.role === "GALLERY");
-  const media = [
-    ...galleryMedia.map((m) => m.url),
-    ...cw.seasonImages.map((s) => s.url),
-  ].filter((url, i, arr) => arr.indexOf(url) === i);
-
+  // Media routing depends on whether the style is unisex.
+  const unisex = cw.style.unisex;
+  const galleryUrls = cw.media.filter((m) => m.role === "GALLERY").map((m) => m.url);
   const roleMedia = {
     flat: cw.media.filter((m) => m.role === "FLAT").map((m) => m.url),
     men: cw.media.filter((m) => m.role === "MEN").map((m) => m.url),
     women: cw.media.filter((m) => m.role === "WOMEN").map((m) => m.url),
   };
+  const seasonUrls = cw.seasonImages.map((s) => s.url);
+  const dedupe = (arr: string[]) => arr.filter((u, i) => arr.indexOf(u) === i);
+
+  let media: string[];
+  if (unisex) {
+    // Unisex: gallery lives in men_images/women_images metafields; the flat is
+    // the sole Shopify media-section image.
+    media = dedupe(roleMedia.flat);
+    if (roleMedia.men.length)
+      add("men_images", "list.file_reference", `${roleMedia.men.length} image(s) via role → Shopify files`);
+    if (roleMedia.women.length)
+      add("women_images", "list.file_reference", `${roleMedia.women.length} image(s) via role → Shopify files`);
+    if (roleMedia.flat.length === 0)
+      warnings.push("Unisex product: no Flat-role image — Shopify media section would be empty.");
+    if (roleMedia.men.length === 0 && roleMedia.women.length === 0)
+      warnings.push("Unisex product: no Men/Women-role images for the gallery metafields.");
+  } else {
+    // Men/Women: gallery images go to the Shopify media section.
+    media = dedupe([...galleryUrls, ...seasonUrls]);
+    if (media.length === 0)
+      warnings.push("No Gallery-role media — Shopify media section would be empty.");
+  }
+
+  // Flat metafield is set regardless of gender.
+  if (roleMedia.flat.length)
+    add("flat", "file_reference", `${roleMedia.flat.length} image via role → Shopify file`);
 
   const shopifyPub = cw.publications.find((p) => p.channel === "SHOPIFY");
 
   return {
     action: shopifyPub?.externalId ? "update" : "create",
     externalId: shopifyPub?.externalId ?? null,
+    unisex,
     product: {
       title: cw.name,
       handle: cw.colorwaySku.toLowerCase(),
