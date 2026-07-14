@@ -56,6 +56,21 @@ export interface BulkChange {
 // Base-layer fields that become MANUAL-owned once edited (§5.3).
 const OWNED_BASE_FIELDS = new Set<string>([...SPLIT_FIELD_KEYS, "vendor", "productType"]);
 
+// Single-value reference fields (Shopify GIDs); multi-value reference fields
+// (master colorway id arrays, carried as JSON strings from the grid).
+const SINGLE_REF_FIELDS = new Set<string>([
+  "carePageId",
+  "fitguidePageId",
+  "recommendedCollectionId",
+  "modelInfoId",
+]);
+const MULTI_REF_FIELDS = new Set<string>([
+  "sameProduct",
+  "styleWith",
+  "styleWithUnisexHerre",
+  "styleWithUnisexDame",
+]);
+
 export async function applyBulkChanges(
   changes: BulkChange[]
 ): Promise<{ colorways: number; changes: number }> {
@@ -111,6 +126,20 @@ export async function applyBulkChanges(
             ? ch.value
             : String(ch.value ?? "").split(",");
           baseData.tags = arr.map((t) => t.trim()).filter(Boolean);
+        } else if (MULTI_REF_FIELDS.has(ch.field)) {
+          // Multi refs arrive as a JSON array string from the grid.
+          let ids: string[] = [];
+          if (Array.isArray(ch.value)) ids = ch.value;
+          else if (typeof ch.value === "string" && ch.value.trim()) {
+            try {
+              ids = JSON.parse(ch.value);
+            } catch {
+              ids = [];
+            }
+          }
+          baseData[ch.field] = ids;
+        } else if (SINGLE_REF_FIELDS.has(ch.field)) {
+          baseData[ch.field] = norm(typeof ch.value === "string" ? ch.value : null);
         } else {
           baseData[ch.field] = norm(
             typeof ch.value === "string" ? ch.value : null

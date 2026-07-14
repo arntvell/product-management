@@ -249,6 +249,17 @@ export interface GridRow {
   priceNok: string;
   mediaCount: number;
   dropped: boolean;
+  // Reference metafields (single = Shopify GID; multi = master colorway ids)
+  refs: {
+    carePageId: string;
+    fitguidePageId: string;
+    recommendedCollectionId: string;
+    modelInfoId: string;
+    sameProduct: string[];
+    styleWith: string[];
+    styleWithUnisexHerre: string[];
+    styleWithUnisexDame: string[];
+  };
   base: Record<string, string>;
   overrides: { SHOPIFY: Record<string, string>; LOOM: Record<string, string> };
 }
@@ -325,6 +336,16 @@ export async function listColorwaysForEdit(
       priceNok: cw.prices[0]?.amount.toString() ?? "",
       mediaCount: cw._count.media,
       dropped: isDropped(cw.entries, seasonCode),
+      refs: {
+        carePageId: cw.carePageId ?? "",
+        fitguidePageId: cw.fitguidePageId ?? "",
+        recommendedCollectionId: cw.recommendedCollectionId ?? "",
+        modelInfoId: cw.modelInfoId ?? "",
+        sameProduct: cw.sameProduct,
+        styleWith: cw.styleWith,
+        styleWithUnisexHerre: cw.styleWithUnisexHerre,
+        styleWithUnisexDame: cw.styleWithUnisexDame,
+      },
       base,
       overrides,
     };

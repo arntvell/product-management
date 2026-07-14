@@ -12,8 +12,28 @@ import {
   PRODUCT_STATUSES,
 } from "@/lib/master/fields";
 import { catalogImageSrc } from "@/lib/catalog-image";
+import { usePages } from "@/hooks/use-pages";
+import { useCollections } from "@/hooks/use-collections";
+import { useModels } from "@/hooks/use-models";
 import type { GridRow } from "@/lib/master/queries";
 import type { BulkChange, EditLayer } from "@/lib/master/edit";
+
+type View = EditLayer | "REFERENCES";
+
+// Reference columns (References view). Single = Shopify-GID select; multi =
+// master colorway id list (count + fill-down/clear; detailed edit in the editor).
+const REF_SINGLE: { key: string; label: string; src: "care" | "fitguide" | "collection" | "model"; width: number }[] = [
+  { key: "carePageId", label: "Care page", src: "care", width: 150 },
+  { key: "fitguidePageId", label: "Fit guide", src: "fitguide", width: 150 },
+  { key: "recommendedCollectionId", label: "Collection", src: "collection", width: 150 },
+  { key: "modelInfoId", label: "Fit model", src: "model", width: 130 },
+];
+const REF_MULTI: { key: keyof GridRow["refs"]; label: string; width: number }[] = [
+  { key: "sameProduct", label: "Same product", width: 120 },
+  { key: "styleWith", label: "Style with", width: 120 },
+  { key: "styleWithUnisexHerre", label: "SW Herre", width: 110 },
+  { key: "styleWithUnisexDame", label: "SW Dame", width: 110 },
+];
 
 interface ColDef {
   key: string;
@@ -62,17 +82,39 @@ export function CatalogGrid({
   seasonId?: string;
 }) {
   const [rows, setRows] = useState<GridRow[]>(initialRows);
-  const [layer, setLayer] = useState<EditLayer>("BASE");
+  const [view, setView] = useState<View>("BASE");
   const [dirty, setDirty] = useState<Map<string, string>>(new Map());
   const [search, setSearch] = useState("");
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [saving, setSaving] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const isBase = layer === "BASE";
+  // References view edits land on the BASE layer (references aren't channel-split).
+  const isRefs = view === "REFERENCES";
+  const layer: EditLayer = isRefs ? "BASE" : (view as EditLayer);
+  const isBase = view === "BASE";
+
+  const { carePages, fitguidePages } = usePages();
+  const { collections } = useCollections();
+  const { models } = useModels();
+  const refOptions = useMemo(
+    () => ({
+      care: carePages.map((p) => ({ id: p.id, label: p.title })),
+      fitguide: fitguidePages.map((p) => ({ id: p.id, label: p.title })),
+      collection: collections.map((c) => ({ id: c.id, label: c.title })),
+      model: models.map((m) => ({ id: m.id, label: m.fields.name || m.handle })),
+    }),
+    [carePages, fitguidePages, collections, models]
+  );
+
   const columns = isBase ? COLUMNS : COLUMNS.filter((c) => c.split);
+  const refWidth = isRefs
+    ? [...REF_SINGLE, ...REF_MULTI].reduce((s, c) => s + c.width, 0)
+    : 0;
   const totalWidth =
-    LABEL_W + FIXED_W + columns.reduce((sum, c) => sum + c.width, 0);
+    LABEL_W +
+    FIXED_W +
+    (isRefs ? refWidth : columns.reduce((sum, c) => sum + c.width, 0));
 
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -106,6 +148,12 @@ export function CatalogGrid({
       if (field === "productType") return row.productType;
       if (field === "swatchHex") return row.swatchHex;
       if (field === "priceNok") return row.priceNok;
+      // single references
+      if (field in row.refs && !Array.isArray(row.refs[field as keyof GridRow["refs"]]))
+        return (row.refs[field as keyof GridRow["refs"]] as string) ?? "";
+      // multi references (carried as JSON array string)
+      if (field in row.refs)
+        return JSON.stringify(row.refs[field as keyof GridRow["refs"]]);
       return row.base[field] ?? "";
     }
     return row.overrides[l][field] ?? "";
@@ -210,18 +258,22 @@ export function CatalogGrid({
           ))}
         </div>
         <div className="flex gap-1.5">
-          {(["BASE", ...CHANNELS] as EditLayer[]).map((l) => (
+          {(["BASE", ...CHANNELS, "REFERENCES"] as View[]).map((v) => (
             <button
-              key={l}
-              onClick={() => setLayer(l)}
+              key={v}
+              onClick={() => setView(v)}
               className={cn(
                 "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                layer === l
+                view === v
                   ? "border-foreground bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted"
               )}
             >
-              {l === "BASE" ? "Base" : CHANNEL_LABELS[l as "SHOPIFY" | "LOOM"]}
+              {v === "BASE"
+                ? "Base"
+                : v === "REFERENCES"
+                  ? "References"
+                  : CHANNEL_LABELS[v as "SHOPIFY" | "LOOM"]}
             </button>
           ))}
         </div>
@@ -257,10 +309,17 @@ export function CatalogGrid({
         </div>
       </div>
 
-      {!isBase && (
+      {!isBase && !isRefs && (
         <p className="mt-2 text-xs text-muted-foreground">
           Editing <b>{CHANNEL_LABELS[layer as "SHOPIFY" | "LOOM"]}</b> overrides.
           Empty cells inherit the base value (shown as placeholder).
+        </p>
+      )}
+      {isRefs && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          References. Single refs are editable selects; product links show a
+          count — set one row in the editor, then use fill-down (↓) to apply to
+          all filtered rows, or ✕ to clear.
         </p>
       )}
 
@@ -287,7 +346,7 @@ export function CatalogGrid({
                 {c.label}
               </div>
             ))}
-            {columns.map((c) => (
+            {(isRefs ? [...REF_SINGLE, ...REF_MULTI] : columns).map((c) => (
               <div
                 key={c.key}
                 style={{ width: c.width }}
@@ -296,7 +355,7 @@ export function CatalogGrid({
                 <span className="truncate">{c.label}</span>
                 <button
                   title="Fill down to all visible rows"
-                  onClick={() => fillDown(c.key)}
+                  onClick={() => fillDown(c.key as string)}
                   className="rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
                 >
                   ↓
@@ -400,48 +459,110 @@ export function CatalogGrid({
                   </a>
 
                   {/* Editable cells */}
-                  {columns.map((c) => {
-                    const disabled = !isBase && !c.split;
-                    const value = cellValue(row, layer, c.key);
-                    const isDirty = dirty.has(dkey(row.id, layer, c.key));
-                    const placeholder =
-                      !isBase && c.split
-                        ? originalValue(row, "BASE", c.key) || undefined
-                        : undefined;
-                    return (
-                      <div
-                        key={c.key}
-                        style={{ width: c.width }}
-                        className={cn(
-                          "shrink-0 border-l",
-                          isDirty && "bg-amber-500/10"
-                        )}
-                      >
-                        {c.kind === "status" ? (
-                          <select
-                            value={value}
-                            disabled={disabled}
-                            onChange={(e) => setCell(row, c.key, e.target.value)}
-                            className="h-full w-full bg-transparent px-2 text-xs outline-none disabled:opacity-40"
+                  {isRefs ? (
+                    <>
+                      {REF_SINGLE.map((c) => {
+                        const value = cellValue(row, "BASE", c.key);
+                        const isDirty = dirty.has(dkey(row.id, "BASE", c.key));
+                        return (
+                          <div
+                            key={c.key}
+                            style={{ width: c.width }}
+                            className={cn("shrink-0 border-l", isDirty && "bg-amber-500/10")}
                           >
-                            {PRODUCT_STATUSES.map((s) => (
-                              <option key={s} value={s}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            value={disabled ? originalValue(row, "BASE", c.key) : value}
-                            disabled={disabled}
-                            placeholder={placeholder}
-                            onChange={(e) => setCell(row, c.key, e.target.value)}
-                            className="h-full w-full bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground/50 focus:bg-background disabled:opacity-40"
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
+                            <select
+                              value={value}
+                              onChange={(e) => setCell(row, c.key, e.target.value, "BASE")}
+                              className="h-full w-full bg-transparent px-1 text-xs outline-none"
+                            >
+                              <option value="">—</option>
+                              {refOptions[c.src].map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                      {REF_MULTI.map((c) => {
+                        const value = cellValue(row, "BASE", c.key as string);
+                        const isDirty = dirty.has(dkey(row.id, "BASE", c.key as string));
+                        let count = 0;
+                        try {
+                          count = (JSON.parse(value || "[]") as string[]).length;
+                        } catch {
+                          count = 0;
+                        }
+                        return (
+                          <div
+                            key={c.key}
+                            style={{ width: c.width }}
+                            className={cn(
+                              "flex shrink-0 items-center justify-between gap-1 border-l px-2 text-xs",
+                              isDirty && "bg-amber-500/10"
+                            )}
+                          >
+                            <span className={count ? "" : "text-muted-foreground/50"}>
+                              {count} linked
+                            </span>
+                            {count > 0 && (
+                              <button
+                                onClick={() => setCell(row, c.key as string, "[]", "BASE")}
+                                title="Clear"
+                                className="text-muted-foreground hover:text-destructive"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    columns.map((c) => {
+                      const disabled = !isBase && !c.split;
+                      const value = cellValue(row, layer, c.key);
+                      const isDirty = dirty.has(dkey(row.id, layer, c.key));
+                      const placeholder =
+                        !isBase && c.split
+                          ? originalValue(row, "BASE", c.key) || undefined
+                          : undefined;
+                      return (
+                        <div
+                          key={c.key}
+                          style={{ width: c.width }}
+                          className={cn(
+                            "shrink-0 border-l",
+                            isDirty && "bg-amber-500/10"
+                          )}
+                        >
+                          {c.kind === "status" ? (
+                            <select
+                              value={value}
+                              disabled={disabled}
+                              onChange={(e) => setCell(row, c.key, e.target.value)}
+                              className="h-full w-full bg-transparent px-2 text-xs outline-none disabled:opacity-40"
+                            >
+                              {PRODUCT_STATUSES.map((s) => (
+                                <option key={s} value={s}>
+                                  {s}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              value={disabled ? originalValue(row, "BASE", c.key) : value}
+                              disabled={disabled}
+                              placeholder={placeholder}
+                              onChange={(e) => setCell(row, c.key, e.target.value)}
+                              className="h-full w-full bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground/50 focus:bg-background disabled:opacity-40"
+                            />
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               );
             })}
@@ -452,15 +573,38 @@ export function CatalogGrid({
   );
 }
 
+const SINGLE_REF_KEYS = new Set(REF_SINGLE.map((c) => c.key));
+const MULTI_REF_KEYS = new Set(REF_MULTI.map((c) => c.key as string));
+
 // Apply saved changes to the in-memory rows so the grid reflects them.
 function applyChanges(rows: GridRow[], changes: BulkChange[]): GridRow[] {
-  const byId = new Map(rows.map((r) => [r.id, { ...r, base: { ...r.base }, overrides: { SHOPIFY: { ...r.overrides.SHOPIFY }, LOOM: { ...r.overrides.LOOM } } }]));
+  const byId = new Map(
+    rows.map((r) => [
+      r.id,
+      {
+        ...r,
+        base: { ...r.base },
+        overrides: { SHOPIFY: { ...r.overrides.SHOPIFY }, LOOM: { ...r.overrides.LOOM } },
+        refs: { ...r.refs },
+      },
+    ])
+  );
   for (const ch of changes) {
     const row = byId.get(ch.colorwayId);
     if (!row) continue;
     const v = typeof ch.value === "string" ? ch.value : "";
     if (ch.field === "priceNok") {
       row.priceNok = v;
+    } else if (SINGLE_REF_KEYS.has(ch.field)) {
+      (row.refs as Record<string, unknown>)[ch.field] = v;
+    } else if (MULTI_REF_KEYS.has(ch.field)) {
+      let ids: string[] = [];
+      try {
+        ids = JSON.parse(v || "[]");
+      } catch {
+        ids = [];
+      }
+      (row.refs as Record<string, unknown>)[ch.field] = ids;
     } else if (ch.layer === "BASE") {
       if (ch.field === "status") row.status = v;
       else if (ch.field === "tags")
