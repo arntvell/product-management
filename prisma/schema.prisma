@@ -255,6 +255,7 @@ model MediaAsset {
   colorway       Colorway    @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
   url            String // Blob URL (owned) or external ref (Shopify CDN / Threadflow)
   source         MediaSource @default(BLOB)
+  role           MediaRole   @default(GALLERY) // maps to Shopify file metafields on push
   blobPathname   String? // set when owned in Blob, so we can delete the object
   alt            String?
   mediaType      String      @default("IMAGE") // IMAGE | VIDEO | MODEL_3D
@@ -361,4 +362,12 @@ enum MediaSource {
   SHOPIFY // referenced from Shopify CDN
   THREADFLOW // referenced via the Threadflow image proxy
   EXTERNAL // any other absolute URL
+}
+
+enum MediaRole {
+  GALLERY // normal product image
+  FLAT // custom.flat (flat-lay)
+  MEN // custom.men_images (unisex)
+  WOMEN // custom.women_images (unisex)
+  SWATCH // colour swatch
 }

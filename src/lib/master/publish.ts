@@ -46,6 +46,9 @@ export interface ShopifyPreview {
   metafields: ShopifyMetafieldPreview[];
   variants: Array<{ sku: string; barcode: string | null; size: string; price: string | null }>;
   media: string[];
+  // Role-tagged media that become file-reference metafields on push
+  // (uploaded to Shopify Files, then custom.flat / men_images / women_images).
+  roleMedia: { flat: string[]; men: string[]; women: string[] };
   warnings: string[];
 }
 
@@ -62,14 +65,13 @@ function resolveShopify(
 }
 
 // Reference metafields hold Shopify GIDs / id lists (kept as-is, per the
-// decision to stay Shopify-GID-based for now).
+// decision to stay Shopify-GID-based for now). Flat / unisex photos are NOT
+// here — they come from media roles (see roleMedia below).
 const LIST_REFERENCE_FIELDS: Array<{ key: string; get: (c: PublishColorway) => string[] }> = [
   { key: "same_product", get: (c) => c.sameProduct },
   { key: "style_with", get: (c) => c.styleWith },
   { key: "style_with_unisex_herre", get: (c) => c.styleWithUnisexHerre },
   { key: "style_with_unisex_dame", get: (c) => c.styleWithUnisexDame },
-  { key: "men_images", get: (c) => c.menImages },
-  { key: "women_images", get: (c) => c.womenImages },
 ];
 
 const SINGLE_REFERENCE_FIELDS: Array<{ key: string; type: string; get: (c: PublishColorway) => string | null }> = [
@@ -77,7 +79,6 @@ const SINGLE_REFERENCE_FIELDS: Array<{ key: string; type: string; get: (c: Publi
   { key: "fitguide", type: "page_reference", get: (c) => c.fitguidePageId },
   { key: "recommended_product_from_collection", type: "collection_reference", get: (c) => c.recommendedCollectionId },
   { key: "model_info", type: "metaobject_reference", get: (c) => c.modelInfoId },
-  { key: "flat", type: "file_reference", get: (c) => c.flatFileId },
 ];
 
 export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
@@ -124,12 +125,19 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
       `${nonPublicMedia} image(s) are Threadflow refs — adopt them into Blob before pushing (Shopify can't fetch the proxy).`
     );
 
-  // Media = the gallery (MediaAsset) plus any per-season images (Threadflow
-  // stores its main image there), de-duplicated, gallery first.
+  // Gallery media (role GALLERY) + per-season images (Threadflow main),
+  // de-duplicated. Role-tagged media map to file metafields instead.
+  const galleryMedia = cw.media.filter((m) => m.role === "GALLERY");
   const media = [
-    ...cw.media.map((m) => m.url),
+    ...galleryMedia.map((m) => m.url),
     ...cw.seasonImages.map((s) => s.url),
   ].filter((url, i, arr) => arr.indexOf(url) === i);
+
+  const roleMedia = {
+    flat: cw.media.filter((m) => m.role === "FLAT").map((m) => m.url),
+    men: cw.media.filter((m) => m.role === "MEN").map((m) => m.url),
+    women: cw.media.filter((m) => m.role === "WOMEN").map((m) => m.url),
+  };
 
   const shopifyPub = cw.publications.find((p) => p.channel === "SHOPIFY");
 
@@ -152,6 +160,7 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
       price,
     })),
     media,
+    roleMedia,
     warnings,
   };
 }

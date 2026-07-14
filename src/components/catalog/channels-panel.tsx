@@ -27,6 +27,7 @@ interface Preview {
   metafields: { key: string; type: string; value: string }[];
   variants: { sku: string; barcode: string | null; size: string; price: string | null }[];
   media: string[];
+  roleMedia: { flat: string[]; men: string[]; women: string[] };
   warnings: string[];
 }
 
@@ -159,12 +160,18 @@ export function ChannelsPanel({
             </div>
             <div>
               <div className="font-medium">
-                Variants ({preview.variants.length}) · Media ({preview.media.length})
+                Variants ({preview.variants.length}) · Gallery media ({preview.media.length})
               </div>
               <div className="mt-1 font-mono text-muted-foreground">
                 {preview.variants.slice(0, 8).map((v) => `${v.size}${v.price ? ` @${v.price}` : ""}`).join("  ")}
                 {preview.variants.length > 8 ? " …" : ""}
               </div>
+              {(preview.roleMedia.flat.length + preview.roleMedia.men.length + preview.roleMedia.women.length) > 0 && (
+                <div className="mt-1 text-muted-foreground">
+                  File metafields from media roles → custom.flat ({preview.roleMedia.flat.length}),
+                  men_images ({preview.roleMedia.men.length}), women_images ({preview.roleMedia.women.length})
+                </div>
+              )}
             </div>
           </div>
         )}

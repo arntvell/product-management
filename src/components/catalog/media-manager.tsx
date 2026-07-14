@@ -22,13 +22,24 @@ import { toast } from "sonner";
 import { catalogImageSrc } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 
+export type MediaRole = "GALLERY" | "FLAT" | "MEN" | "WOMEN" | "SWATCH";
+
 export interface MediaItem {
   id: string;
   url: string;
   source: "BLOB" | "SHOPIFY" | "THREADFLOW" | "EXTERNAL";
+  role: MediaRole;
   alt: string | null;
   position: number;
 }
+
+const ROLE_OPTIONS: { value: MediaRole; label: string }[] = [
+  { value: "GALLERY", label: "Gallery" },
+  { value: "FLAT", label: "Flat" },
+  { value: "MEN", label: "Men" },
+  { value: "WOMEN", label: "Women" },
+  { value: "SWATCH", label: "Swatch" },
+];
 
 const SOURCE_LABEL: Record<MediaItem["source"], string> = {
   BLOB: "Owned",
@@ -124,6 +135,16 @@ export function MediaManager({
     }
   }
 
+  async function setRole(id: string, role: MediaRole) {
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, role } : i)));
+    const res = await fetch(`/api/catalog/media/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    if (!res.ok) toast.error("Couldn't set role");
+  }
+
   async function adopt(id: string) {
     try {
       const res = await fetch(`/api/catalog/media/${id}/adopt`, { method: "POST" });
@@ -162,7 +183,7 @@ export function MediaManager({
           ? "Uploading…"
           : isDragActive
             ? "Drop images to upload"
-            : "Drag images here, or click to select. Uploads go to Blob (owned by the master)."}
+            : "Drag one or more images here (bulk upload supported), or click to select. Uploads go to Blob. Tag each as Flat / Men / Women below to feed the file metafields."}
       </div>
 
       {externalCount > 0 && (
@@ -183,6 +204,7 @@ export function MediaManager({
                 item={item}
                 onRemove={() => remove(item.id)}
                 onAdopt={() => adopt(item.id)}
+                onRole={(role) => setRole(item.id, role)}
               />
             ))}
           </div>
@@ -207,10 +229,12 @@ function SortableTile({
   item,
   onRemove,
   onAdopt,
+  onRole,
 }: {
   item: MediaItem;
   onRemove: () => void;
   onAdopt: () => void;
+  onRole: (role: MediaRole) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
@@ -228,43 +252,60 @@ function SortableTile({
       <div
         {...attributes}
         {...listeners}
-        className="aspect-square cursor-grab active:cursor-grabbing"
+        className="relative aspect-square cursor-grab active:cursor-grabbing"
       >
         {src && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt={item.alt ?? ""} className="h-full w-full object-cover" />
         )}
-      </div>
-
-      <span
-        className={cn(
-          "absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
-          item.source === "BLOB"
-            ? "bg-green-600/90 text-white"
-            : "bg-background/90 text-muted-foreground"
-        )}
-      >
-        {SOURCE_LABEL[item.source]}
-      </span>
-
-      <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-        {item.source !== "BLOB" && (
-          <button
-            onClick={onAdopt}
-            title="Adopt into Blob"
-            className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium hover:bg-background"
-          >
-            Adopt
-          </button>
-        )}
-        <button
-          onClick={onRemove}
-          title="Remove"
-          className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-destructive hover:bg-background"
+        <span
+          className={cn(
+            "absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
+            item.source === "BLOB"
+              ? "bg-green-600/90 text-white"
+              : "bg-background/90 text-muted-foreground"
+          )}
         >
-          ✕
-        </button>
+          {SOURCE_LABEL[item.source]}
+        </span>
+        {item.role !== "GALLERY" && (
+          <span className="absolute bottom-1.5 left-1.5 rounded bg-foreground/90 px-1.5 py-0.5 text-[10px] font-medium text-background">
+            {item.role}
+          </span>
+        )}
+        <div className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          {item.source !== "BLOB" && (
+            <button
+              onClick={onAdopt}
+              title="Adopt into Blob"
+              className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium hover:bg-background"
+            >
+              Adopt
+            </button>
+          )}
+          <button
+            onClick={onRemove}
+            title="Remove"
+            className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-destructive hover:bg-background"
+          >
+            ✕
+          </button>
+        </div>
       </div>
+
+      {/* Role selector (outside the drag area) */}
+      <select
+        value={item.role}
+        onChange={(e) => onRole(e.target.value as MediaRole)}
+        className="w-full border-t bg-background px-2 py-1 text-[11px]"
+        title="How this image is used on push"
+      >
+        {ROLE_OPTIONS.map((r) => (
+          <option key={r.value} value={r.value}>
+            {r.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
