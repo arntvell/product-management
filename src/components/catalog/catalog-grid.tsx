@@ -75,11 +75,13 @@ export function CatalogGrid({
   seasons,
   season,
   seasonId,
+  colorwayOptions,
 }: {
   initialRows: GridRow[];
   seasons: { code: string }[];
   season?: string;
   seasonId?: string;
+  colorwayOptions: { id: string; label: string }[];
 }) {
   const [rows, setRows] = useState<GridRow[]>(initialRows);
   const [view, setView] = useState<View>("BASE");
@@ -189,6 +191,43 @@ export function CatalogGrid({
       return next;
     });
     toast.success(`Filled "${field}" to ${visibleRows.length} rows`);
+  }
+
+  // ---- bulk reference apply (over visible rows) ----
+  function applySingleRef(field: string, value: string) {
+    setDirty((prev) => {
+      const next = new Map(prev);
+      for (const row of visibleRows) {
+        const key = dkey(row.id, "BASE", field);
+        if (value === originalValue(row, "BASE", field)) next.delete(key);
+        else next.set(key, value);
+      }
+      return next;
+    });
+    toast.success(`Applied to ${visibleRows.length} rows`);
+  }
+
+  function applyMultiRef(field: string, ids: string[], mode: "add" | "replace") {
+    setDirty((prev) => {
+      const next = new Map(prev);
+      for (const row of visibleRows) {
+        const key = dkey(row.id, "BASE", field);
+        const cur = next.get(key) ?? originalValue(row, "BASE", field);
+        let arr: string[] = [];
+        try {
+          arr = JSON.parse(cur || "[]");
+        } catch {
+          arr = [];
+        }
+        const merged =
+          mode === "replace" ? ids : Array.from(new Set([...arr, ...ids]));
+        const val = JSON.stringify(merged);
+        if (val === originalValue(row, "BASE", field)) next.delete(key);
+        else next.set(key, val);
+      }
+      return next;
+    });
+    toast.success(`${mode === "add" ? "Added to" : "Replaced on"} ${visibleRows.length} rows`);
   }
 
   // ---- save ----
@@ -316,11 +355,19 @@ export function CatalogGrid({
         </p>
       )}
       {isRefs && (
-        <p className="mt-2 text-xs text-muted-foreground">
-          References. Single refs are editable selects; product links show a
-          count — set one row in the editor, then use fill-down (↓) to apply to
-          all filtered rows, or ✕ to clear.
-        </p>
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-muted-foreground">
+            References. Edit inline, fill-down (↓), or use the bulk bar to search
+            a value and apply it to all {visibleRows.length} filtered rows.
+          </p>
+          <BulkRefApply
+            refOptions={refOptions}
+            colorwayOptions={colorwayOptions}
+            visibleCount={visibleRows.length}
+            onApplySingle={applySingleRef}
+            onApplyMulti={applyMultiRef}
+          />
+        </div>
       )}
 
       {/* Grid */}
@@ -575,6 +622,155 @@ export function CatalogGrid({
 
 const SINGLE_REF_KEYS = new Set(REF_SINGLE.map((c) => c.key));
 const MULTI_REF_KEYS = new Set(REF_MULTI.map((c) => c.key as string));
+
+type RefField =
+  | { key: string; label: string; kind: "single"; src: "care" | "fitguide" | "collection" | "model" }
+  | { key: string; label: string; kind: "multi" };
+
+const REF_FIELDS: RefField[] = [
+  ...REF_SINGLE.map((c) => ({ key: c.key, label: c.label, kind: "single" as const, src: c.src })),
+  ...REF_MULTI.map((c) => ({ key: c.key as string, label: c.label, kind: "multi" as const })),
+];
+
+function BulkRefApply({
+  refOptions,
+  colorwayOptions,
+  visibleCount,
+  onApplySingle,
+  onApplyMulti,
+}: {
+  refOptions: Record<"care" | "fitguide" | "collection" | "model", { id: string; label: string }[]>;
+  colorwayOptions: { id: string; label: string }[];
+  visibleCount: number;
+  onApplySingle: (field: string, value: string) => void;
+  onApplyMulti: (field: string, ids: string[], mode: "add" | "replace") => void;
+}) {
+  const [fieldKey, setFieldKey] = useState(REF_FIELDS[0].key);
+  const field = REF_FIELDS.find((f) => f.key === fieldKey)!;
+  const [q, setQ] = useState("");
+  const [single, setSingle] = useState<{ id: string; label: string } | null>(null);
+  const [ids, setIds] = useState<string[]>([]);
+  const [mode, setMode] = useState<"add" | "replace">("add");
+
+  const options = field.kind === "single" ? refOptions[field.src] : colorwayOptions;
+  const labelById = useMemo(
+    () => new Map(options.map((o) => [o.id, o.label])),
+    [options]
+  );
+  const matches = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return [];
+    return options
+      .filter((o) => o.label.toLowerCase().includes(query) && !ids.includes(o.id))
+      .slice(0, 8);
+  }, [q, options, ids]);
+
+  function changeField(key: string) {
+    setFieldKey(key);
+    setQ("");
+    setSingle(null);
+    setIds([]);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
+      <span className="px-1 text-xs font-medium">Bulk set</span>
+      <select
+        value={fieldKey}
+        onChange={(e) => changeField(e.target.value)}
+        className="h-8 rounded-md border bg-transparent px-2 text-xs"
+      >
+        {REF_FIELDS.map((f) => (
+          <option key={f.key} value={f.key}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+
+      {/* value picker */}
+      <div className="relative">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={field.kind === "single" ? "Search…" : "Search products…"}
+          className="h-8 w-64"
+        />
+        {matches.length > 0 && (
+          <div className="absolute z-20 mt-1 w-64 overflow-hidden rounded-md border bg-background shadow-md">
+            {matches.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => {
+                  if (field.kind === "single") {
+                    setSingle(o);
+                    setQ(o.label);
+                  } else {
+                    setIds((prev) => [...prev, o.id]);
+                    setQ("");
+                  }
+                }}
+                className="block w-full truncate px-3 py-1.5 text-left text-xs hover:bg-muted"
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {field.kind === "multi" && ids.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {ids.map((id) => (
+            <span key={id} className="flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-[11px]">
+              {labelById.get(id) ?? id}
+              <button onClick={() => setIds((p) => p.filter((x) => x !== id))} className="text-muted-foreground hover:text-destructive">✕</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {field.kind === "multi" && (
+        <div className="flex gap-1">
+          {(["add", "replace"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs capitalize",
+                mode === m ? "border-foreground bg-foreground text-background" : "text-muted-foreground"
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <Button
+        size="sm"
+        disabled={field.kind === "single" ? !single : ids.length === 0}
+        onClick={() => {
+          if (field.kind === "single" && single) onApplySingle(field.key, single.id);
+          else if (field.kind === "multi" && ids.length) onApplyMulti(field.key, ids, mode);
+        }}
+      >
+        Apply to {visibleCount}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-muted-foreground"
+        onClick={() =>
+          field.kind === "single"
+            ? onApplySingle(field.key, "")
+            : onApplyMulti(field.key, [], "replace")
+        }
+      >
+        Clear on {visibleCount}
+      </Button>
+    </div>
+  );
+}
 
 // Apply saved changes to the in-memory rows so the grid reflects them.
 function applyChanges(rows: GridRow[], changes: BulkChange[]): GridRow[] {
