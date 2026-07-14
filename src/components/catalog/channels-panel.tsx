@@ -144,7 +144,7 @@ export function ChannelsPanel({
               <dt className="text-muted-foreground">Vendor</dt><dd>{preview.product.vendor ?? "—"}</dd>
               <dt className="text-muted-foreground">Type</dt><dd>{preview.product.productType ?? "—"}</dd>
               <dt className="text-muted-foreground">Status</dt><dd>{preview.product.status}</dd>
-              <dt className="text-muted-foreground">Tags</dt><dd>{preview.product.tags.join(", ") || "—"}</dd>
+              <dt className="text-muted-foreground">Tags</dt><dd>{preview.product.tags.join(", ") || "—"}<span className="ml-1 text-muted-foreground">(merged additively with existing Shopify tags)</span></dd>
             </dl>
             <div>
               <div className="font-medium">Metafields ({preview.metafields.length})</div>
