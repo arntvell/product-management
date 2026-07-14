@@ -1,23 +1,22 @@
-// Live Shopify push (Phase 3). Creates or updates a Shopify product from a
-// master colorway. First pass: core product fields + free-text custom.*
-// metafields (incl. style_name). Variants, media, and reference/product GIDs
-// come in later passes (see the preview warnings).
+// Live Shopify push (Phase 3). Uses productSet (declarative) so create and
+// update share one idempotent path: core fields, free-text custom.* metafields
+// (incl. style_name/color_hex), a "Size" option, and one variant per master
+// variant with the NOK MSRP price + barcode.
+// Not yet: media (adopt TF -> Blob -> Shopify files) and reference/product-ref
+// GID resolution (see the preview warnings).
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
-import {
-  PRODUCT_CREATE_MUTATION,
-  PRODUCT_UPDATE_MUTATION,
-} from "@/lib/shopify/mutations";
-import { METAFIELD_NAMESPACE } from "@/lib/constants";
+import { PRODUCT_SET_MUTATION } from "@/lib/shopify/mutations";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
 
-interface ProductMutationResult {
-  productCreate?: {
-    product: { id: string; handle: string; status: string } | null;
-    userErrors: { field: string[]; message: string }[];
-  };
-  productUpdate?: {
-    product: { id: string } | null;
+interface ProductSetResult {
+  productSet: {
+    product: {
+      id: string;
+      handle: string;
+      status: string;
+      variants: { edges: { node: { id: string; sku: string; price: string } }[] };
+    } | null;
     userErrors: { field: string[]; message: string }[];
   };
 }
@@ -26,9 +25,19 @@ export interface PushResult {
   action: "create" | "update";
   productGid: string;
   handle: string | null;
-  metafieldsSet: number;
+  variants: number;
+  metafields: number;
   adminUrl: string;
 }
+
+const FREE_TEXT_KEYS = new Set([
+  "short_description",
+  "full_description",
+  "details",
+  "style_tagline",
+  "style_name",
+  "color_hex",
+]);
 
 export async function pushColorwayToShopify(id: string): Promise<PushResult> {
   const cw = await getColorwayForPublish(id);
@@ -38,77 +47,71 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
   const existing = cw.publications.find((p) => p.channel === "SHOPIFY");
   const action: "create" | "update" = existing?.externalId ? "update" : "create";
 
-  // Core product fields (free-text metafields only in this pass — the reference
-  // and file metafields need GID resolution / Shopify file uploads first).
-  const freeTextKeys = new Set([
-    "short_description",
-    "full_description",
-    "details",
-    "style_tagline",
-    "style_name",
-    "color_hex",
-  ]);
   const metafields = preview.metafields
-    .filter((m) => freeTextKeys.has(m.key))
+    .filter((m) => FREE_TEXT_KEYS.has(m.key))
     .map((m) => ({ namespace: m.namespace, key: m.key, value: m.value, type: m.type }));
 
-  const productInput: Record<string, unknown> = {
+  // One "Size" option; one variant per master variant (deduped size labels).
+  const sizes = [...new Set(preview.variants.map((v) => v.size))];
+  const hasVariants = sizes.length > 0;
+  const variants = preview.variants.map((v) => ({
+    optionValues: [{ optionName: "Size", name: v.size }],
+    ...(v.price ? { price: v.price } : {}),
+    inventoryItem: { sku: v.sku },
+    ...(v.barcode ? { barcode: v.barcode } : {}),
+  }));
+
+  const input: Record<string, unknown> = {
+    ...(existing?.externalId ? { id: existing.externalId } : {}),
     title: preview.product.title,
+    handle: preview.product.handle,
     vendor: preview.product.vendor ?? undefined,
     productType: preview.product.productType ?? undefined,
     tags: preview.product.tags,
-    status: preview.product.status, // ACTIVE | DRAFT | ARCHIVED
+    status: preview.product.status,
     metafields,
+    ...(hasVariants
+      ? {
+          productOptions: [
+            { name: "Size", position: 1, values: sizes.map((name) => ({ name })) },
+          ],
+          variants,
+        }
+      : {}),
   };
 
-  let productGid: string;
-  let handle: string | null = null;
+  const res = await shopifyGraphQL<ProductSetResult>(PRODUCT_SET_MUTATION, { input });
+  const errs = res.productSet?.userErrors ?? [];
+  if (errs.length) throw new Error(`productSet: ${errs.map((e) => e.message).join(", ")}`);
+  const product = res.productSet?.product;
+  if (!product) throw new Error("productSet returned no product");
 
-  if (action === "create") {
-    productInput.handle = preview.product.handle;
-    const res = await shopifyGraphQL<ProductMutationResult>(PRODUCT_CREATE_MUTATION, {
-      input: productInput,
-    });
-    const errs = res.productCreate?.userErrors ?? [];
-    if (errs.length) throw new Error(`productCreate: ${errs.map((e) => e.message).join(", ")}`);
-    const product = res.productCreate?.product;
-    if (!product) throw new Error("productCreate returned no product");
-    productGid = product.id;
-    handle = product.handle;
-  } else {
-    productInput.id = existing!.externalId;
-    const res = await shopifyGraphQL<ProductMutationResult>(PRODUCT_UPDATE_MUTATION, {
-      input: productInput,
-    });
-    const errs = res.productUpdate?.userErrors ?? [];
-    if (errs.length) throw new Error(`productUpdate: ${errs.map((e) => e.message).join(", ")}`);
-    productGid = existing!.externalId!;
-    // productUpdate with metafields in input sets them; belt-and-braces below is
-    // skipped for update since input handles it.
-  }
-
-  // Record the publication.
   await prisma.channelPublication.upsert({
     where: { colorwayId_channel: { colorwayId: id, channel: "SHOPIFY" } },
     create: {
       colorwayId: id,
       channel: "SHOPIFY",
       published: true,
-      externalId: productGid,
+      externalId: product.id,
       lastPushedAt: new Date(),
       lastPushStatus: "ok",
     },
     update: {
       published: true,
-      externalId: productGid,
+      externalId: product.id,
       lastPushedAt: new Date(),
       lastPushStatus: "ok",
     },
   });
 
-  const numericId = productGid.split("/").pop();
+  const numericId = product.id.split("/").pop();
   const store = (process.env.SHOPIFY_STORE_URL ?? "").replace(/^https?:\/\//, "");
-  const adminUrl = `https://${store}/admin/products/${numericId}`;
-
-  return { action, productGid, handle, metafieldsSet: metafields.length, adminUrl };
+  return {
+    action,
+    productGid: product.id,
+    handle: product.handle,
+    variants: product.variants.edges.length,
+    metafields: metafields.length,
+    adminUrl: `https://${store}/admin/products/${numericId}`,
+  };
 }

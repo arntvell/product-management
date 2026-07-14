@@ -43,6 +43,13 @@ export function ChannelsPanel({
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [pushing, setPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<{
+    action: string;
+    variants: number;
+    metafields: number;
+    adminUrl: string;
+  } | null>(null);
 
   const targeted = (c: ChannelKey) => pubs.some((p) => p.channel === c);
   const pubFor = (c: ChannelKey) => pubs.find((p) => p.channel === c);
@@ -67,6 +74,27 @@ export function ChannelsPanel({
       toast.error(err instanceof Error ? err.message : "Failed to update channels");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function pushToShopify() {
+    if (!confirm("Push this product to Shopify now? Creates or updates the live Shopify product.")) return;
+    setPushing(true);
+    try {
+      const res = await fetch(`/api/catalog/colorways/${colorwayId}/push`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Push failed");
+      setPushResult(data);
+      setPubs((prev) =>
+        prev.map((p) =>
+          p.channel === "SHOPIFY" ? { ...p, published: true } : p
+        )
+      );
+      toast.success(`Pushed (${data.action}) — ${data.variants} variants`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Push failed");
+    } finally {
+      setPushing(false);
     }
   }
 
@@ -117,12 +145,26 @@ export function ChannelsPanel({
 
         {targeted("SHOPIFY") && (
           <div className="mt-4 border-t pt-4">
-            <Button variant="outline" size="sm" onClick={loadPreview} disabled={loadingPreview}>
-              {loadingPreview ? "Computing…" : "Preview Shopify push"}
-            </Button>
-            <span className="ml-2 text-xs text-muted-foreground">
-              Dry-run — shows what would be sent. Nothing is written.
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={loadPreview} disabled={loadingPreview}>
+                {loadingPreview ? "Computing…" : "Preview Shopify push"}
+              </Button>
+              <Button size="sm" onClick={pushToShopify} disabled={pushing}>
+                {pushing ? "Pushing…" : "Push to Shopify"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Preview is a dry-run; Push writes to the live store.
+              </span>
+            </div>
+            {pushResult && (
+              <p className="mt-2 text-xs text-green-700 dark:text-green-500">
+                ✓ {pushResult.action} · {pushResult.variants} variants ·{" "}
+                {pushResult.metafields} metafields ·{" "}
+                <a href={pushResult.adminUrl} target="_blank" rel="noreferrer" className="underline">
+                  open in Shopify
+                </a>
+              </p>
+            )}
           </div>
         )}
 

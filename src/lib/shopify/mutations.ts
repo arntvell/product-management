@@ -126,6 +126,27 @@ export const PRODUCT_CREATE_MUTATION = `
   }
 `;
 
+// Declarative set of a whole product (create when no id, update when id given):
+// core fields, metafields, options and variants — reconciled to match input.
+export const PRODUCT_SET_MUTATION = `
+  mutation ProductSet($input: ProductSetInput!) {
+    productSet(synchronous: true, input: $input) {
+      product {
+        id
+        handle
+        status
+        variants(first: 100) {
+          edges { node { id sku price } }
+        }
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 export const PRODUCT_VARIANTS_BULK_UPDATE_MUTATION = `
   mutation ProductVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
     productVariantsBulkUpdate(productId: $productId, variants: $variants) {
