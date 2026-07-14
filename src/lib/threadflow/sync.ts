@@ -310,6 +310,7 @@ export async function syncSeason(
           withImages,
           styleVendor,
           styleProductType,
+          styleNameTF: s.style_name,
           ownedByColorway,
           wasNew: !colorwayIdByTf.has(c.colorway_id),
           colorwayId: resolveColorway(c.colorway_id),
@@ -414,6 +415,7 @@ interface ColorwayCtx {
   withImages: boolean;
   styleVendor: string;
   styleProductType: string | null;
+  styleNameTF: string;
   ownedByColorway: Map<string, Set<string>>;
   wasNew: boolean;
   colorwayId: string;
@@ -458,9 +460,11 @@ function buildColorway(c: TFColorway, ctx: ColorwayCtx): void {
       ...base,
       vendor: ctx.styleVendor,
       productType: ctx.styleProductType,
+      // Auto-populate the custom.style_name metafield from the TF style name.
+      styleName: ctx.styleNameTF,
     });
   } else {
-    // Respect manual edits: only refresh vendor/productType if not locked.
+    // Respect manual edits: only refresh vendor/productType/styleName if not locked.
     const owned = ctx.ownedByColorway.get(ctx.colorwayId);
     ctx.colorwayUpdates.push(
       prisma.colorway.update({
@@ -471,6 +475,7 @@ function buildColorway(c: TFColorway, ctx: ColorwayCtx): void {
           ...(owned?.has("productType")
             ? {}
             : { productType: ctx.styleProductType }),
+          ...(owned?.has("styleName") ? {} : { styleName: ctx.styleNameTF }),
         },
       })
     );
