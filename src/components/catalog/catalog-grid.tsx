@@ -89,6 +89,14 @@ export function CatalogGrid({
   const [dirty, setDirty] = useState<Map<string, string>>(new Map());
   const [search, setSearch] = useState("");
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
+  const [filters, setFilters] = useState({
+    vendor: "",
+    productType: "",
+    gender: "",
+    status: "",
+    source: "",
+    needs: "",
+  });
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastClickedRef = useRef<number | null>(null);
@@ -122,11 +130,44 @@ export function CatalogGrid({
     FIXED_W +
     (isRefs ? refWidth : columns.reduce((sum, c) => sum + c.width, 0));
 
+  // Distinct attribute values for the filter dropdowns.
+  const filterOptions = useMemo(() => {
+    const distinct = (get: (r: GridRow) => string) =>
+      [...new Set(rows.map(get).filter(Boolean))].sort();
+    return {
+      vendor: distinct((r) => r.vendor),
+      productType: distinct((r) => r.productType),
+      gender: distinct((r) => r.gender),
+      source: distinct((r) => r.source),
+    };
+  }, [rows]);
+
+  function needsMatch(r: GridRow): boolean {
+    switch (filters.needs) {
+      case "noPrice":
+        return !r.priceNok;
+      case "noMedia":
+        return r.mediaCount === 0;
+      case "noShortDesc":
+        return !(r.base.shortDescription ?? "").trim();
+      case "noFullDesc":
+        return !(r.base.fullDescription ?? "").trim();
+      default:
+        return true;
+    }
+  }
+
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (droppedFilter === "active" && r.dropped) return false;
       if (droppedFilter === "dropped" && !r.dropped) return false;
+      if (filters.vendor && r.vendor !== filters.vendor) return false;
+      if (filters.productType && r.productType !== filters.productType) return false;
+      if (filters.gender && r.gender !== filters.gender) return false;
+      if (filters.status && r.status !== filters.status) return false;
+      if (filters.source && r.source !== filters.source) return false;
+      if (filters.needs && !needsMatch(r)) return false;
       if (!q) return true;
       return (
         r.name.toLowerCase().includes(q) ||
@@ -134,7 +175,8 @@ export function CatalogGrid({
         r.colorwaySku.toLowerCase().includes(q)
       );
     });
-  }, [rows, search, droppedFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, search, droppedFilter, filters]);
 
   const droppedCount = rows.filter((r) => r.dropped).length;
 
@@ -393,6 +435,41 @@ export function CatalogGrid({
             {saving ? "Saving…" : `Save ${dirty.size || ""}`.trim()}
           </Button>
         </div>
+      </div>
+
+      {/* Attribute filter bar (universal across views) */}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <FilterSelect label="Vendor" value={filters.vendor} options={filterOptions.vendor}
+          onChange={(v) => setFilters((f) => ({ ...f, vendor: v }))} />
+        <FilterSelect label="Type" value={filters.productType} options={filterOptions.productType}
+          onChange={(v) => setFilters((f) => ({ ...f, productType: v }))} />
+        <FilterSelect label="Gender" value={filters.gender} options={filterOptions.gender}
+          onChange={(v) => setFilters((f) => ({ ...f, gender: v }))} />
+        <FilterSelect label="Status" value={filters.status} options={[...PRODUCT_STATUSES]}
+          onChange={(v) => setFilters((f) => ({ ...f, status: v }))} />
+        <FilterSelect label="Source" value={filters.source} options={filterOptions.source}
+          onChange={(v) => setFilters((f) => ({ ...f, source: v }))} />
+        <FilterSelect
+          label="Needs"
+          value={filters.needs}
+          options={[
+            { value: "noPrice", label: "No price" },
+            { value: "noMedia", label: "No media" },
+            { value: "noShortDesc", label: "No short desc" },
+            { value: "noFullDesc", label: "No full desc" },
+          ]}
+          onChange={(v) => setFilters((f) => ({ ...f, needs: v }))}
+        />
+        {Object.values(filters).some(Boolean) && (
+          <button
+            onClick={() =>
+              setFilters({ vendor: "", productType: "", gender: "", status: "", source: "", needs: "" })
+            }
+            className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {selected.size > 0 && (
@@ -703,6 +780,40 @@ export function CatalogGrid({
 
 const SINGLE_REF_KEYS = new Set(REF_SINGLE.map((c) => c.key));
 const MULTI_REF_KEYS = new Set(REF_MULTI.map((c) => c.key as string));
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: (string | { value: string; label: string })[];
+  onChange: (value: string) => void;
+}) {
+  const opts = options.map((o) =>
+    typeof o === "string" ? { value: o, label: o } : o
+  );
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      title={label}
+      className={cn(
+        "h-8 rounded-md border bg-transparent px-2 text-xs",
+        value ? "border-foreground font-medium" : "text-muted-foreground"
+      )}
+    >
+      <option value="">{label}: all</option>
+      {opts.map((o) => (
+        <option key={o.value} value={o.value}>
+          {label}: {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 type RefField =
   | { key: string; label: string; kind: "single"; src: "care" | "fitguide" | "collection" | "model" }

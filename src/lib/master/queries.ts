@@ -245,6 +245,8 @@ export interface GridRow {
   tags: string[];
   vendor: string;
   productType: string;
+  gender: string; // "women" | "men" | "unisex" | ""
+  source: string; // THREADFLOW | MANUAL | SHOPIFY_IMPORT
   swatchHex: string;
   priceNok: string;
   mediaCount: number;
@@ -292,7 +294,7 @@ export async function listColorwaysForEdit(
       : {},
     orderBy: [{ style: { styleName: "asc" } }, { name: "asc" }],
     include: {
-      style: { select: { styleName: true } },
+      style: { select: { styleName: true, gender: true, unisex: true } },
       channelContent: true,
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
       entries: { select: { cancelled: true, season: { select: { code: true } } } },
@@ -332,6 +334,8 @@ export async function listColorwaysForEdit(
       tags: cw.tags,
       vendor: cw.vendor ?? "",
       productType: cw.productType ?? "",
+      gender: cw.style.unisex ? "unisex" : cw.style.gender ?? "",
+      source: cw.source,
       swatchHex: cw.swatchHex ?? "",
       priceNok: cw.prices[0]?.amount.toString() ?? "",
       mediaCount: cw._count.media,
