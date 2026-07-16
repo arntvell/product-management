@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -101,6 +101,11 @@ export function CatalogGrid({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastClickedRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Live registry of rendered cell inputs (rowIndex:field -> element) for
+  // keyboard navigation across the virtualized grid.
+  const cellRefs = useRef<Map<string, HTMLInputElement | HTMLSelectElement>>(new Map());
+  // Row the user last focused — the source for column fill-down.
+  const activeRowIdRef = useRef<string | null>(null);
 
   // References view edits land on the BASE layer (references aren't channel-split).
   const isRefs = view === "REFERENCES";
@@ -221,6 +226,18 @@ export function CatalogGrid({
     overscan: 12,
   });
 
+  // Guard against losing unsaved edits on refresh / full-page navigation
+  // (season pills, style/media links are real <a> navigations).
+  useEffect(() => {
+    if (dirty.size === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty.size]);
+
   // ---- value resolution ----
   function originalValue(row: GridRow, l: EditLayer, field: string): string {
     if (l === "BASE") {
@@ -256,10 +273,108 @@ export function CatalogGrid({
     });
   }
 
-  // ---- fill down: copy the top visible row's value to all visible rows ----
+  // ---- keyboard navigation + spreadsheet paste ----
+  // Editable cells in visual order, with the layer each writes to. Drives
+  // Enter/Shift+Enter movement and multi-cell paste.
+  const editableCols = useMemo(() => {
+    const fixed = [
+      { key: "swatchHex", kind: "text" as const, atLayer: "BASE" as EditLayer },
+      { key: "priceNok", kind: "text" as const, atLayer: "BASE" as EditLayer },
+    ];
+    if (isRefs)
+      return [
+        ...fixed,
+        ...REF_SINGLE.map((c) => ({ key: c.key, kind: "select" as const, atLayer: "BASE" as EditLayer })),
+      ];
+    const cols = isBase ? COLUMNS : COLUMNS.filter((c) => c.split);
+    return [
+      ...fixed,
+      ...cols.map((c) => ({
+        key: c.key,
+        kind: (c.kind === "status" ? "select" : "text") as "text" | "select",
+        atLayer: layer,
+      })),
+    ];
+  }, [isRefs, isBase, layer]);
+
+  const colIndexByField = useMemo(
+    () => new Map(editableCols.map((c, i) => [c.key, i])),
+    [editableCols]
+  );
+
+  function registerCell(rowIndex: number, field: string, el: HTMLInputElement | HTMLSelectElement | null) {
+    const k = `${rowIndex}:${field}`;
+    if (el) cellRefs.current.set(k, el);
+    else cellRefs.current.delete(k);
+  }
+
+  // Focus a cell, scrolling it into view first so a virtualized (unmounted)
+  // target row gets rendered before we try to focus it.
+  function focusCell(rowIndex: number, field: string) {
+    const clamped = Math.max(0, Math.min(rowIndex, visibleRows.length - 1));
+    virtualizer.scrollToIndex(clamped, { align: "auto" });
+    let tries = 0;
+    const tryFocus = () => {
+      const el = cellRefs.current.get(`${clamped}:${field}`);
+      if (el) {
+        el.focus();
+        if (el instanceof HTMLInputElement) el.select();
+      } else if (tries++ < 8) {
+        requestAnimationFrame(tryFocus);
+      }
+    };
+    requestAnimationFrame(tryFocus);
+  }
+
+  function onCellKeyDown(e: React.KeyboardEvent, rowIndex: number, field: string) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      focusCell(rowIndex + (e.shiftKey ? -1 : 1), field);
+    }
+  }
+
+  // Paste a TSV block (from Excel/Sheets) starting at the focused cell: rows go
+  // down, tab-separated columns go across (skipping selects and locked price).
+  function onCellPaste(e: React.ClipboardEvent, rowIndex: number, field: string) {
+    const text = e.clipboardData.getData("text");
+    if (!text || !/[\n\t]/.test(text)) return; // single value → default paste
+    e.preventDefault();
+    const lines = text.replace(/\r/g, "").replace(/\n+$/, "").split("\n");
+    const startCol = colIndexByField.get(field) ?? 0;
+    let count = 0;
+    setDirty((prev) => {
+      const next = new Map(prev);
+      lines.forEach((line, r) => {
+        const targetRow = visibleRows[rowIndex + r];
+        if (!targetRow) return;
+        line.split("\t").forEach((val, c) => {
+          const col = editableCols[startCol + c];
+          if (!col || col.kind === "select") return;
+          if (col.key === "priceNok" && !seasonId) return;
+          const key = dkey(targetRow.id, col.atLayer, col.key);
+          if (val === originalValue(targetRow, col.atLayer, col.key)) next.delete(key);
+          else next.set(key, val);
+          count++;
+        });
+      });
+      return next;
+    });
+    toast.success(`Pasted ${lines.length} row(s) · ${count} cells`);
+  }
+
+  const cellHandlers = (rowIndex: number, row: GridRow, field: string, kind: "text" | "select") => ({
+    ref: (el: HTMLInputElement | HTMLSelectElement | null) => registerCell(rowIndex, field, el),
+    onFocus: () => {
+      activeRowIdRef.current = row.id;
+    },
+    onKeyDown: (e: React.KeyboardEvent) => onCellKeyDown(e, rowIndex, field),
+    ...(kind === "text" ? { onPaste: (e: React.ClipboardEvent) => onCellPaste(e, rowIndex, field) } : {}),
+  });
+
+  // ---- fill down: copy the focused (or top) row's value to target rows ----
   function fillDown(field: string) {
     if (targetRows.length === 0) return;
-    const source = targetRows[0];
+    const source = targetRows.find((r) => r.id === activeRowIdRef.current) ?? targetRows[0];
     const value = cellValue(source, layer, field);
     setDirty((prev) => {
       const next = new Map(prev);
@@ -472,6 +587,16 @@ export function CatalogGrid({
         )}
       </div>
 
+      {!seasonId && (
+        <p className="mt-2 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-500">
+          Prices are per-season — select a season above to edit NOK prices.
+        </p>
+      )}
+      <p className="mt-2 text-xs text-muted-foreground">
+        Tip: <b>Enter</b> / <b>Shift+Enter</b> move down/up a column · paste a
+        column from a spreadsheet into any cell · <b>↓</b> fills the focused
+        cell down.
+      </p>
       {selected.size > 0 && (
         <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
           {selected.size} selected — fill-down (↓) and bulk actions apply to these
@@ -632,6 +757,7 @@ export function CatalogGrid({
                       style={{ backgroundColor: cellValue(row, "BASE", "swatchHex") || "transparent" }}
                     />
                     <input
+                      {...cellHandlers(vi.index, row, "swatchHex", "text")}
                       value={cellValue(row, "BASE", "swatchHex")}
                       placeholder="#hex"
                       onChange={(e) => setCell(row, "swatchHex", e.target.value, "BASE")}
@@ -646,6 +772,7 @@ export function CatalogGrid({
                     )}
                   >
                     <input
+                      {...cellHandlers(vi.index, row, "priceNok", "text")}
                       value={cellValue(row, "BASE", "priceNok")}
                       disabled={!seasonId}
                       placeholder={seasonId ? "NOK" : "season"}
@@ -676,6 +803,7 @@ export function CatalogGrid({
                             className={cn("shrink-0 border-l", isDirty && "bg-amber-500/10")}
                           >
                             <select
+                              {...cellHandlers(vi.index, row, c.key, "select")}
                               value={value}
                               onChange={(e) => setCell(row, c.key, e.target.value, "BASE")}
                               className="h-full w-full bg-transparent px-1 text-xs outline-none"
@@ -744,6 +872,7 @@ export function CatalogGrid({
                         >
                           {c.kind === "status" ? (
                             <select
+                              {...(disabled ? {} : cellHandlers(vi.index, row, c.key, "select"))}
                               value={value}
                               disabled={disabled}
                               onChange={(e) => setCell(row, c.key, e.target.value)}
@@ -757,6 +886,7 @@ export function CatalogGrid({
                             </select>
                           ) : (
                             <input
+                              {...(disabled ? {} : cellHandlers(vi.index, row, c.key, "text"))}
                               value={disabled ? originalValue(row, "BASE", c.key) : value}
                               disabled={disabled}
                               placeholder={placeholder}
