@@ -1,6 +1,7 @@
 // Read-model queries for the Catalog browse UI (Phase 1).
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
+import { shopifyMissing, loomMissing } from "./readiness";
 
 export interface SeasonOption {
   id: string;
@@ -48,10 +49,6 @@ export interface PublishingRow {
   loom: ChannelCellState;
 }
 
-function has(v: string | null | undefined): boolean {
-  return typeof v === "string" && v.trim().length > 0;
-}
-
 export async function listColorwaysForPublishing(
   seasonCode?: string
 ): Promise<PublishingRow[]> {
@@ -71,7 +68,16 @@ export async function listColorwaysForPublishing(
         },
       },
       publications: true,
-      prices: { where: { currency: "NOK", priceType: "MSRP" }, take: 1 },
+      // Season-scoped price so readiness matches the price the push will send
+      // for THIS season (a product priced only in another season isn't ready).
+      prices: {
+        where: {
+          currency: "NOK",
+          priceType: "MSRP",
+          ...(seasonCode ? { season: { code: seasonCode } } : {}),
+        },
+        take: 1,
+      },
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
       entries: { select: { cancelled: true, season: { select: { code: true } } } },
       _count: { select: { variants: true } },
@@ -84,31 +90,28 @@ export async function listColorwaysForPublishing(
       return { targeted: !!p, published: !!p?.published, ready: false, missing: [] };
     };
 
-    // Readiness — mirrors the push preview's required fields.
+    // Readiness — uses the SAME predicates the live push enforces.
     const hasVariants = cw._count.variants > 0;
-    const shopifyMissing: string[] = [];
-    if (!hasVariants) shopifyMissing.push("variants");
-    if (cw.prices.length === 0) shopifyMissing.push("price");
+    const hasPrice = cw.prices.length > 0;
 
-    const hs = cw.hsCodeOverride ?? cw.style.hsCode;
-    const cdesc = cw.customsDescriptionOverride ?? cw.style.customsDescription;
-    const weight = cw.weightKgOverride ?? cw.style.weightKg;
-    const fiber = cw.fiberCompositionOverride ?? cw.style.fiberComposition;
-    const loomMissing: string[] = [];
-    if (!hasVariants) loomMissing.push("variants");
-    if (!has(hs)) loomMissing.push("HS code");
-    if (!has(cdesc)) loomMissing.push("customs desc");
-    if (weight == null) loomMissing.push("weight");
-    if (!has(fiber)) loomMissing.push("fibre");
-    if (!has(cw.countryOfOrigin)) loomMissing.push("origin");
-    if (!cw.manufacturerId) loomMissing.push("manufacturer");
+    const shopifyMiss = shopifyMissing({ hasVariants, hasPrice });
+    const loomMiss = loomMissing({
+      hasVariants,
+      hasPrice,
+      hsCode: cw.hsCodeOverride ?? cw.style.hsCode,
+      customsDescription: cw.customsDescriptionOverride ?? cw.style.customsDescription,
+      weightKg: cw.weightKgOverride ?? cw.style.weightKg,
+      fiberComposition: cw.fiberCompositionOverride ?? cw.style.fiberComposition,
+      countryOfOrigin: cw.countryOfOrigin,
+      hasManufacturer: !!cw.manufacturerId,
+    });
 
     const shopify = pub("SHOPIFY");
-    shopify.missing = shopifyMissing;
-    shopify.ready = shopifyMissing.length === 0;
+    shopify.missing = shopifyMiss;
+    shopify.ready = shopifyMiss.length === 0;
     const loom = pub("LOOM");
-    loom.missing = loomMissing;
-    loom.ready = loomMissing.length === 0;
+    loom.missing = loomMiss;
+    loom.ready = loomMiss.length === 0;
 
     return {
       id: cw.id,

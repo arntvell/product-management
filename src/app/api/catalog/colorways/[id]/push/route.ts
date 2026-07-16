@@ -7,12 +7,19 @@ export const maxDuration = 60;
 // POST /api/catalog/colorways/[id]/push — LIVE write: create/update the Shopify
 // product from this colorway.
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  let seasonCode: string | undefined;
   try {
-    const result = await pushColorwayToShopify(id);
+    const body = (await req.json()) as { seasonCode?: string };
+    seasonCode = body?.seasonCode;
+  } catch {
+    /* no body is fine — push without a season scope */
+  }
+  try {
+    const result = await pushColorwayToShopify(id, seasonCode);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

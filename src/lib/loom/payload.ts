@@ -2,6 +2,7 @@
 // Style -> Colorway -> Variant, with stable ids, per-season prices, the full
 // customs block + manufacturer, channels, and per-season lifecycle flags.
 import { prisma } from "@/lib/db";
+import { loomMissing } from "@/lib/master/readiness";
 
 export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: string) {
   return prisma.colorway.findMany({
@@ -19,10 +20,24 @@ export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: st
   });
 }
 
-type LoomColorway = Awaited<ReturnType<typeof loadColorwaysForLoom>>[number];
+export type LoomColorway = Awaited<ReturnType<typeof loadColorwaysForLoom>>[number];
 
 function has(v: string | null | undefined): string | null {
   return v && v.trim() ? v : null;
+}
+
+/** Required fields missing for THIS colorway's Loom push (empty = ready). */
+export function loomMissingForColorway(cw: LoomColorway): string[] {
+  return loomMissing({
+    hasVariants: cw.variants.length > 0,
+    hasPrice: cw.prices.some((p) => p.priceType === "MSRP"),
+    hsCode: has(cw.hsCodeOverride) ?? cw.style.hsCode,
+    customsDescription: has(cw.customsDescriptionOverride) ?? cw.style.customsDescription,
+    weightKg: cw.weightKgOverride ?? cw.style.weightKg,
+    fiberComposition: has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition,
+    countryOfOrigin: cw.countryOfOrigin,
+    hasManufacturer: !!cw.manufacturerId,
+  });
 }
 
 function buildColorway(cw: LoomColorway) {
@@ -103,12 +118,11 @@ export interface LoomPayload {
   }>;
 }
 
-export async function buildLoomPayload(
-  colorwayIds: string[],
+/** Group already-loaded colorways into the Loom payload shape. */
+export function buildLoomPayloadFromColorways(
+  colorways: LoomColorway[],
   seasonCode: string
-): Promise<LoomPayload> {
-  const colorways = await loadColorwaysForLoom(colorwayIds, seasonCode);
-
+): LoomPayload {
   // Group colorways under their style.
   const byStyle = new Map<string, LoomColorway[]>();
   for (const cw of colorways) {
@@ -131,4 +145,12 @@ export async function buildLoomPayload(
   });
 
   return { season: seasonCode, styles };
+}
+
+export async function buildLoomPayload(
+  colorwayIds: string[],
+  seasonCode: string
+): Promise<LoomPayload> {
+  const colorways = await loadColorwaysForLoom(colorwayIds, seasonCode);
+  return buildLoomPayloadFromColorways(colorways, seasonCode);
 }

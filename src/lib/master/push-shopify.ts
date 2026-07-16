@@ -6,9 +6,22 @@
 // GID resolution (see the preview warnings).
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
-import { PRODUCT_SET_MUTATION, FILE_CREATE_MUTATION } from "@/lib/shopify/mutations";
+import {
+  PRODUCT_SET_MUTATION,
+  FILE_CREATE_MUTATION,
+  METAFIELDS_DELETE_MUTATION,
+} from "@/lib/shopify/mutations";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
+import { shopifyMissing } from "./readiness";
+
+// Fetch the live product's fields we must MERGE with (not overwrite): tags a
+// merchant added in Shopify admin, and current publish status.
+const PRODUCT_MERGE_QUERY = `
+  query ProductMerge($id: ID!) {
+    product(id: $id) { id status tags }
+  }
+`;
 
 type PublishColorway = NonNullable<Awaited<ReturnType<typeof getColorwayForPublish>>>;
 type Metafield = { namespace: string; key: string; value: string; type: string };
@@ -114,20 +127,35 @@ export interface PushResult {
   adminUrl: string;
 }
 
-export async function pushColorwayToShopify(id: string): Promise<PushResult> {
-  const cw = await getColorwayForPublish(id);
+export async function pushColorwayToShopify(
+  id: string,
+  seasonCode?: string
+): Promise<PushResult> {
+  const cw = await getColorwayForPublish(id, seasonCode);
   if (!cw) throw new Error("Colorway not found");
   const preview = buildShopifyPreview(cw);
 
   const existing = cw.publications.find((p) => p.channel === "SHOPIFY");
   const action: "create" | "update" = existing?.externalId ? "update" : "create";
 
+  // --- Readiness gate: never push a product that can't publish correctly. ---
+  const hasVariants = preview.variants.length > 0;
+  const hasPrice = cw.prices.some((p) => p.currency === "NOK" && p.priceType === "MSRP");
+  const missing = shopifyMissing({ hasVariants, hasPrice });
+  if (missing.length)
+    throw new Error(
+      `Not ready for Shopify — missing: ${missing.join(", ")}${
+        seasonCode ? ` (season ${seasonCode})` : ""
+      }.`
+    );
+
   const warnings: string[] = [];
+  if (!seasonCode)
+    warnings.push("Pushed without a season — price is not season-scoped; verify it's correct.");
   const metafields = await buildMetafields(cw, warnings);
 
   // One "Size" option; one variant per master variant (deduped size labels).
   const sizes = [...new Set(preview.variants.map((v) => v.size))];
-  const hasVariants = sizes.length > 0;
   const variants = preview.variants.map((v) => ({
     optionValues: [{ optionName: "Size", name: v.size }],
     ...(v.price ? { price: v.price } : {}),
@@ -156,25 +184,53 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
 
   const productMediaUrls = preview.unisex ? flatUrls : galleryUrls;
 
-  // Create Shopify files for every image we need (product media + role file
-  // metafields), then reference them by GID. Best-effort: if the token lacks
-  // the write_files scope (or any file error), skip media and keep pushing the
-  // rest. Requires the `write_files` scope on the Shopify token.
-  const allMediaUrls = [...new Set([...productMediaUrls, ...flatUrls, ...menUrls, ...womenUrls])];
+  // Idempotent media: reuse the Shopify file GID we cached on first upload
+  // (MediaAsset.shopifyMediaId / SeasonImage.shopifyFileId) so re-pushing does
+  // NOT create duplicate files. Only upload URLs we've never uploaded.
+  // Best-effort: if the token lacks write_files (or any error), skip media and
+  // keep pushing the rest. Requires the `write_files` scope on the token.
   const gidByUrl = new Map<string, string>();
-  if (allMediaUrls.length) {
+  for (const m of cw.media) if (m.shopifyMediaId && isPublic(m.url)) gidByUrl.set(m.url, m.shopifyMediaId);
+  for (const s of cw.seasonImages) if (s.shopifyFileId && isPublic(s.url)) gidByUrl.set(s.url, s.shopifyFileId);
+
+  const allMediaUrls = [...new Set([...productMediaUrls, ...flatUrls, ...menUrls, ...womenUrls])];
+  const toCreate = allMediaUrls.filter((u) => !gidByUrl.has(u));
+  if (toCreate.length) {
     try {
       const fc = await shopifyGraphQL<{
         fileCreate: { files: { id: string }[]; userErrors: { message: string }[] };
       }>(FILE_CREATE_MUTATION, {
-        files: allMediaUrls.map((u) => ({ originalSource: u, contentType: "IMAGE" })),
+        files: toCreate.map((u) => ({ originalSource: u, contentType: "IMAGE" })),
       });
       if (fc.fileCreate.userErrors.length)
         warnings.push(`media: ${fc.fileCreate.userErrors.map((e) => e.message).join(", ")}`);
-      allMediaUrls.forEach((u, i) => {
+      const created: { url: string; gid: string }[] = [];
+      toCreate.forEach((u, i) => {
         const g = fc.fileCreate.files[i]?.id;
-        if (g) gidByUrl.set(u, g);
+        if (g) {
+          gidByUrl.set(u, g);
+          created.push({ url: u, gid: g });
+        }
       });
+      // Cache the new GIDs so the next push reuses them instead of duplicating.
+      if (created.length) {
+        try {
+          await prisma.$transaction(
+            created.flatMap(({ url, gid }) => [
+              prisma.mediaAsset.updateMany({
+                where: { colorwayId: id, url, shopifyMediaId: null },
+                data: { shopifyMediaId: gid },
+              }),
+              prisma.seasonImage.updateMany({
+                where: { colorwayId: id, url, shopifyFileId: null },
+                data: { shopifyFileId: gid },
+              }),
+            ])
+          );
+        } catch {
+          /* caching is best-effort; a failure just means we re-upload next time */
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown";
       warnings.push(
@@ -194,14 +250,36 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
   if (menGids.length) metafields.push({ namespace: METAFIELD_NAMESPACE, key: "men_images", type: "list.file_reference", value: JSON.stringify(menGids) });
   if (womenGids.length) metafields.push({ namespace: METAFIELD_NAMESPACE, key: "women_images", type: "list.file_reference", value: JSON.stringify(womenGids) });
 
+  // productSet is declarative (full-replace), so for an UPDATE we must first
+  // read the live product and MERGE, or we'd wipe merchant-added data.
+  let tags = preview.product.tags;
+  let status: string | undefined = preview.product.status;
+  if (action === "update" && existing?.externalId) {
+    const live = await shopifyGraphQL<{
+      product: { id: string; status: string; tags: string[] } | null;
+    }>(PRODUCT_MERGE_QUERY, { id: existing.externalId });
+    const liveTags = live.product?.tags ?? [];
+    // Additive: union of live tags + master tags (never removes merchant tags).
+    tags = [...new Set([...liveTags, ...preview.product.tags])];
+    // Never silently unpublish: if the product is live (ACTIVE) but master says
+    // DRAFT/ARCHIVED, leave the live status alone and warn instead.
+    const liveStatus = live.product?.status;
+    if (liveStatus === "ACTIVE" && preview.product.status !== "ACTIVE") {
+      status = undefined;
+      warnings.push(
+        `Kept live status ACTIVE (master is ${preview.product.status}) — change status in Shopify directly to unpublish.`
+      );
+    }
+  }
+
   const input: Record<string, unknown> = {
     ...(existing?.externalId ? { id: existing.externalId } : {}),
     title: preview.product.title,
     handle: preview.product.handle,
     vendor: preview.product.vendor ?? undefined,
     productType: preview.product.productType ?? undefined,
-    tags: preview.product.tags,
-    status: preview.product.status,
+    tags,
+    ...(status ? { status } : {}),
     metafields,
     ...(productMediaGids.length
       ? { files: productMediaGids.map((gid) => ({ id: gid })) }
@@ -221,6 +299,27 @@ export async function pushColorwayToShopify(id: string): Promise<PushResult> {
   if (errs.length) throw new Error(`productSet: ${errs.map((e) => e.message).join(", ")}`);
   const product = res.productSet?.product;
   if (!product) throw new Error("productSet returned no product");
+
+  // Clear metafields the user emptied in master (productSet only upserts the
+  // keys it's given; it never removes omitted ones). Skip keys we just set.
+  // Only meaningful on update — a fresh create has nothing to delete.
+  if (action === "update") {
+    const setKeys = new Set(metafields.map((m) => m.key));
+    const toDelete = preview.emptyMetafieldKeys.filter((k) => !setKeys.has(k));
+    if (toDelete.length) {
+      try {
+        await shopifyGraphQL(METAFIELDS_DELETE_MUTATION, {
+          metafields: toDelete.map((key) => ({
+            ownerId: product.id,
+            namespace: METAFIELD_NAMESPACE,
+            key,
+          })),
+        });
+      } catch {
+        warnings.push(`Could not clear ${toDelete.length} emptied metafield(s) on Shopify.`);
+      }
+    }
+  }
 
   await prisma.channelPublication.upsert({
     where: { colorwayId_channel: { colorwayId: id, channel: "SHOPIFY" } },
@@ -264,7 +363,10 @@ export interface BulkPushRow {
 
 // Push many colorways with bounded concurrency (Shopify throttling is handled
 // in the client). One product's failure never blocks the rest.
-export async function bulkPushToShopify(ids: string[]): Promise<BulkPushRow[]> {
+export async function bulkPushToShopify(
+  ids: string[],
+  seasonCode?: string
+): Promise<BulkPushRow[]> {
   const CONCURRENCY = 3;
   const results: BulkPushRow[] = [];
   for (let i = 0; i < ids.length; i += CONCURRENCY) {
@@ -272,7 +374,7 @@ export async function bulkPushToShopify(ids: string[]): Promise<BulkPushRow[]> {
     const rows = await Promise.all(
       batch.map(async (colorwayId): Promise<BulkPushRow> => {
         try {
-          const r = await pushColorwayToShopify(colorwayId);
+          const r = await pushColorwayToShopify(colorwayId, seasonCode);
           return { colorwayId, ok: true, action: r.action, variants: r.variants, warnings: r.warnings };
         } catch (err) {
           return { colorwayId, ok: false, error: err instanceof Error ? err.message : "Push failed" };

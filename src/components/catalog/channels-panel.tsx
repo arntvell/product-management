@@ -79,11 +79,25 @@ export function ChannelsPanel({
     }
   }
 
+  // Shopify isn't per-season, but the price is — scope to the first season the
+  // product belongs to so we send that season's price (not an arbitrary one).
+  const shopifySeason = seasonCodes[0];
   async function pushToShopify() {
-    if (!confirm("Push this product to Shopify now? Creates or updates the live Shopify product.")) return;
+    if (
+      !confirm(
+        `Push this product to Shopify now? Creates or updates the live Shopify product${
+          shopifySeason ? ` (price from season ${shopifySeason})` : ""
+        }.`
+      )
+    )
+      return;
     setPushing(true);
     try {
-      const res = await fetch(`/api/catalog/colorways/${colorwayId}/push`, { method: "POST" });
+      const res = await fetch(`/api/catalog/colorways/${colorwayId}/push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seasonCode: shopifySeason }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Push failed");
       setPushResult(data);
@@ -109,6 +123,8 @@ export function ChannelsPanel({
     if (!confirm(`Push to Loom for season(s): ${seasonCodes.join(", ")}?`)) return;
     setPushingLoom(true);
     try {
+      let sentAny = false;
+      const notes: string[] = [];
       for (const seasonCode of seasonCodes) {
         const res = await fetch(`/api/catalog/push/loom`, {
           method: "POST",
@@ -116,11 +132,17 @@ export function ChannelsPanel({
           body: JSON.stringify({ colorwayIds: [colorwayId], seasonCode }),
         });
         const data = await res.json();
-        if (!res.ok || data.ok === false)
+        if (!res.ok && data.sent === undefined)
           throw new Error(data.error ?? data.raw ?? "Loom push failed");
+        if (data.ok && data.sent > 0) sentAny = true;
+        for (const s of (data.skipped ?? []) as { reason: string }[])
+          notes.push(`${seasonCode}: ${s.reason}`);
       }
-      setPubs((prev) => prev.map((p) => (p.channel === "LOOM" ? { ...p, published: true } : p)));
-      toast.success(`Pushed to Loom (${seasonCodes.join(", ")})`);
+      if (sentAny)
+        setPubs((prev) => prev.map((p) => (p.channel === "LOOM" ? { ...p, published: true } : p)));
+      if (sentAny && notes.length === 0) toast.success(`Pushed to Loom (${seasonCodes.join(", ")})`);
+      else if (sentAny) toast.warning(`Pushed to Loom; some seasons skipped: ${notes.join("; ")}`);
+      else toast.error(`Not pushed — ${notes.join("; ") || "not ready for Loom"}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Loom push failed");
     } finally {

@@ -8,7 +8,7 @@ export const maxDuration = 300;
 // LIVE write: create/update each colorway's Shopify product. Per-product
 // results; one failure never blocks the rest.
 export async function POST(req: Request) {
-  let body: { colorwayIds?: string[] };
+  let body: { colorwayIds?: string[]; seasonCode?: string };
   try {
     body = await req.json();
   } catch {
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "colorwayIds required" }, { status: 400 });
   }
 
-  const results = await bulkPushToShopify(body.colorwayIds);
+  const results = await bulkPushToShopify(body.colorwayIds, body.seasonCode);
   const ok = results.filter((r) => r.ok).length;
   return NextResponse.json({ total: results.length, ok, failed: results.length - ok, results });
 }

@@ -244,6 +244,7 @@ model SeasonImage {
   colorway   Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
   slot       ImageSlot // MAIN | ALT
   url        String
+  shopifyFileId String? // GID once uploaded to Shopify (reused on re-push)
 
   @@unique([seasonId, colorwayId, slot])
   @@index([colorwayId])

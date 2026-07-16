@@ -5,7 +5,10 @@
 import { prisma } from "@/lib/db";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 
-export async function getColorwayForPublish(id: string) {
+// seasonCode scopes the price to the season the user is pushing FROM, so we
+// never send another season's price. Omitted -> all prices (legacy behaviour,
+// which then warns if it can't find a single unambiguous NOK MSRP).
+export async function getColorwayForPublish(id: string, seasonCode?: string) {
   return prisma.colorway.findUnique({
     where: { id },
     include: {
@@ -13,7 +16,7 @@ export async function getColorwayForPublish(id: string) {
       brand: true,
       channelContent: true,
       variants: { orderBy: { sizeLabel: "asc" } },
-      prices: true,
+      prices: seasonCode ? { where: { season: { code: seasonCode } } } : true,
       media: { orderBy: { position: "asc" } },
       seasonImages: true,
       publications: true,
@@ -45,6 +48,9 @@ export interface ShopifyPreview {
     tags: string[];
   };
   metafields: ShopifyMetafieldPreview[];
+  // Managed custom.* keys whose master value is now empty — the push deletes
+  // these from Shopify so clearing a field in master clears it live.
+  emptyMetafieldKeys: string[];
   variants: Array<{ sku: string; barcode: string | null; size: string; price: string | null }>;
   media: string[];
   // Role-tagged media that become file-reference metafields on push
@@ -85,9 +91,13 @@ const SINGLE_REFERENCE_FIELDS: Array<{ key: string; type: string; get: (c: Publi
 export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
   const warnings: string[] = [];
   const mf: ShopifyMetafieldPreview[] = [];
+  // Text/reference keys whose master value is blank -> delete from Shopify.
+  // (Media keys are handled separately in the push; they're best-effort.)
+  const emptyMetafieldKeys: string[] = [];
   const add = (key: string, type: string, value: string | null) => {
     if (value && value.trim())
       mf.push({ namespace: METAFIELD_NAMESPACE, key, type, value });
+    else emptyMetafieldKeys.push(key);
   };
 
   // Free-text enrichment (Shopify-resolved).
@@ -186,6 +196,7 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
       tags,
     },
     metafields: mf,
+    emptyMetafieldKeys,
     variants: cw.variants.map((v) => ({
       sku: v.variantSku,
       barcode: v.barcode,

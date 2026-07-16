@@ -7,6 +7,13 @@ import { catalogImageSrc } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 import type { PublishingRow, ChannelCellState } from "@/lib/master/queries";
 
+interface PushReport {
+  channel: "Shopify" | "Loom";
+  ok: number;
+  total: number;
+  issues: string[]; // failures, warnings, and skips — one line each
+}
+
 export function PublishingTable({
   rows,
   season,
@@ -20,6 +27,13 @@ export function PublishingTable({
   const [busy, setBusy] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [pushingLoom, setPushingLoom] = useState(false);
+  const [report, setReport] = useState<PushReport | null>(null);
+
+  // Map a colorway id to its readable name for the report.
+  const nameOf = (id: string) => {
+    const r = items.find((x) => x.id === id);
+    return r ? `${r.styleName} / ${r.name}` : id;
+  };
 
   async function pushLoomSelected() {
     if (selected.size === 0) return;
@@ -27,23 +41,40 @@ export function PublishingTable({
       toast.error("Pick a season first — Loom pushes are per-season.");
       return;
     }
-    if (!confirm(`Push ${selected.size} product(s) to Loom for ${season}?`)) return;
+    if (!confirm(`Push ${selected.size} product(s) to Loom for ${season}? Not-ready products are skipped.`)) return;
     setPushingLoom(true);
+    setReport(null);
+    const ids = [...selected];
     try {
       const res = await fetch("/api/catalog/push/loom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ colorwayIds: [...selected], seasonCode: season }),
+        body: JSON.stringify({ colorwayIds: ids, seasonCode: season }),
       });
       const data = await res.json();
-      if (!res.ok || data.ok === false)
+      if (!res.ok && data.sent === undefined)
         throw new Error(data.error ?? data.raw ?? "Loom push failed");
-      setItems((prev) =>
-        prev.map((r) =>
-          selected.has(r.id) ? { ...r, loom: { ...r.loom, targeted: true, published: true } } : r
-        )
-      );
-      toast.success(`Pushed ${selected.size} product(s) to Loom (${season})`);
+
+      const skipped: { colorwayId: string; reason: string }[] = data.skipped ?? [];
+      const skippedIds = new Set(skipped.map((s) => s.colorwayId));
+      // Mark published ONLY for the products actually sent (not skipped).
+      if (data.ok) {
+        setItems((prev) =>
+          prev.map((r) =>
+            selected.has(r.id) && !skippedIds.has(r.id)
+              ? { ...r, loom: { ...r.loom, targeted: true, published: true } }
+              : r
+          )
+        );
+      }
+      setReport({
+        channel: "Loom",
+        ok: data.sent ?? 0,
+        total: data.requested ?? ids.length,
+        issues: skipped.map((s) => `${nameOf(s.colorwayId)} — skipped: ${s.reason}`),
+      });
+      if (data.ok) toast.success(`Pushed ${data.sent} to Loom (${season})${skipped.length ? `, ${skipped.length} skipped` : ""}`);
+      else toast.error(`Loom push failed — ${data.sent ?? 0} sent, ${skipped.length} skipped`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Loom push failed");
     } finally {
@@ -53,23 +84,26 @@ export function PublishingTable({
 
   async function pushSelected() {
     if (selected.size === 0) return;
-    if (!confirm(`Push ${selected.size} product(s) to Shopify now? Creates/updates the live Shopify products.`))
+    if (!confirm(`Push ${selected.size} product(s) to Shopify now? Creates/updates the live Shopify products. Not-ready products are skipped.`))
       return;
     setPushing(true);
+    setReport(null);
     const ids = [...selected];
     try {
       const res = await fetch("/api/catalog/push/shopify/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ colorwayIds: ids }),
+        body: JSON.stringify({ colorwayIds: ids, seasonCode: season }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Bulk push failed");
-      const okIds = new Set(
-        (data.results as { colorwayId: string; ok: boolean }[])
-          .filter((r) => r.ok)
-          .map((r) => r.colorwayId)
-      );
+      const results = data.results as {
+        colorwayId: string;
+        ok: boolean;
+        error?: string;
+        warnings?: string[];
+      }[];
+      const okIds = new Set(results.filter((r) => r.ok).map((r) => r.colorwayId));
       setItems((prev) =>
         prev.map((r) =>
           okIds.has(r.id)
@@ -77,12 +111,16 @@ export function PublishingTable({
             : r
         )
       );
-      if (data.failed > 0) {
-        const firstErr = (data.results as { ok: boolean; error?: string }[]).find((r) => !r.ok)?.error;
-        toast.error(`Pushed ${data.ok}/${data.total}. ${data.failed} failed — e.g. ${firstErr ?? ""}`);
-      } else {
-        toast.success(`Pushed ${data.ok} product(s) to Shopify`);
-      }
+      const issues = [
+        ...results.filter((r) => !r.ok).map((r) => `${nameOf(r.colorwayId)} — failed: ${r.error ?? "unknown"}`),
+        ...results
+          .filter((r) => r.ok && r.warnings?.length)
+          .flatMap((r) => r.warnings!.map((w) => `${nameOf(r.colorwayId)} — ${w}`)),
+      ];
+      setReport({ channel: "Shopify", ok: data.ok, total: data.total, issues });
+      if (data.failed > 0) toast.error(`Pushed ${data.ok}/${data.total} to Shopify — ${data.failed} failed`);
+      else if (issues.length) toast.warning(`Pushed ${data.ok} to Shopify with ${issues.length} warning(s)`);
+      else toast.success(`Pushed ${data.ok} product(s) to Shopify`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Bulk push failed");
     } finally {
@@ -238,6 +276,30 @@ export function PublishingTable({
           </Button>
         </div>
       </div>
+
+      {report && (
+        <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">
+              {report.channel} push: {report.ok}/{report.total} pushed
+              {report.issues.length ? ` · ${report.issues.length} issue(s)` : " · no issues"}
+            </span>
+            <button
+              onClick={() => setReport(null)}
+              className="text-muted-foreground underline underline-offset-4"
+            >
+              Dismiss
+            </button>
+          </div>
+          {report.issues.length > 0 && (
+            <ul className="mt-2 max-h-48 list-disc space-y-0.5 overflow-auto pl-4 text-amber-700 dark:text-amber-500">
+              {report.issues.map((it, i) => (
+                <li key={i}>{it}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 overflow-hidden rounded-lg border">
         <table className="w-full text-sm">
