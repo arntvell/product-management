@@ -32,6 +32,7 @@ export const PRODUCTS_QUERY = `
             edges {
               node {
                 id
+                sku
                 price
                 compareAtPrice
               }

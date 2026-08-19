@@ -44,6 +44,7 @@ export async function GET() {
 
         const variants: ProductVariant[] = node.variants.edges.map((e) => ({
           id: e.node.id,
+          sku: e.node.sku ?? null,
           price: e.node.price,
           compareAtPrice: e.node.compareAtPrice ?? null,
         }));
