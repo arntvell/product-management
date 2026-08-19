@@ -61,6 +61,7 @@ export interface ProductsQueryResult {
           edges: Array<{
             node: {
               id: string;
+              sku: string | null;
               price: string;
               compareAtPrice: string | null;
             };

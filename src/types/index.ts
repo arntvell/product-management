@@ -1,5 +1,6 @@
 export interface ProductVariant {
   id: string;
+  sku: string | null;
   price: string;
   compareAtPrice: string | null;
 }

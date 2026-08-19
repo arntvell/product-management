@@ -395,9 +395,9 @@ export default function ProductsPage() {
   const handleExportCsv = useCallback(() => {
     if (filteredProducts.length === 0) return;
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadProductsCsv(filteredProducts, `products-${stamp}.csv`);
+    const rows = downloadProductsCsv(filteredProducts, `products-${stamp}.csv`);
     toast.success(
-      `Exported ${filteredProducts.length} product${filteredProducts.length !== 1 ? "s" : ""} to CSV`
+      `Exported ${filteredProducts.length} product${filteredProducts.length !== 1 ? "s" : ""} (${rows} SKU row${rows !== 1 ? "s" : ""}) to CSV`
     );
   }, [filteredProducts]);
 
