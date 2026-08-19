@@ -36,6 +36,9 @@ export function ProductFilters({
   const [searchInput, setSearchInput] = useState(filters.search);
   const debouncedSearch = useDebounce(searchInput, 300);
 
+  const [excludeInput, setExcludeInput] = useState(filters.excludeTags.join(", "));
+  const debouncedExclude = useDebounce(excludeInput, 300);
+
   useEffect(() => {
     if (debouncedSearch !== filters.search) {
       onFiltersChange({ ...filters, search: debouncedSearch });
@@ -48,11 +51,30 @@ export function ProductFilters({
     }
   }, [filters.search]);
 
+  // Push the comma-separated exclude patterns into the filter state.
+  useEffect(() => {
+    const parsed = debouncedExclude
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parsed.join("\n") !== filters.excludeTags.join("\n")) {
+      onFiltersChange({ ...filters, excludeTags: parsed });
+    }
+  }, [debouncedExclude]);
+
+  // Keep the input in sync when filters are cleared elsewhere.
+  useEffect(() => {
+    if (filters.excludeTags.length === 0 && excludeInput !== "") {
+      setExcludeInput("");
+    }
+  }, [filters.excludeTags]);
+
   const hasActiveFilters =
     filters.search ||
     filters.vendors.length > 0 ||
     filters.productTypes.length > 0 ||
     filters.tags.length > 0 ||
+    filters.excludeTags.length > 0 ||
     filters.statuses.length > 0 ||
     filters.missingFlat;
 
@@ -88,6 +110,13 @@ export function ProductFilters({
         selected={filters.tags}
         onChange={(tags) => onFiltersChange({ ...filters, tags })}
         placeholder="All Tags"
+      />
+      <Input
+        placeholder="Exclude tags (e.g. SS27*, sample)"
+        value={excludeInput}
+        onChange={(e) => setExcludeInput(e.target.value)}
+        className="max-w-xs"
+        title="Comma-separated. Use * as a wildcard. Products carrying any matching tag are hidden."
       />
       <MultiSelect
         options={statuses}

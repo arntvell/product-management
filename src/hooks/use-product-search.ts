@@ -11,6 +11,7 @@ export interface Filters {
   vendors: string[];
   productTypes: string[];
   tags: string[];
+  excludeTags: string[];
   statuses: string[];
   missingFlat: boolean;
   sortKey: SortKey | null;
@@ -22,11 +23,26 @@ export const DEFAULT_FILTERS: Filters = {
   vendors: [],
   productTypes: [],
   tags: [],
+  excludeTags: [],
   statuses: [],
   missingFlat: false,
   sortKey: null,
   sortDir: "asc",
 };
+
+// Convert a simple glob (only `*` is a wildcard) into an anchored,
+// case-insensitive RegExp. A pattern with no `*` matches a tag exactly;
+// "SS27*" matches any tag starting with "SS27".
+function globToRegExp(pattern: string): RegExp {
+  // Split on `*`, regex-escape each literal segment, then rejoin with `.*`.
+  // Keeps literal characters (incl. spaces) safe without a sentinel.
+  const body = pattern
+    .trim()
+    .split("*")
+    .map((seg) => seg.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${body}$`, "i");
+}
 
 export function useProductSearch(products: Product[] | undefined) {
   const [filters, setFilters] = usePersistedState<Filters>(
@@ -36,6 +52,9 @@ export function useProductSearch(products: Product[] | undefined) {
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
+
+    // Compile exclude-tag patterns once (supports `*` wildcards).
+    const excludeMatchers = filters.excludeTags.map(globToRegExp);
 
     let result = products.filter((product) => {
       if (filters.search) {
@@ -64,6 +83,14 @@ export function useProductSearch(products: Product[] | undefined) {
       if (
         filters.tags.length > 0 &&
         !filters.tags.some((t) => product.tags.includes(t))
+      ) {
+        return false;
+      }
+
+      // Exclude: hide a product if any of its tags matches any exclude pattern.
+      if (
+        excludeMatchers.length > 0 &&
+        product.tags.some((tag) => excludeMatchers.some((re) => re.test(tag)))
       ) {
         return false;
       }
