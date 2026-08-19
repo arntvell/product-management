@@ -54,7 +54,7 @@ export function useProductSearch(products: Product[] | undefined) {
     if (!products) return [];
 
     // Compile exclude-tag patterns once (supports `*` wildcards).
-    const excludeMatchers = filters.excludeTags.map(globToRegExp);
+    const excludeMatchers = (filters.excludeTags ?? []).map(globToRegExp);
 
     let result = products.filter((product) => {
       if (filters.search) {
