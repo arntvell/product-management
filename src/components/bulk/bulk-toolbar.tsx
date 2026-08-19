@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -16,6 +17,8 @@ interface BulkToolbarProps {
   onClearSelection: () => void;
   onBulkApply: () => void;
   onCopyDown: (fields: MetafieldKey[]) => void;
+  onAddTag: (tag: string) => void;
+  allTags?: string[];
   columns: ColumnDef[];
 }
 
@@ -24,14 +27,32 @@ export function BulkToolbar({
   onClearSelection,
   onBulkApply,
   onCopyDown,
+  onAddTag,
+  allTags = [],
   columns,
 }: BulkToolbarProps) {
   const [copyDownOpen, setCopyDownOpen] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<MetafieldKey>>(
     new Set()
   );
+  const [addTagOpen, setAddTagOpen] = useState(false);
+  const [tagInput, setTagInput] = useState("");
 
   if (selectedCount === 0) return null;
+
+  const tagSuggestions = tagInput.trim()
+    ? allTags
+        .filter((t) => t.toLowerCase().includes(tagInput.toLowerCase()))
+        .slice(0, 8)
+    : [];
+
+  const applyTag = (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed) return;
+    onAddTag(trimmed);
+    setTagInput("");
+    setAddTagOpen(false);
+  };
 
   const toggleField = (key: MetafieldKey) => {
     setSelectedFields((prev) => {
@@ -63,6 +84,58 @@ export function BulkToolbar({
       <Button size="sm" variant="outline" onClick={onBulkApply}>
         Bulk Apply Value
       </Button>
+      <Popover open={addTagOpen} onOpenChange={setAddTagOpen}>
+        <PopoverTrigger asChild>
+          <Button size="sm" variant="outline">
+            Add Tag
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 p-3 space-y-2">
+          <div>
+            <p className="text-sm font-medium">Add a tag</p>
+            <p className="text-xs text-muted-foreground">
+              Added to all {selectedCount} selected — existing tags are kept.
+            </p>
+          </div>
+          <div className="flex gap-1">
+            <Input
+              autoFocus
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && tagInput.trim()) {
+                  e.preventDefault();
+                  applyTag(tagInput);
+                }
+              }}
+              placeholder="Tag name..."
+              className="h-7 text-xs"
+            />
+            <Button
+              size="sm"
+              className="h-7"
+              disabled={!tagInput.trim()}
+              onClick={() => applyTag(tagInput)}
+            >
+              Add
+            </Button>
+          </div>
+          {tagSuggestions.length > 0 && (
+            <div className="border rounded text-xs divide-y max-h-32 overflow-auto">
+              {tagSuggestions.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="w-full text-left px-2 py-1 hover:bg-muted"
+                  onClick={() => applyTag(s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
       <Popover open={copyDownOpen} onOpenChange={setCopyDownOpen}>
         <PopoverTrigger asChild>
           <Button size="sm" variant="outline">

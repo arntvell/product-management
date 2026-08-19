@@ -505,6 +505,30 @@ export function ProductTable({
     [selectedIds, onCellChange]
   );
 
+  // Additive bulk tag add: append the tag to each selected product's CURRENT
+  // (dirty-aware) tags without erasing what's already there.
+  const handleBulkAddTag = useCallback(
+    (tag: string) => {
+      const trimmed = tag.trim();
+      if (!trimmed || selectedIds.size === 0) return;
+      let added = 0;
+      for (const id of selectedIds) {
+        const product = products.find((p) => p.id === id);
+        if (!product) continue;
+        const current = dirtyProductProps.get(id)?.tags ?? product.tags;
+        if (current.includes(trimmed)) continue;
+        onProductPropChange(id, "tags", [...current, trimmed]);
+        added++;
+      }
+      toast.success(
+        added > 0
+          ? `Added "${trimmed}" to ${added} product${added !== 1 ? "s" : ""} — save to apply`
+          : `All selected products already have "${trimmed}"`
+      );
+    },
+    [selectedIds, products, dirtyProductProps, onProductPropChange]
+  );
+
   const handleCopyDown = useCallback(
     (fields: MetafieldKey[]) => {
       if (selectedIds.size < 2 || fields.length === 0) return;
@@ -610,6 +634,8 @@ export function ProductTable({
         onClearSelection={() => onSelectedIdsChange(new Set())}
         onBulkApply={() => setBulkApplyOpen(true)}
         onCopyDown={handleCopyDown}
+        onAddTag={handleBulkAddTag}
+        allTags={allTags}
         columns={columns}
       />
 
