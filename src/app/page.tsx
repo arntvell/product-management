@@ -34,6 +34,11 @@ interface ActivePicker {
   pickerType: string;
 }
 
+// Product-prop updates are sent to Shopify in chunks of this size so a large
+// bulk selection is split across several short requests instead of one long
+// one (avoids timeouts and gives incremental save progress).
+const PROP_CHUNK_SIZE = 20;
+
 export default function ProductsPage() {
   const { data: products, isLoading, error, refetch } = useProducts();
   const {
@@ -127,78 +132,154 @@ export default function ProductsPage() {
     [products]
   );
 
-  const saveProductProps = useCallback(async (): Promise<string[]> => {
-    if (dirtyProductProps.size === 0) return [];
+  // Save product props (tags/status/vendor) in chunks so a large selection
+  // never lands in one giant, timeout-prone request. Returns which products
+  // saved and which failed, so callers can clear only what succeeded.
+  const saveProductProps = useCallback(
+    async (
+      onChunkDone?: () => void
+    ): Promise<{
+      succeededIds: string[];
+      failures: { productId: string; error: string }[];
+    }> => {
+      const all = [...dirtyProductProps.values()].map((prop) => {
+        const u: Record<string, unknown> = { productId: prop.productId };
+        if (prop.tags !== undefined) u.tags = prop.tags;
+        if (prop.status !== undefined) u.status = prop.status;
+        if (prop.vendor !== undefined) u.vendor = prop.vendor;
+        return u;
+      });
 
-    const updates = [...dirtyProductProps.values()].map((prop) => {
-      const u: Record<string, unknown> = { productId: prop.productId };
-      if (prop.tags !== undefined) u.tags = prop.tags;
-      if (prop.status !== undefined) u.status = prop.status;
-      if (prop.vendor !== undefined) u.vendor = prop.vendor;
-      return u;
-    });
+      const succeededIds: string[] = [];
+      const failures: { productId: string; error: string }[] = [];
 
-    const res = await fetch("/api/product-update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ updates }),
-    });
+      for (let i = 0; i < all.length; i += PROP_CHUNK_SIZE) {
+        const chunk = all.slice(i, i + PROP_CHUNK_SIZE);
+        try {
+          const res = await fetch("/api/product-update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ updates: chunk }),
+          });
+          const data = await res.json().catch(() => ({}));
+          const results = (data.results ?? []) as {
+            productId: string;
+            ok: boolean;
+            error?: string;
+          }[];
+          if (!res.ok && results.length === 0) {
+            // Whole chunk failed before any per-item result was produced.
+            for (const u of chunk)
+              failures.push({
+                productId: u.productId as string,
+                error: data.error ?? `HTTP ${res.status}`,
+              });
+          } else if (results.length > 0) {
+            for (const r of results) {
+              if (r.ok) succeededIds.push(r.productId);
+              else failures.push({ productId: r.productId, error: r.error ?? "failed" });
+            }
+          } else {
+            // No per-item results but 2xx — treat the chunk as saved.
+            for (const u of chunk) succeededIds.push(u.productId as string);
+          }
+        } catch (err) {
+          for (const u of chunk)
+            failures.push({
+              productId: u.productId as string,
+              error: err instanceof Error ? err.message : "network error",
+            });
+        }
+        onChunkDone?.();
+      }
 
-    if (!res.ok) throw new Error(`Product update failed: ${res.statusText}`);
-    const data = await res.json();
-    return data.errors ?? [];
-  }, [dirtyProductProps]);
+      return { succeededIds, failures };
+    },
+    [dirtyProductProps]
+  );
 
   const handleSaveAll = useCallback(async () => {
     if (totalDirtyCount === 0) return;
 
     const updates = dirtyCellsToUpdates(dirtyCells);
-    const total = updates.length + (dirtyProductProps.size > 0 ? 1 : 0);
+    const propChunks = Math.ceil(dirtyProductProps.size / PROP_CHUNK_SIZE);
+    const total = updates.length + propChunks;
 
     abortRef.current = false;
     if (total > 1) setSaveProgress({ completed: 0, total });
 
-    const errors: string[] = [];
+    let completed = 0;
+    const bump = () => {
+      completed++;
+      if (total > 1) setSaveProgress({ completed, total });
+    };
 
-    // Save metafields
+    // Save metafields (one at a time — unchanged behavior).
+    const metafieldErrors: string[] = [];
     for (let i = 0; i < updates.length; i++) {
       if (abortRef.current) break;
       try {
         const result = await mutation.mutateAsync([updates[i]]);
-        if (!result.success) errors.push(...result.errors);
+        if (!result.success) metafieldErrors.push(...result.errors);
       } catch (err) {
-        errors.push(err instanceof Error ? err.message : "Unknown error");
+        metafieldErrors.push(err instanceof Error ? err.message : "Unknown error");
       }
-      if (total > 1) setSaveProgress({ completed: i + 1, total });
+      bump();
     }
 
-    // Save product props (tags, status, vendor)
+    // Save product props (tags, status, vendor) — chunked, partial-tolerant.
+    let propResult = {
+      succeededIds: [] as string[],
+      failures: [] as { productId: string; error: string }[],
+    };
     if (dirtyProductProps.size > 0 && !abortRef.current) {
-      try {
-        const propErrors = await saveProductProps();
-        errors.push(...propErrors);
-      } catch (err) {
-        errors.push(err instanceof Error ? err.message : "Unknown error");
-      }
-      if (total > 1) setSaveProgress({ completed: total, total });
+      propResult = await saveProductProps(bump);
     }
 
     setSaveProgress(null);
 
-    if (errors.length === 0) {
-      // Apply metafield changes optimistically
+    // Metafields keep their all-or-nothing clear (they aren't per-item tracked).
+    if (metafieldErrors.length === 0 && updates.length > 0) {
       queryClient.setQueryData<Product[]>(["products"], (old) =>
         old ? applyDirtyCellsToProducts(old, dirtyCells) : old
       );
       setDirtyCells(new Map());
-      setDirtyProductProps(new Map());
-      // Refetch after short delay to get server-confirmed values
-      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["products"] }), 3000);
+    }
+
+    // Clear only the product props that actually saved; keep failures dirty
+    // so the user can retry just those.
+    if (propResult.succeededIds.length > 0) {
+      const saved = new Set(propResult.succeededIds);
+      setDirtyProductProps((prev) => {
+        const next = new Map(prev);
+        for (const id of saved) next.delete(id);
+        return next;
+      });
+    }
+
+    // Refetch to reflect whatever landed on Shopify.
+    setTimeout(() => queryClient.invalidateQueries({ queryKey: ["products"] }), 3000);
+
+    const failureCount = metafieldErrors.length + propResult.failures.length;
+    if (failureCount === 0) {
       toast.success(`Saved ${totalDirtyCount} change${totalDirtyCount !== 1 ? "s" : ""}`);
     } else {
-      toast.error(`Some updates failed: ${errors.join(", ")}`);
+      const savedProps = propResult.succeededIds.length;
+      const firstErr = propResult.failures[0]?.error ?? metafieldErrors[0] ?? "";
+      toast.error(
+        `${failureCount} update${failureCount !== 1 ? "s" : ""} failed` +
+          (savedProps > 0 ? ` (${savedProps} saved)` : "") +
+          `: ${firstErr}`
+      );
     }
-  }, [dirtyCells, dirtyProductProps, totalDirtyCount, mutation, queryClient, saveProductProps]);
+  }, [
+    dirtyCells,
+    dirtyProductProps,
+    totalDirtyCount,
+    mutation,
+    queryClient,
+    saveProductProps,
+  ]);
 
   const handlePickerSelect = useCallback(
     (id: string) => {
