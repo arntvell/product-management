@@ -330,6 +330,7 @@ enum Source {
   THREADFLOW
   MANUAL
   SHOPIFY_IMPORT
+  CIN7_IMPORT
 }
 
 enum SeasonKind {
