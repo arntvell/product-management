@@ -53,6 +53,7 @@ export function MultiSelect({
 
   const clear = (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     onChange([]);
   };
 
@@ -82,10 +83,19 @@ export function MultiSelect({
           </span>
           <span className="flex items-center gap-0.5 ml-1 shrink-0">
             {selected.length > 0 && (
-              <X
-                className="h-3 w-3 opacity-50 hover:opacity-100"
+              <span
+                role="button"
+                tabIndex={-1}
+                aria-label="Clear selection"
+                title="Clear"
+                className="inline-flex items-center rounded-sm p-0.5 opacity-50 hover:bg-muted hover:opacity-100"
+                // Stop the pointer-down so Radix doesn't open the popover before
+                // the click clears the selection.
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={clear}
-              />
+              >
+                <X className="h-3 w-3" />
+              </span>
             )}
             <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
           </span>
