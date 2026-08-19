@@ -26,6 +26,7 @@ import { ModelPicker } from "@/components/pickers/model-picker";
 import { PricesTable } from "@/components/prices/prices-table";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { downloadProductsCsv } from "@/lib/csv-export";
 import type { DirtyCell, DirtyProductProp, DirtyPrice, MetafieldKey, Product } from "@/types";
 
 interface ActivePicker {
@@ -391,6 +392,15 @@ export default function ProductsPage() {
     [dirtyCells]
   );
 
+  const handleExportCsv = useCallback(() => {
+    if (filteredProducts.length === 0) return;
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadProductsCsv(filteredProducts, `products-${stamp}.csv`);
+    toast.success(
+      `Exported ${filteredProducts.length} product${filteredProducts.length !== 1 ? "s" : ""} to CSV`
+    );
+  }, [filteredProducts]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-56px)]">
@@ -448,29 +458,40 @@ export default function ProductsPage() {
         totalCount={products?.length || 0}
         filteredCount={filteredProducts.length}
         actions={
-          activeTab === "metafields" ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setFindReplaceOpen(true)}
-              >
-                Find & Replace
-              </Button>
-              <FitguideAutoLink
-                products={products || []}
-                selectedIds={selectedIds}
-                fitguidePages={fitguidePages}
-                onApply={handleAutoLinkFitguides}
-              />
-              <ColumnPicker
-                visibleKeys={visibleKeys}
-                onToggle={toggleColumn}
-                onReset={resetToDefaults}
-                onShowAll={showAll}
-              />
-            </>
-          ) : null
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={filteredProducts.length === 0}
+              title="Download the filtered products as a CSV"
+            >
+              Export CSV ({filteredProducts.length})
+            </Button>
+            {activeTab === "metafields" && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFindReplaceOpen(true)}
+                >
+                  Find & Replace
+                </Button>
+                <FitguideAutoLink
+                  products={products || []}
+                  selectedIds={selectedIds}
+                  fitguidePages={fitguidePages}
+                  onApply={handleAutoLinkFitguides}
+                />
+                <ColumnPicker
+                  visibleKeys={visibleKeys}
+                  onToggle={toggleColumn}
+                  onReset={resetToDefaults}
+                  onShowAll={showAll}
+                />
+              </>
+            )}
+          </>
         }
       />
 
