@@ -174,6 +174,7 @@ export async function syncSeason(
     const styleTfIds = styles.map((s) => s.style_id);
     const colorways = styles.flatMap((s) => s.colorways);
     const colorwayTfIds = colorways.map((c) => c.colorway_id);
+    const colorwaySkusIncoming = colorways.map((c) => c.colorway_sku);
     const variantSkus = colorways.flatMap((c) => c.variants.map((v) => v.sku));
 
     const existingStyles = await chunkedFind(styleTfIds, (ids) =>
@@ -184,15 +185,29 @@ export async function syncSeason(
     );
     const styleIdByTf = new Map(existingStyles.map((s) => [s.threadflowId!, s.id]));
 
+    // Threadflow assigns colorway ids PER SEASON, so a carry-over colorway
+    // appears in a new season with a fresh colorway_id but the SAME colorway_sku.
+    // Match on threadflowId first, then fall back to colorwaySku (the stable
+    // natural key) so carry-overs update the existing row instead of colliding
+    // on the unique colorwaySku.
     const existingColorways = await chunkedFind(colorwayTfIds, (ids) =>
       prisma.colorway.findMany({
         where: { threadflowId: { in: ids } },
-        select: { id: true, threadflowId: true },
+        select: { id: true, threadflowId: true, colorwaySku: true },
       })
     );
-    const colorwayIdByTf = new Map(
-      existingColorways.map((c) => [c.threadflowId!, c.id])
+    const existingColorwaysBySku = await chunkedFind(colorwaySkusIncoming, (skus) =>
+      prisma.colorway.findMany({
+        where: { colorwaySku: { in: skus } },
+        select: { id: true, threadflowId: true, colorwaySku: true },
+      })
     );
+    const colorwayIdByTf = new Map<string, string>();
+    const colorwayIdBySku = new Map<string, string>();
+    for (const c of [...existingColorways, ...existingColorwaysBySku]) {
+      if (c.threadflowId) colorwayIdByTf.set(c.threadflowId, c.id);
+      colorwayIdBySku.set(c.colorwaySku, c.id);
+    }
 
     const existingVariants = await chunkedFind(variantSkus, (skus) =>
       prisma.variant.findMany({
@@ -214,7 +229,9 @@ export async function syncSeason(
 
     // Manually-edited (locked) colorway fields — the sync must not clobber them
     // (docs/product-master-architecture.md §5.3).
-    const existingColorwayIds = [...colorwayIdByTf.values()];
+    const existingColorwayIds = [
+      ...new Set([...colorwayIdByTf.values(), ...colorwayIdBySku.values()]),
+    ];
     const ownerRows = await chunkedFind(existingColorwayIds, (ids) =>
       prisma.fieldOwner.findMany({
         where: { entityType: "colorway", entityId: { in: ids }, owner: "MANUAL" },
@@ -231,9 +248,16 @@ export async function syncSeason(
     // Resolve every id up front (existing or freshly minted).
     const resolveStyle = (tfId: string) =>
       styleIdByTf.get(tfId) ?? styleIdByTf.set(tfId, randomUUID()).get(tfId)!;
-    const resolveColorway = (tfId: string) =>
-      colorwayIdByTf.get(tfId) ??
-      colorwayIdByTf.set(tfId, randomUUID()).get(tfId)!;
+    // Resolve a colorway's stable master id by threadflowId, else by colorwaySku
+    // (carry-over), else mint a new one. Returns whether it was newly minted.
+    const resolveColorway = (tfId: string, sku: string): { id: string; wasNew: boolean } => {
+      const existingId = colorwayIdByTf.get(tfId) ?? colorwayIdBySku.get(sku);
+      const id = existingId ?? randomUUID();
+      // Cache under both keys so later references in this run resolve.
+      colorwayIdByTf.set(tfId, id);
+      colorwayIdBySku.set(sku, id);
+      return { id, wasNew: !existingId };
+    };
 
     // 5. Build write ops.
     const styleCreates: Prisma.StyleCreateManyInput[] = [];
@@ -302,6 +326,7 @@ export async function syncSeason(
       const styleProductType = s.category || null;
 
       for (const c of s.colorways) {
+        const resolved = resolveColorway(c.colorway_id, c.colorway_sku);
         buildColorway(c, {
           styleId,
           brandId: brand.id,
@@ -312,8 +337,8 @@ export async function syncSeason(
           styleProductType,
           styleNameTF: s.style_name,
           ownedByColorway,
-          wasNew: !colorwayIdByTf.has(c.colorway_id),
-          colorwayId: resolveColorway(c.colorway_id),
+          wasNew: resolved.wasNew,
+          colorwayId: resolved.id,
           colorwayCreates,
           colorwayUpdates,
           variantCreates,
