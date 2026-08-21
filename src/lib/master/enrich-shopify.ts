@@ -8,7 +8,7 @@
 // is never touched.
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, Source } from "@/generated/prisma/client";
 
 const ENRICH_QUERY = `
   query EnrichProducts($cursor: String) {
@@ -79,9 +79,16 @@ interface Cin7Row {
   variants: { variantSku: string; barcode: string | null }[];
 }
 
-async function loadCin7Colorways(): Promise<Cin7Row[]> {
+// Which product sources to enrich. Default: Cin7 imports + Threadflow (skip
+// purely MANUAL products). Threadflow matches are few today (most current-season
+// products aren't in Shopify yet) but this picks them up as they appear.
+const DEFAULT_ENRICH_SOURCES: Source[] = ["CIN7_IMPORT", "THREADFLOW"];
+
+async function loadColorwaysForEnrich(
+  sources: Source[] = DEFAULT_ENRICH_SOURCES
+): Promise<Cin7Row[]> {
   const rows = await prisma.colorway.findMany({
-    where: { source: "CIN7_IMPORT" },
+    where: { source: { in: sources } },
     select: {
       id: true,
       vendor: true,
@@ -143,7 +150,7 @@ function planUpdate(
 }
 
 export interface EnrichPreview {
-  cin7Colorways: number;
+  colorwaysConsidered: number;
   matched: number;
   unmatched: number;
   wouldSetTags: number;
@@ -152,7 +159,7 @@ export interface EnrichPreview {
 }
 
 export async function previewShopifyEnrichment(): Promise<EnrichPreview> {
-  const [{ bySku, byBarcode }, rows] = await Promise.all([loadShopifyIndex(), loadCin7Colorways()]);
+  const [{ bySku, byBarcode }, rows] = await Promise.all([loadShopifyIndex(), loadColorwaysForEnrich()]);
   const locks = await loadManualLocks(rows.map((r) => r.id));
 
   let matched = 0, wTags = 0, wVendor = 0, wType = 0;
@@ -167,7 +174,7 @@ export async function previewShopifyEnrichment(): Promise<EnrichPreview> {
     if (u.productType) wType++;
   }
   return {
-    cin7Colorways: rows.length,
+    colorwaysConsidered: rows.length,
     matched,
     unmatched: rows.length - matched,
     wouldSetTags: wTags,
@@ -190,7 +197,7 @@ export async function runShopifyEnrichment(): Promise<EnrichResult> {
     data: { source: "shopify-enrich", mode: "cin7-identification", status: "running" },
   });
   try {
-    const [{ bySku, byBarcode }, rows] = await Promise.all([loadShopifyIndex(), loadCin7Colorways()]);
+    const [{ bySku, byBarcode }, rows] = await Promise.all([loadShopifyIndex(), loadColorwaysForEnrich()]);
     const locks = await loadManualLocks(rows.map((r) => r.id));
 
     let matched = 0, updated = 0, setTags = 0, setVendor = 0, setProductType = 0;

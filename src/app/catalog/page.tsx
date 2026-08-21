@@ -40,6 +40,12 @@ export default async function CatalogPage() {
         </div>
         <div className="flex items-center gap-2">
           <Link
+            href="/catalog/collections"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            Collections
+          </Link>
+          <Link
             href="/catalog/edit"
             className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
           >
