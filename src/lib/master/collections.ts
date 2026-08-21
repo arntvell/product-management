@@ -24,10 +24,20 @@ export interface CollectionMember {
   vendor: string | null;
   productType: string | null;
   isCore: boolean;
-  origin: "NEW" | "CARRYOVER" | null; // for the selected season, if a real entry
+  onSale: boolean;
+  // The season the carry-over toggle targets (the viewed season, or the current
+  // season for non-season buckets), and the product's origin in it (null = not
+  // yet in that season → can be carried over).
+  targetSeason: string;
+  origin: "NEW" | "CARRYOVER" | null;
 }
 
 const BARE_SEASON = /^(SS|FW)\d{2}$/i;
+
+// A product is "on sale" if it carries a SALE* tag (case-insensitive).
+function isOnSale(tags: string[]): boolean {
+  return tags.some((t) => t.trim().toUpperCase().startsWith("SALE"));
+}
 
 interface Loaded {
   id: string;
@@ -80,17 +90,31 @@ function maxRealSeasonValue(rows: Loaded[]): number {
 
 export async function getCollections(
   selected?: string,
-  vendor?: string
+  vendor?: string,
+  sale?: "1" | "0"
 ): Promise<{
   buckets: CollectionBucket[];
   members: CollectionMember[];
   selected: string;
   vendors: { vendor: string; count: number }[];
   vendor: string | null;
+  sale: "1" | "0" | null;
+  saleCounts: { onSale: number; notOnSale: number };
+  currentSeason: string;
   filteredCount: number;
 }> {
   const rows = await loadAll();
   const ceiling = maxRealSeasonValue(rows) + 5; // allow up to one season ahead
+
+  // The "current" season = the newest REGULAR season (carry-over target).
+  let currentSeason = "";
+  let currentVal = -1;
+  for (const cw of rows)
+    for (const e of cw.entries)
+      if (e.season.kind === "REGULAR") {
+        const v = seasonSortValue(e.season.code) ?? -1;
+        if (v > currentVal) { currentVal = v; currentSeason = e.season.code.toUpperCase(); }
+      }
 
   const seasonCounts = new Map<string, number>();
   let coreCount = 0;
@@ -119,20 +143,26 @@ export async function getCollections(
 
   // Full membership of the selected bucket (before any vendor filter), so the
   // vendor options + counts reflect the whole bucket, not just a display page.
+  const selIsSeason = buckets.find((b) => b.key === sel)?.kind === "season";
   const NO_VENDOR = "(no vendor)";
   const all: CollectionMember[] = [];
   const vendorCounts = new Map<string, number>();
+  let onSaleCount = 0;
   for (const cw of rows) {
     let match = false;
-    let origin: "NEW" | "CARRYOVER" | null = null;
     if (sel === "CORE") match = cw.isCore;
     else if (sel === "CONTINUITY") match = inContinuity(cw);
-    else {
-      match = seasonKeysOf(cw).has(sel);
-      const entry = cw.entries.find((e) => e.season.code.toUpperCase() === sel);
-      origin = entry ? entry.origin : null;
-    }
+    else match = seasonKeysOf(cw).has(sel);
     if (!match) continue;
+
+    // Carry-over toggle targets the viewed season (if a real one) else the
+    // current season; origin is the product's origin in that target season.
+    const targetSeason = selIsSeason ? sel : currentSeason;
+    const targetEntry = cw.entries.find((e) => e.season.code.toUpperCase() === targetSeason);
+    const origin = targetEntry ? targetEntry.origin : null;
+    const onSale = isOnSale(cw.tags);
+    if (onSale) onSaleCount++;
+
     all.push({
       id: cw.id,
       name: cw.name,
@@ -141,6 +171,8 @@ export async function getCollections(
       vendor: cw.vendor,
       productType: cw.productType,
       isCore: cw.isCore,
+      onSale,
+      targetSeason,
       origin,
     });
     const vkey = cw.vendor?.trim() || NO_VENDOR;
@@ -152,10 +184,14 @@ export async function getCollections(
     .sort((a, b) => b.count - a.count || a.vendor.localeCompare(b.vendor));
 
   const activeVendor = vendor && vendorCounts.has(vendor) ? vendor : null;
-  const filtered = activeVendor
-    ? all.filter((m) => (m.vendor?.trim() || NO_VENDOR) === activeVendor)
-    : all;
-  filtered.sort((a, b) => a.styleName.localeCompare(b.styleName) || a.name.localeCompare(b.name));
+  const activeSale = sale === "1" || sale === "0" ? sale : null;
+
+  let filtered = all;
+  if (activeVendor) filtered = filtered.filter((m) => (m.vendor?.trim() || NO_VENDOR) === activeVendor);
+  if (activeSale) filtered = filtered.filter((m) => (activeSale === "1" ? m.onSale : !m.onSale));
+  filtered = [...filtered].sort(
+    (a, b) => a.styleName.localeCompare(b.styleName) || a.name.localeCompare(b.name)
+  );
 
   const MAX = 500;
   return {
@@ -164,6 +200,9 @@ export async function getCollections(
     selected: sel,
     vendors,
     vendor: activeVendor,
+    sale: activeSale,
+    saleCounts: { onSale: onSaleCount, notOnSale: all.length - onSaleCount },
+    currentSeason,
     filteredCount: filtered.length,
   };
 }

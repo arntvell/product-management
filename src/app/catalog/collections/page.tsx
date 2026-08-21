@@ -8,12 +8,31 @@ export const dynamic = "force-dynamic";
 export default async function CollectionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; vendor?: string }>;
+  searchParams: Promise<{ c?: string; vendor?: string; sale?: "1" | "0" }>;
 }) {
-  const { c, vendor } = await searchParams;
-  const { buckets, members, selected, vendors, vendor: activeVendor, filteredCount } =
-    await getCollections(c, vendor);
+  const { c, vendor, sale } = await searchParams;
+  const {
+    buckets,
+    members,
+    selected,
+    vendors,
+    vendor: activeVendor,
+    sale: activeSale,
+    saleCounts,
+    filteredCount,
+  } = await getCollections(c, vendor, sale);
   const current = buckets.find((b) => b.key === selected);
+  // Preserve vendor + sale across links.
+  const qs = (extra: Record<string, string | undefined>) => {
+    const p = new URLSearchParams({ c: selected });
+    if (activeVendor) p.set("vendor", activeVendor);
+    if (activeSale) p.set("sale", activeSale);
+    for (const [k, v] of Object.entries(extra)) {
+      if (v === undefined) p.delete(k);
+      else p.set(k, v);
+    }
+    return `/catalog/collections?${p.toString()}`;
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
@@ -62,12 +81,35 @@ export default async function CollectionsPage({
         })}
       </div>
 
+      {/* Sale filter */}
+      <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-xs font-medium text-muted-foreground">Sale</span>
+        {[
+          { key: undefined as string | undefined, label: "All" },
+          { key: "1", label: `On sale (${saleCounts.onSale})` },
+          { key: "0", label: `Not on sale (${saleCounts.notOnSale})` },
+        ].map((o) => {
+          const active = (activeSale ?? undefined) === o.key;
+          return (
+            <Link
+              key={o.label}
+              href={qs({ sale: o.key })}
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                active ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {o.label}
+            </Link>
+          );
+        })}
+      </div>
+
       {/* Vendor filter */}
       {vendors.length > 1 && (
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="mr-1 text-xs font-medium text-muted-foreground">Vendor</span>
           <Link
-            href={`/catalog/collections?c=${encodeURIComponent(selected)}`}
+            href={qs({ vendor: undefined })}
             className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
               !activeVendor ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
             }`}
@@ -79,7 +121,7 @@ export default async function CollectionsPage({
             return (
               <Link
                 key={v.vendor}
-                href={`/catalog/collections?c=${encodeURIComponent(selected)}&vendor=${encodeURIComponent(v.vendor)}`}
+                href={qs({ vendor: v.vendor })}
                 className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                   active ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
                 }`}
@@ -147,8 +189,9 @@ export default async function CollectionsPage({
                       <LineControls
                         colorwayId={m.id}
                         initialIsCore={m.isCore}
-                        seasonCode={m.origin !== null ? selected : undefined}
+                        targetSeason={m.targetSeason}
                         initialOrigin={m.origin}
+                        onSale={m.onSale}
                       />
                     </td>
                   </tr>

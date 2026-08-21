@@ -31,17 +31,24 @@ export async function POST(
     }
 
     if (body.seasonCode && (body.origin === "NEW" || body.origin === "CARRYOVER")) {
-      const entry = await prisma.seasonEntry.findFirst({
-        where: { colorwayId: id, season: { code: body.seasonCode } },
+      const season = await prisma.season.findUnique({
+        where: { code: body.seasonCode },
         select: { id: true },
       });
-      if (!entry) {
+      if (!season) {
         return NextResponse.json(
-          { error: `No ${body.seasonCode} entry for this product` },
+          { error: `Unknown season ${body.seasonCode}` },
           { status: 404 }
         );
       }
-      await prisma.seasonEntry.update({ where: { id: entry.id }, data: { origin: body.origin } });
+      // Upsert the entry: carry a product into the season even if it isn't in
+      // it yet (e.g. promoting a Continuity/older product into the current one).
+      const entry = await prisma.seasonEntry.upsert({
+        where: { colorwayId_seasonId: { colorwayId: id, seasonId: season.id } },
+        create: { colorwayId: id, seasonId: season.id, origin: body.origin },
+        update: { origin: body.origin },
+        select: { id: true },
+      });
       await prisma.fieldOwner.upsert({
         where: { entityType_entityId_field: { entityType: "seasonEntry", entityId: entry.id, field: "origin" } },
         create: { entityType: "seasonEntry", entityId: entry.id, field: "origin", owner: "MANUAL", lockedAt: new Date() },

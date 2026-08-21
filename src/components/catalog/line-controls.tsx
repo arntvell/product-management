@@ -4,19 +4,23 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Inline CORE / New-vs-Carry-over editor for a product row in the Collections
-// list. Each change posts to the classify endpoint, which records a MANUAL lock
-// so the automatic classify pass won't revert it.
+// Inline editor for a product row in the Collections list: CORE flag, New vs
+// Carry-over for the target season (creating the season entry if the product
+// isn't in it yet), and a read-only Sale badge. Each change posts to the
+// classify endpoint, which records a MANUAL lock so the auto classify pass
+// won't revert it.
 export function LineControls({
   colorwayId,
   initialIsCore,
-  seasonCode,
+  targetSeason,
   initialOrigin,
+  onSale,
 }: {
   colorwayId: string;
   initialIsCore: boolean;
-  seasonCode?: string; // the season being viewed, if it's a real season entry
+  targetSeason: string;
   initialOrigin: "NEW" | "CARRYOVER" | null;
+  onSale: boolean;
 }) {
   const [isCore, setIsCore] = useState(initialIsCore);
   const [origin, setOrigin] = useState<"NEW" | "CARRYOVER" | null>(initialOrigin);
@@ -48,11 +52,12 @@ export function LineControls({
     else toast.success(next ? "Marked as Core" : "Removed from Core");
   }
 
-  async function toggleOrigin() {
-    if (!seasonCode || origin === null) return;
-    const next = origin === "CARRYOVER" ? "NEW" : "CARRYOVER";
+  async function setOriginTo(next: "NEW" | "CARRYOVER") {
+    const prev = origin;
     setOrigin(next);
-    if (!(await post({ seasonCode, origin: next }))) setOrigin(origin);
+    if (!(await post({ seasonCode: targetSeason, origin: next }))) setOrigin(prev);
+    else if (prev === null)
+      toast.success(`Carried over into ${targetSeason}`);
   }
 
   return (
@@ -64,19 +69,28 @@ export function LineControls({
         title={isCore ? "Core line — click to unset" : "Mark as Core line"}
         className={cn(
           "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase transition-colors disabled:opacity-50",
-          isCore
-            ? "bg-foreground text-background"
-            : "border text-muted-foreground hover:bg-muted"
+          isCore ? "bg-foreground text-background" : "border text-muted-foreground hover:bg-muted"
         )}
       >
         ★ Core
       </button>
-      {origin !== null && (
+
+      {origin === null ? (
         <button
           type="button"
-          onClick={toggleOrigin}
+          onClick={() => setOriginTo("CARRYOVER")}
           disabled={busy}
-          title="Toggle New / Carry-over for this season"
+          title={`Carry this product over into ${targetSeason}`}
+          className="rounded border border-dashed px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+        >
+          + Carry over
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOriginTo(origin === "CARRYOVER" ? "NEW" : "CARRYOVER")}
+          disabled={busy}
+          title={`${targetSeason}: toggle New / Carry-over`}
           className={cn(
             "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase transition-colors disabled:opacity-50",
             origin === "CARRYOVER"
@@ -86,6 +100,15 @@ export function LineControls({
         >
           {origin === "CARRYOVER" ? "Carry-over" : "New"}
         </button>
+      )}
+
+      {onSale && (
+        <span
+          title="On sale (has a SALE tag)"
+          className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700 dark:text-rose-400"
+        >
+          Sale
+        </span>
       )}
     </div>
   );
