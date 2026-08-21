@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 export default async function CollectionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string }>;
+  searchParams: Promise<{ c?: string; vendor?: string }>;
 }) {
-  const { c } = await searchParams;
-  const { buckets, members, selected } = await getCollections(c);
+  const { c, vendor } = await searchParams;
+  const { buckets, members, selected, vendors, vendor: activeVendor, filteredCount } =
+    await getCollections(c, vendor);
   const current = buckets.find((b) => b.key === selected);
 
   return (
@@ -60,15 +61,46 @@ export default async function CollectionsPage({
         })}
       </div>
 
+      {/* Vendor filter */}
+      {vendors.length > 1 && (
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-medium text-muted-foreground">Vendor</span>
+          <Link
+            href={`/catalog/collections?c=${encodeURIComponent(selected)}`}
+            className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+              !activeVendor ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            All
+          </Link>
+          {vendors.map((v) => {
+            const active = v.vendor === activeVendor;
+            return (
+              <Link
+                key={v.vendor}
+                href={`/catalog/collections?c=${encodeURIComponent(selected)}&vendor=${encodeURIComponent(v.vendor)}`}
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                  active ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {v.vendor}{" "}
+                <span className={active ? "text-background/70" : "text-muted-foreground/70"}>{v.count}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       {/* Members */}
       <div className="mt-6 flex items-baseline justify-between">
         <h2 className="text-sm font-semibold">
-          {current?.label}{" "}
+          {current?.label}
+          {activeVendor && <span className="font-normal text-muted-foreground"> · {activeVendor}</span>}{" "}
           <span className="font-normal text-muted-foreground">
-            · {current?.count ?? 0} product{(current?.count ?? 0) !== 1 ? "s" : ""}
+            · {filteredCount} product{filteredCount !== 1 ? "s" : ""}
           </span>
         </h2>
-        {members.length < (current?.count ?? 0) && (
+        {members.length < filteredCount && (
           <span className="text-xs text-muted-foreground">
             showing first {members.length}
           </span>

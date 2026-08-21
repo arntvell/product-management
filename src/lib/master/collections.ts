@@ -78,10 +78,16 @@ function maxRealSeasonValue(rows: Loaded[]): number {
   return max || 99999;
 }
 
-export async function getCollections(selected?: string): Promise<{
+export async function getCollections(
+  selected?: string,
+  vendor?: string
+): Promise<{
   buckets: CollectionBucket[];
   members: CollectionMember[];
   selected: string;
+  vendors: { vendor: string; count: number }[];
+  vendor: string | null;
+  filteredCount: number;
 }> {
   const rows = await loadAll();
   const ceiling = maxRealSeasonValue(rows) + 5; // allow up to one season ahead
@@ -111,9 +117,11 @@ export async function getCollections(selected?: string): Promise<{
 
   const sel = selected && buckets.some((b) => b.key === selected) ? selected : buckets[0].key;
 
-  // Members of the selected bucket.
-  const MAX = 500;
-  const members: CollectionMember[] = [];
+  // Full membership of the selected bucket (before any vendor filter), so the
+  // vendor options + counts reflect the whole bucket, not just a display page.
+  const NO_VENDOR = "(no vendor)";
+  const all: CollectionMember[] = [];
+  const vendorCounts = new Map<string, number>();
   for (const cw of rows) {
     let match = false;
     let origin: "NEW" | "CARRYOVER" | null = null;
@@ -125,7 +133,7 @@ export async function getCollections(selected?: string): Promise<{
       origin = entry ? entry.origin : null;
     }
     if (!match) continue;
-    members.push({
+    all.push({
       id: cw.id,
       name: cw.name,
       styleName: cw.style.styleName,
@@ -135,9 +143,27 @@ export async function getCollections(selected?: string): Promise<{
       isCore: cw.isCore,
       origin,
     });
-    if (members.length >= MAX) break;
+    const vkey = cw.vendor?.trim() || NO_VENDOR;
+    vendorCounts.set(vkey, (vendorCounts.get(vkey) ?? 0) + 1);
   }
-  members.sort((a, b) => a.styleName.localeCompare(b.styleName) || a.name.localeCompare(b.name));
 
-  return { buckets, members, selected: sel };
+  const vendors = [...vendorCounts.entries()]
+    .map(([vendor, count]) => ({ vendor, count }))
+    .sort((a, b) => b.count - a.count || a.vendor.localeCompare(b.vendor));
+
+  const activeVendor = vendor && vendorCounts.has(vendor) ? vendor : null;
+  const filtered = activeVendor
+    ? all.filter((m) => (m.vendor?.trim() || NO_VENDOR) === activeVendor)
+    : all;
+  filtered.sort((a, b) => a.styleName.localeCompare(b.styleName) || a.name.localeCompare(b.name));
+
+  const MAX = 500;
+  return {
+    buckets,
+    members: filtered.slice(0, MAX),
+    selected: sel,
+    vendors,
+    vendor: activeVendor,
+    filteredCount: filtered.length,
+  };
 }
