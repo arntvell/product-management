@@ -15,6 +15,7 @@ const ENRICH_QUERY = `
     products(first: 200, after: $cursor, query: "status:active OR status:draft OR status:archived") {
       edges {
         node {
+          title
           vendor
           productType
           tags
@@ -36,6 +37,7 @@ interface EnrichQueryResult {
   products: {
     edges: {
       node: {
+        title: string;
         vendor: string | null;
         productType: string | null;
         tags: string[];
@@ -46,13 +48,17 @@ interface EnrichQueryResult {
   };
 }
 
-// Index every Shopify variant SKU and barcode -> its product's enrich fields.
+// Index every Shopify variant SKU and barcode -> its product's enrich fields,
+// plus a cleaned-name index (dropping ambiguous names that map to >1 product).
 async function loadShopifyIndex(): Promise<{
   bySku: Map<string, ShopifyEnrichRec>;
   byBarcode: Map<string, ShopifyEnrichRec>;
+  byName: Map<string, ShopifyEnrichRec>;
 }> {
   const bySku = new Map<string, ShopifyEnrichRec>();
   const byBarcode = new Map<string, ShopifyEnrichRec>();
+  const byName = new Map<string, ShopifyEnrichRec>();
+  const nameAmbiguous = new Set<string>();
   let cursor: string | null = null;
   let hasNext = true;
   while (hasNext) {
@@ -64,19 +70,41 @@ async function loadShopifyIndex(): Promise<{
         if (v.node.sku) bySku.set(v.node.sku, rec);
         if (v.node.barcode) byBarcode.set(String(v.node.barcode), rec);
       }
+      // Only tagged titles are useful, and only if unambiguous.
+      const key = cleanNameKey(p.title);
+      if (key && rec.tags.length) {
+        if (byName.has(key)) nameAmbiguous.add(key);
+        else byName.set(key, rec);
+      }
     }
     hasNext = data.products.pageInfo.hasNextPage;
     cursor = data.products.pageInfo.endCursor;
   }
-  return { bySku, byBarcode };
+  for (const k of nameAmbiguous) byName.delete(k);
+  return { bySku, byBarcode, byName };
 }
 
 interface Cin7Row {
   id: string;
+  name: string;
   vendor: string | null;
   productType: string | null;
   tags: string[];
   variants: { variantSku: string; barcode: string | null }[];
+}
+
+// Normalize a product name for a last-resort match: drop trailing size tokens
+// ("Keri Japan Gravel, 3432*" / "Barnes ... 31/32" / "34 34") and punctuation,
+// so a Cin7 colorway name lines up with the Shopify product title. Cin7 and
+// Shopify use different SKU schemes for legacy items (JP vs JPN, IMP- prefixes),
+// so SKU/barcode alone misses products that DO exist in Shopify with tags.
+function cleanNameKey(s: string): string {
+  return (s || "")
+    .replace(/\*/g, "")
+    .replace(/,?\s*\d{2,4}([\/x]\d{2,4})?\s*$/i, "")
+    .replace(/,?\s*(\d{2}\s+\d{2})\s*$/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 // Which product sources to enrich. Default: Cin7 imports + Threadflow (skip
@@ -91,6 +119,7 @@ async function loadColorwaysForEnrich(
     where: { source: { in: sources } },
     select: {
       id: true,
+      name: true,
       vendor: true,
       productType: true,
       tags: true,
@@ -121,10 +150,13 @@ async function loadManualLocks(colorwayIds: string[]): Promise<Map<string, Set<s
 function matchRec(
   row: Cin7Row,
   bySku: Map<string, ShopifyEnrichRec>,
-  byBarcode: Map<string, ShopifyEnrichRec>
+  byBarcode: Map<string, ShopifyEnrichRec>,
+  byName: Map<string, ShopifyEnrichRec>
 ): ShopifyEnrichRec | null {
   for (const v of row.variants) if (v.variantSku && bySku.has(v.variantSku)) return bySku.get(v.variantSku)!;
   for (const v of row.variants) if (v.barcode && byBarcode.has(String(v.barcode))) return byBarcode.get(String(v.barcode))!;
+  const nameKey = cleanNameKey(row.name); // last resort (legacy SKU schemes differ)
+  if (nameKey && byName.has(nameKey)) return byName.get(nameKey)!;
   return null;
 }
 
@@ -159,12 +191,12 @@ export interface EnrichPreview {
 }
 
 export async function previewShopifyEnrichment(): Promise<EnrichPreview> {
-  const [{ bySku, byBarcode }, rows] = await Promise.all([loadShopifyIndex(), loadColorwaysForEnrich()]);
+  const [{ bySku, byBarcode, byName }, rows] = await Promise.all([loadShopifyIndex(), loadColorwaysForEnrich()]);
   const locks = await loadManualLocks(rows.map((r) => r.id));
 
   let matched = 0, wTags = 0, wVendor = 0, wType = 0;
   for (const row of rows) {
-    const rec = matchRec(row, bySku, byBarcode);
+    const rec = matchRec(row, bySku, byBarcode, byName);
     if (!rec) continue;
     matched++;
     const u = planUpdate(row, rec, locks.get(row.id) ?? new Set());
@@ -197,7 +229,7 @@ export async function runShopifyEnrichment(): Promise<EnrichResult> {
     data: { source: "shopify-enrich", mode: "cin7-identification", status: "running" },
   });
   try {
-    const [{ bySku, byBarcode }, rows] = await Promise.all([loadShopifyIndex(), loadColorwaysForEnrich()]);
+    const [{ bySku, byBarcode, byName }, rows] = await Promise.all([loadShopifyIndex(), loadColorwaysForEnrich()]);
     const locks = await loadManualLocks(rows.map((r) => r.id));
 
     let matched = 0, updated = 0, setTags = 0, setVendor = 0, setProductType = 0;
@@ -209,7 +241,7 @@ export async function runShopifyEnrichment(): Promise<EnrichResult> {
     };
 
     for (const row of rows) {
-      const rec = matchRec(row, bySku, byBarcode);
+      const rec = matchRec(row, bySku, byBarcode, byName);
       if (!rec) continue;
       matched++;
       const u = planUpdate(row, rec, locks.get(row.id) ?? new Set());

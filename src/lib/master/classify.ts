@@ -47,6 +47,18 @@ async function computePlan() {
   const seasonValueById = new Map<string, number | null>();
   for (const s of seasons) seasonValueById.set(s.id, seasonSortValue(s.code));
 
+  // Manual overrides (from the Collections editor) must never be reverted.
+  const locks = await prisma.fieldOwner.findMany({
+    where: { owner: "MANUAL", field: { in: ["isCore", "origin"] } },
+    select: { entityType: true, entityId: true, field: true },
+  });
+  const coreLocked = new Set<string>(); // colorway ids
+  const originLocked = new Set<string>(); // season-entry ids
+  for (const l of locks) {
+    if (l.field === "isCore" && l.entityType === "colorway") coreLocked.add(l.entityId);
+    if (l.field === "origin" && l.entityType === "seasonEntry") originLocked.add(l.entityId);
+  }
+
   const colorways = await prisma.colorway.findMany({
     select: {
       id: true,
@@ -62,10 +74,12 @@ async function computePlan() {
   const entriesToCarry: string[] = [];
 
   for (const cw of colorways) {
-    // CORE from tags.
-    const core = isCoreTags(cw.tags);
-    if (core && !cw.isCore) coreTrue.push(cw.id);
-    else if (!core && cw.isCore) coreFalse.push(cw.id);
+    // CORE from tags — unless manually overridden.
+    if (!coreLocked.has(cw.id)) {
+      const core = isCoreTags(cw.tags);
+      if (core && !cw.isCore) coreTrue.push(cw.id);
+      else if (!core && cw.isCore) coreFalse.push(cw.id);
+    }
 
     // Origin value = earliest real-season signal from entries + tags.
     const candidates: number[] = [];
@@ -80,6 +94,7 @@ async function computePlan() {
       const sv = seasonValueById.get(e.seasonId);
       // Only classify real (SS/FW) seasons; leave CONTINUITY entries as-is.
       if (sv == null) continue;
+      if (originLocked.has(e.id)) continue; // manual override
       const desired = origin != null && sv > origin ? "CARRYOVER" : "NEW";
       if (desired !== e.origin) (desired === "CARRYOVER" ? entriesToCarry : entriesToNew).push(e.id);
     }

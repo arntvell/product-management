@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCollections } from "@/lib/master/collections";
 import { catalogImageSrc } from "@/lib/catalog-image";
+import { LineControls } from "@/components/catalog/line-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +119,7 @@ export default async function CollectionsPage({
                 <th className="p-3">Product</th>
                 <th className="p-3">Vendor</th>
                 <th className="p-3">Type</th>
-                <th className="w-28 p-3">Line</th>
+                <th className="w-44 p-3">Line</th>
               </tr>
             </thead>
             <tbody>
@@ -143,26 +144,12 @@ export default async function CollectionsPage({
                     <td className="p-3 text-muted-foreground">{m.vendor ?? "—"}</td>
                     <td className="p-3 text-muted-foreground">{m.productType ?? "—"}</td>
                     <td className="p-3">
-                      <div className="flex flex-wrap gap-1">
-                        {m.isCore && (
-                          <span className="rounded bg-foreground/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase">
-                            Core
-                          </span>
-                        )}
-                        {m.origin === "CARRYOVER" && (
-                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-500">
-                            Carry-over
-                          </span>
-                        )}
-                        {m.origin === "NEW" && (
-                          <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-green-700 dark:text-green-500">
-                            New
-                          </span>
-                        )}
-                        {!m.isCore && m.origin === null && (
-                          <span className="text-[10px] text-muted-foreground">—</span>
-                        )}
-                      </div>
+                      <LineControls
+                        colorwayId={m.id}
+                        initialIsCore={m.isCore}
+                        seasonCode={m.origin !== null ? selected : undefined}
+                        initialOrigin={m.origin}
+                      />
                     </td>
                   </tr>
                 );
