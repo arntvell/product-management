@@ -170,6 +170,8 @@ export interface Cin7ImportPreview {
   toImportColorways: number;
   toImportVariants: number;
   skippedExisting: number;
+  wouldDrop: number; // already-imported colorways no longer in stock
+  wouldRestock: number; // dropped colorways back in stock
   byBrand: { brand: string; colorways: number }[];
 }
 
@@ -205,6 +207,26 @@ export async function previewCin7Import(brands?: string[]): Promise<Cin7ImportPr
     brandCounts.set(brandName, (brandCounts.get(brandName) ?? 0) + 1);
   }
 
+  // Lifecycle preview: how many already-imported colorways would flip
+  // dropped/restocked based on current stock.
+  const inStockBases = new Set(groups.map((g) => g.base));
+  const existingCin7 = await prisma.colorway.findMany({
+    where: { source: "CIN7_IMPORT" },
+    select: {
+      colorwaySku: true,
+      entries: { where: { season: { code: "CONTINUITY" } }, select: { cancelled: true } },
+    },
+  });
+  let wouldDrop = 0;
+  let wouldRestock = 0;
+  for (const cw of existingCin7) {
+    const entry = cw.entries[0];
+    if (!entry) continue;
+    const outOfStock = !inStockBases.has(cw.colorwaySku);
+    if (outOfStock && !entry.cancelled) wouldDrop++;
+    else if (!outOfStock && entry.cancelled) wouldRestock++;
+  }
+
   return {
     inStockSkus: inStockSkuCount,
     productMissing,
@@ -213,6 +235,8 @@ export async function previewCin7Import(brands?: string[]): Promise<Cin7ImportPr
     toImportColorways,
     toImportVariants,
     skippedExisting,
+    wouldDrop,
+    wouldRestock,
     byBrand: [...brandCounts.entries()]
       .map(([brand, colorways]) => ({ brand, colorways }))
       .sort((a, b) => b.colorways - a.colorways),
@@ -223,6 +247,8 @@ export interface Cin7ImportResult {
   importedColorways: number;
   importedVariants: number;
   skipped: number;
+  droppedMarked: number; // previously imported, now out of stock -> cancelled
+  restocked: number; // previously dropped, back in stock -> un-cancelled
   brands: number;
   syncRunId: string;
 }
@@ -363,10 +389,46 @@ export async function runCin7Import(brands?: string[]): Promise<Cin7ImportResult
       await prisma.seasonVariant.createMany({ data: seasonVariantLinks, skipDuplicates: true });
     if (priceCreates.length) await prisma.price.createMany({ data: priceCreates as never });
 
+    // Lifecycle reconciliation: a previously-imported Cin7 colorway that's no
+    // longer in stock at the target locations is marked dropped (cancelled) in
+    // its CONTINUITY entry; one back in stock is un-dropped. Never deleted.
+    const inStockBases = new Set(groups.map((g) => g.base));
+    const existingCin7 = await prisma.colorway.findMany({
+      where: { source: "CIN7_IMPORT" },
+      select: {
+        colorwaySku: true,
+        entries: {
+          where: { seasonId: season.id },
+          select: { id: true, cancelled: true },
+        },
+      },
+    });
+    const toCancel: string[] = [];
+    const toRestock: string[] = [];
+    for (const cw of existingCin7) {
+      const entry = cw.entries[0];
+      if (!entry) continue;
+      const outOfStock = !inStockBases.has(cw.colorwaySku);
+      if (outOfStock && !entry.cancelled) toCancel.push(entry.id);
+      else if (!outOfStock && entry.cancelled) toRestock.push(entry.id);
+    }
+    if (toCancel.length)
+      await prisma.seasonEntry.updateMany({
+        where: { id: { in: toCancel } },
+        data: { cancelled: true },
+      });
+    if (toRestock.length)
+      await prisma.seasonEntry.updateMany({
+        where: { id: { in: toRestock } },
+        data: { cancelled: false },
+      });
+
     const result: Cin7ImportResult = {
       importedColorways,
       importedVariants,
       skipped,
+      droppedMarked: toCancel.length,
+      restocked: toRestock.length,
       brands: brandIdByName.size,
       syncRunId: run.id,
     };
