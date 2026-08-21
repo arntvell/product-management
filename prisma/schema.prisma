@@ -132,6 +132,11 @@ model Colorway {
   tags   String[]
   vendor String?
 
+  // A CORE product is a permanent production line, carried every season by
+  // design (as opposed to a seasonal product). Set from the CORE/Allseasons
+  // tags or manually; durable across seasons.
+  isCore Boolean @default(false)
+
   // ---- Optional customs overrides (else inherit from Style) ----
   hsCodeOverride             String?
   customsDescriptionOverride String?
@@ -205,6 +210,10 @@ model SeasonEntry {
   season                Season          @relation(fields: [seasonId], references: [id])
   cancelled             Boolean         @default(false) // = Threadflow "dropped" (plan §8)
   approvedForProduction Boolean         @default(false)
+  // How this product entered THIS season: NEW = its origin season; CARRYOVER =
+  // pulled forward from an earlier season. (CORE is a product-level trait; see
+  // Colorway.isCore.) Relative to the season, so it lives on the entry.
+  origin                EntryOrigin     @default(NEW)
   merchPosition         Int? // preserved across cancel/restore
   variants              SeasonVariant[]
 
@@ -336,6 +345,11 @@ enum Source {
 enum SeasonKind {
   REGULAR
   CONTINUITY
+}
+
+enum EntryOrigin {
+  NEW // this product's origin (first) season
+  CARRYOVER // carried forward from an earlier season
 }
 
 enum PriceType {
