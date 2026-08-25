@@ -230,7 +230,13 @@ async function collectChanges(opts: Cin7EnrichOptions): Promise<{
       if (!isEmpty) continue;
       const entity = STYLE_FIELDS.has(field) ? "style" : "colorway";
       const entityId = entity === "style" ? cw.styleId : cw.id;
-      if (locked.has(`${entity}|${entityId}|${field}`)) {
+      // A manual correction is recorded against the COLORWAY even for fields
+      // stored on the style, so honour both — otherwise a hand-set value could
+      // be undercut by writing the style default it inherits from.
+      if (
+        locked.has(`${entity}|${entityId}|${field}`) ||
+        locked.has(`colorway|${cw.id}|${field}`)
+      ) {
         skippedLocked++;
         continue;
       }
