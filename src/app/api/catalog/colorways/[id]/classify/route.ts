@@ -4,16 +4,23 @@ import { prisma } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 // POST /api/catalog/colorways/[id]/classify
-//   { isCore?: boolean, seasonCode?: string, origin?: "NEW" | "CARRYOVER" }
+//   { isCore?: boolean, seasonCode?: string, origin?: "NEW" | "CARRYOVER",
+//     remove?: boolean }
 // Manually set a product's CORE flag and/or a season entry's NEW/CARRYOVER
-// origin. Each manual edit is recorded as a MANUAL FieldOwner lock so the
-// automatic classify pass never reverts it.
+// origin, or remove the product from the season entirely. Each manual edit is
+// recorded as a MANUAL FieldOwner lock so the automatic classify pass never
+// reverts it.
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  let body: { isCore?: boolean; seasonCode?: string; origin?: "NEW" | "CARRYOVER" };
+  let body: {
+    isCore?: boolean;
+    seasonCode?: string;
+    origin?: "NEW" | "CARRYOVER";
+    remove?: boolean;
+  };
   try {
     body = await req.json();
   } catch {
@@ -28,6 +35,33 @@ export async function POST(
         create: { entityType: "colorway", entityId: id, field: "isCore", owner: "MANUAL", lockedAt: new Date() },
         update: { owner: "MANUAL", lockedAt: new Date() },
       });
+    }
+
+    // Undoing a carry-over means taking the product back OUT of the season —
+    // not relabelling it NEW, which would leave it in scope for that season's
+    // push. Drops the MANUAL lock too, so classify is free to decide again.
+    if (body.seasonCode && body.remove) {
+      const season = await prisma.season.findUnique({
+        where: { code: body.seasonCode },
+        select: { id: true },
+      });
+      if (!season) {
+        return NextResponse.json(
+          { error: `Unknown season ${body.seasonCode}` },
+          { status: 404 }
+        );
+      }
+      const entry = await prisma.seasonEntry.findUnique({
+        where: { colorwayId_seasonId: { colorwayId: id, seasonId: season.id } },
+        select: { id: true },
+      });
+      if (entry) {
+        await prisma.fieldOwner.deleteMany({
+          where: { entityType: "seasonEntry", entityId: entry.id, field: "origin" },
+        });
+        await prisma.seasonEntry.delete({ where: { id: entry.id } });
+      }
+      return NextResponse.json({ ok: true, removed: !!entry });
     }
 
     if (body.seasonCode && (body.origin === "NEW" || body.origin === "CARRYOVER")) {

@@ -60,6 +60,15 @@ export function LineControls({
       toast.success(`Carried over into ${targetSeason}`);
   }
 
+  // Take the product back OUT of the season. Toggling to NEW would leave it in
+  // the season — and so in scope for that season's push.
+  async function removeFromSeason() {
+    const prev = origin;
+    setOrigin(null);
+    if (!(await post({ seasonCode: targetSeason, remove: true }))) setOrigin(prev);
+    else toast.success(`Removed from ${targetSeason}`);
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-1">
       <button
@@ -86,20 +95,37 @@ export function LineControls({
           + Carry over
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={() => setOriginTo(origin === "CARRYOVER" ? "NEW" : "CARRYOVER")}
-          disabled={busy}
-          title={`${targetSeason}: toggle New / Carry-over`}
-          className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase transition-colors disabled:opacity-50",
-            origin === "CARRYOVER"
-              ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-500"
-              : "bg-green-500/15 text-green-700 hover:bg-green-500/25 dark:text-green-500"
-          )}
-        >
-          {origin === "CARRYOVER" ? "Carry-over" : "New"}
-        </button>
+        <span className="inline-flex items-center">
+          <button
+            type="button"
+            onClick={() => setOriginTo(origin === "CARRYOVER" ? "NEW" : "CARRYOVER")}
+            disabled={busy}
+            title={`${targetSeason}: toggle New / Carry-over (stays in the season)`}
+            className={cn(
+              "rounded-l px-1.5 py-0.5 text-[10px] font-semibold uppercase transition-colors disabled:opacity-50",
+              origin === "CARRYOVER"
+                ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-500"
+                : "bg-green-500/15 text-green-700 hover:bg-green-500/25 dark:text-green-500"
+            )}
+          >
+            {origin === "CARRYOVER" ? "Carry-over" : "New"}
+          </button>
+          <button
+            type="button"
+            onClick={removeFromSeason}
+            disabled={busy}
+            title={`Remove from ${targetSeason} entirely`}
+            aria-label={`Remove from ${targetSeason}`}
+            className={cn(
+              "rounded-r border-l px-1.5 py-0.5 text-[10px] font-semibold leading-none transition-colors disabled:opacity-50",
+              origin === "CARRYOVER"
+                ? "border-amber-700/20 bg-amber-500/15 text-amber-700/70 hover:bg-rose-500/25 hover:text-rose-700 dark:text-amber-500/70"
+                : "border-green-700/20 bg-green-500/15 text-green-700/70 hover:bg-rose-500/25 hover:text-rose-700 dark:text-green-500/70"
+            )}
+          >
+            ×
+          </button>
+        </span>
       )}
 
       {onSale && (
