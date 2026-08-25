@@ -213,6 +213,14 @@ export function PublishingTable({
       <p className="mt-1 text-sm text-muted-foreground">
         {items.length} products · {counts.shopify} → Shopify · {counts.loom} → Loom ·{" "}
         {counts.shopifyReady} Shopify-ready · {counts.loomReady} Loom-ready.
+        {items.length > counts.loomReady && (
+          <>
+            {" "}
+            <a href="/catalog/fix" className="underline underline-offset-4 hover:text-foreground">
+              Fix the {items.length - counts.loomReady} not ready →
+            </a>
+          </>
+        )}
       </p>
 
       <div className="mt-3 flex gap-1" title="Filter by Threadflow dropped status">
