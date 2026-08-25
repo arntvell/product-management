@@ -73,22 +73,30 @@ export async function pushColorwaysToLoom(
   const ok = res.ok && bodyOk;
 
   if (ok) {
-    // Mark published ONLY for the colorways actually transmitted.
+    // Mark published ONLY for the colorways actually transmitted. Two bulk
+    // statements rather than one upsert per colorway: a per-row round trip
+    // overruns the 5 s transaction timeout well before a full season's worth
+    // of products, which would fail the push *after* Loom already had the data.
     const sentIds = sendable.map((c) => c.id);
+    const pushedAt = new Date();
     await prisma.$transaction(
-      sentIds.map((colorwayId) =>
-        prisma.channelPublication.upsert({
-          where: { colorwayId_channel: { colorwayId, channel: "LOOM" } },
-          create: {
+      [
+        prisma.channelPublication.updateMany({
+          where: { colorwayId: { in: sentIds }, channel: "LOOM" },
+          data: { published: true, lastPushedAt: pushedAt, lastPushStatus: "ok" },
+        }),
+        prisma.channelPublication.createMany({
+          data: sentIds.map((colorwayId) => ({
             colorwayId,
-            channel: "LOOM",
+            channel: "LOOM" as const,
             published: true,
-            lastPushedAt: new Date(),
+            lastPushedAt: pushedAt,
             lastPushStatus: "ok",
-          },
-          update: { published: true, lastPushedAt: new Date(), lastPushStatus: "ok" },
-        })
-      )
+          })),
+          skipDuplicates: true, // rows the updateMany above already handled
+        }),
+      ],
+      { timeout: 60_000 }
     );
   }
 
