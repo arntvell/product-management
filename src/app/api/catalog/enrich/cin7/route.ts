@@ -17,11 +17,17 @@ const VALID: Cin7Field[] = [
 ];
 
 // POST /api/catalog/enrich/cin7
-//   { dryRun?: boolean, seasonCode?: string, fields?: Cin7Field[] }
+//   { dryRun?, seasonCode?, includeCore?, vendors?: string[], fields?: Cin7Field[] }
 // Fill the customs block on CIN7_IMPORT products from Cin7's additional
 // attributes. Non-destructive: empty fields only, MANUAL locks respected.
 export async function POST(req: Request) {
-  let body: { dryRun?: boolean; seasonCode?: string; fields?: string[] } = {};
+  let body: {
+    dryRun?: boolean;
+    seasonCode?: string;
+    includeCore?: boolean;
+    vendors?: string[];
+    fields?: string[];
+  } = {};
   try {
     body = await req.json();
   } catch {
@@ -38,7 +44,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const opts = { seasonCode: body.seasonCode, fields };
+  const opts = {
+    seasonCode: body.seasonCode,
+    includeCore: body.includeCore,
+    vendors: body.vendors,
+    fields,
+  };
   try {
     if (body.dryRun) {
       const preview = await previewCin7Enrichment(opts);

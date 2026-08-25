@@ -42,3 +42,6 @@ next-env.d.ts
 
 /src/generated/prisma
 _scratch/
+
+# generated readiness/gap reports
+*.csv

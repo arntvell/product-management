@@ -18,6 +18,10 @@ import type { Cin7Product } from "@/lib/cin7/types";
 export interface Cin7EnrichOptions {
   /** Limit to one season's products (by code). Omit for the whole catalogue. */
   seasonCode?: string;
+  /** Also include CORE products, whatever season they sit in. */
+  includeCore?: boolean;
+  /** Limit to these vendors (exact match). Omit for all. */
+  vendors?: string[];
   /** Restrict to these fields. Omit for all of them. */
   fields?: Cin7Field[];
 }
@@ -144,8 +148,13 @@ async function collectChanges(opts: Cin7EnrichOptions): Promise<{
 
   const where: Record<string, unknown> = { source: "CIN7_IMPORT" };
   if (opts.seasonCode) {
-    where.entries = { some: { season: { code: opts.seasonCode } } };
+    const inSeason = { entries: { some: { season: { code: opts.seasonCode } } } };
+    // "the season, plus CORE wherever it lives" is the usual publishing scope.
+    where.OR = opts.includeCore ? [inSeason, { isCore: true }] : [inSeason];
+  } else if (opts.includeCore) {
+    where.isCore = true;
   }
+  if (opts.vendors?.length) where.vendor = { in: opts.vendors };
   const colorways = await prisma.colorway.findMany({
     where,
     include: { style: true, variants: { select: { variantSku: true } } },
