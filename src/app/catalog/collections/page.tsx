@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function CollectionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; vendor?: string; sale?: "1" | "0" }>;
+  searchParams: Promise<{ c?: string; vendor?: string; sale?: "1" | "0"; carry?: string }>;
 }) {
-  const { c, vendor, sale } = await searchParams;
+  const { c, vendor, sale, carry } = await searchParams;
   const {
     buckets,
     members,
@@ -19,14 +19,17 @@ export default async function CollectionsPage({
     vendor: activeVendor,
     sale: activeSale,
     saleCounts,
+    carrySeasons,
+    carryInto,
     filteredCount,
-  } = await getCollections(c, vendor, sale);
+  } = await getCollections(c, vendor, sale, carry);
   const current = buckets.find((b) => b.key === selected);
   // Preserve vendor + sale across links.
   const qs = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams({ c: selected });
     if (activeVendor) p.set("vendor", activeVendor);
     if (activeSale) p.set("sale", activeSale);
+    p.set("carry", carryInto);
     for (const [k, v] of Object.entries(extra)) {
       if (v === undefined) p.delete(k);
       else p.set(k, v);
@@ -53,6 +56,35 @@ export default async function CollectionsPage({
         </div>
       </div>
 
+      {/* Carry-over target season */}
+      {carrySeasons.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center gap-1.5 rounded-lg border bg-muted/30 px-3 py-2">
+          <span className="mr-1 text-xs font-medium">Carry into</span>
+          {carrySeasons.map((code) => {
+            const active = code === carryInto;
+            const p = new URLSearchParams({ c: selected, carry: code });
+            if (activeVendor) p.set("vendor", activeVendor);
+            if (activeSale) p.set("sale", activeSale);
+            return (
+              <Link
+                key={code}
+                href={`/catalog/collections?${p.toString()}`}
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                  active
+                    ? "border-foreground bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {code}
+              </Link>
+            );
+          })}
+          <span className="ml-1 text-xs text-muted-foreground">
+            — the season the Core / Carry-over buttons below write to
+          </span>
+        </div>
+      )}
+
       {/* Bucket selector */}
       <div className="mt-6 flex flex-wrap gap-2">
         {buckets.map((b) => {
@@ -60,7 +92,7 @@ export default async function CollectionsPage({
           return (
             <Link
               key={b.key}
-              href={`/catalog/collections?c=${encodeURIComponent(b.key)}`}
+              href={`/catalog/collections?c=${encodeURIComponent(b.key)}&carry=${encodeURIComponent(carryInto)}`}
               className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                 active
                   ? "border-foreground bg-foreground text-background"

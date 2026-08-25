@@ -91,7 +91,8 @@ function maxRealSeasonValue(rows: Loaded[]): number {
 export async function getCollections(
   selected?: string,
   vendor?: string,
-  sale?: "1" | "0"
+  sale?: "1" | "0",
+  carryInto?: string
 ): Promise<{
   buckets: CollectionBucket[];
   members: CollectionMember[];
@@ -101,9 +102,21 @@ export async function getCollections(
   sale: "1" | "0" | null;
   saleCounts: { onSale: number; notOnSale: number };
   currentSeason: string;
+  // Real REGULAR seasons a product can be carried into, newest first, and the
+  // one currently targeted by the carry-over controls.
+  carrySeasons: string[];
+  carryInto: string;
   filteredCount: number;
 }> {
   const rows = await loadAll();
+  // Only seasons that actually exist as rows can be carry-over targets — the
+  // bucket list also contains tag-only historical seasons (SS26, FW25 …) which
+  // have no Season row and would 404 on classify.
+  const carrySeasons = (
+    await prisma.season.findMany({ where: { kind: "REGULAR" }, select: { code: true } })
+  )
+    .map((s) => s.code.toUpperCase())
+    .sort((a, b) => (seasonSortValue(b) ?? 0) - (seasonSortValue(a) ?? 0));
   const ceiling = maxRealSeasonValue(rows) + 5; // allow up to one season ahead
 
   // The "current" season = the newest REGULAR season (carry-over target).
@@ -144,6 +157,13 @@ export async function getCollections(
   // Full membership of the selected bucket (before any vendor filter), so the
   // vendor options + counts reflect the whole bucket, not just a display page.
   const selIsSeason = buckets.find((b) => b.key === sel)?.kind === "season";
+  // Carry-over target: an explicit pick wins; otherwise the viewed bucket when
+  // it is a real season, else the current season. Never a tag-only season.
+  const requested = carryInto?.toUpperCase();
+  const carryTarget =
+    (requested && carrySeasons.includes(requested) && requested) ||
+    (selIsSeason && carrySeasons.includes(sel) && sel) ||
+    currentSeason;
   const NO_VENDOR = "(no vendor)";
   const all: CollectionMember[] = [];
   const vendorCounts = new Map<string, number>();
@@ -155,9 +175,9 @@ export async function getCollections(
     else match = seasonKeysOf(cw).has(sel);
     if (!match) continue;
 
-    // Carry-over toggle targets the viewed season (if a real one) else the
-    // current season; origin is the product's origin in that target season.
-    const targetSeason = selIsSeason ? sel : currentSeason;
+    // Carry-over toggle targets the picked season; origin is the product's
+    // origin in that target season.
+    const targetSeason = carryTarget;
     const targetEntry = cw.entries.find((e) => e.season.code.toUpperCase() === targetSeason);
     const origin = targetEntry ? targetEntry.origin : null;
     const onSale = isOnSale(cw.tags);
@@ -203,6 +223,8 @@ export async function getCollections(
     sale: activeSale,
     saleCounts: { onSale: onSaleCount, notOnSale: all.length - onSaleCount },
     currentSeason,
+    carrySeasons,
+    carryInto: carryTarget,
     filteredCount: filtered.length,
   };
 }

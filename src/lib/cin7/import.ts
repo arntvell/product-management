@@ -43,8 +43,18 @@ function deriveSize(size: string): { sizeLabel: string; dim1: string; dim2: stri
 }
 
 // Strip a trailing size token from the product name -> the colorway name.
-function colorwayName(name: string, size: string): string {
-  return name.replace(new RegExp(`[,\\s]+${escapeRegExp(size)}\\s*$`, "i"), "").trim() || name;
+// The SKU encodes a jeans size as 4 digits (2634) but the product name spells
+// it out ("26 34", "26/34", "W26/L34"), so match both forms or the size stays
+// glued to the name ("Joelle Japan Dawn 26 34").
+export function colorwayName(name: string, size: string): string {
+  const forms = [escapeRegExp(size)];
+  const wl = /^(\d{2})(\d{2})$/.exec(size);
+  if (wl) forms.push(`W?${wl[1]}\\s*[\\/x\\s]\\s*L?${wl[2]}`);
+  for (const form of forms) {
+    const stripped = name.replace(new RegExp(`[,\\s]+${form}\\s*$`, "i"), "").trim();
+    if (stripped && stripped !== name) return stripped;
+  }
+  return name;
 }
 
 function weightToKg(weight: number | null, units: string | null): number | null {

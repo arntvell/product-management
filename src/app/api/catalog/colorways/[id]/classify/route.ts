@@ -36,8 +36,18 @@ export async function POST(
         select: { id: true },
       });
       if (!season) {
+        // Collections also lists tag-only historical seasons (SS26, FW25 …)
+        // that have no Season row; say so instead of a bare "unknown".
+        const known = await prisma.season.findMany({
+          where: { kind: "REGULAR" },
+          select: { code: true },
+        });
         return NextResponse.json(
-          { error: `Unknown season ${body.seasonCode}` },
+          {
+            error: `"${body.seasonCode}" is not a real season, so nothing can be carried into it. Pick one of: ${known
+              .map((s) => s.code)
+              .join(", ")}.`,
+          },
           { status: 404 }
         );
       }
