@@ -4,6 +4,7 @@ import {
   loadColorwaysForLoom,
   buildLoomPayloadFromColorways,
   loomMissingForColorway,
+  type LoomPayload,
 } from "./payload";
 import { loomUpsert } from "./client";
 
@@ -16,16 +17,40 @@ export interface LoomPushResult {
   ok: boolean;
   status: number;
   styles: number;
-  sent: number; // colorways actually transmitted
+  sent: number; // colorways actually transmitted (0 on a dry run)
   requested: number;
   skipped: LoomSkipped[]; // requested but not sent (not-ready / not-in-season)
   response: unknown;
   raw: string;
+  /** True when nothing was transmitted and nothing was marked published. */
+  dryRun?: boolean;
+  /** Dry run only: what WOULD be sent, so it can be inspected before it goes. */
+  preview?: {
+    wouldSend: number;
+    styles: number;
+    /** Products Loom has not seen before (a first push announces loom:false). */
+    newToLoom: number;
+    alreadyPublished: number;
+    channelsLoomTrue: number;
+    channelsLoomFalse: number;
+    dropped: number;
+    approvedForProduction: number;
+    currencies: string[];
+    missingImage: number;
+    products: { sku: string; name: string; loomFlag: boolean; variants: number }[];
+    payload: LoomPayload;
+  };
+}
+
+export interface LoomPushOptions {
+  /** Build and report the payload without transmitting or recording anything. */
+  dryRun?: boolean;
 }
 
 export async function pushColorwaysToLoom(
   colorwayIds: string[],
-  seasonCode: string
+  seasonCode: string,
+  opts: LoomPushOptions = {}
 ): Promise<LoomPushResult> {
   const loaded = await loadColorwaysForLoom(colorwayIds, seasonCode);
   const loadedById = new Map(loaded.map((c) => [c.id, c]));
@@ -58,10 +83,53 @@ export async function pushColorwaysToLoom(
       skipped,
       response: null,
       raw: "No ready colorways to push.",
+      dryRun: opts.dryRun,
     };
   }
 
   const payload = buildLoomPayloadFromColorways(sendable, seasonCode);
+
+  if (opts.dryRun) {
+    // Nothing leaves the process and no ChannelPublication is touched.
+    const all = payload.styles.flatMap((s) => s.colorways);
+    const currencies = new Set<string>();
+    for (const c of all) for (const k of Object.keys(c.prices)) currencies.add(k);
+    return {
+      ok: true,
+      status: 0,
+      styles: payload.styles.length,
+      sent: 0,
+      requested: colorwayIds.length,
+      skipped,
+      response: null,
+      raw: "Dry run — nothing was sent to Loom.",
+      dryRun: true,
+      preview: {
+        wouldSend: all.length,
+        styles: payload.styles.length,
+        newToLoom: sendable.filter(
+          (c) => !c.publications.some((p) => p.channel === "LOOM")
+        ).length,
+        alreadyPublished: sendable.filter((c) =>
+          c.publications.some((p) => p.channel === "LOOM" && p.published)
+        ).length,
+        channelsLoomTrue: all.filter((c) => c.channels.loom).length,
+        channelsLoomFalse: all.filter((c) => !c.channels.loom).length,
+        dropped: all.filter((c) => c.dropped).length,
+        approvedForProduction: all.filter((c) => c.approved_for_production).length,
+        currencies: [...currencies].sort(),
+        missingImage: all.filter((c) => !c.image).length,
+        products: all.map((c) => ({
+          sku: c.colorway_sku,
+          name: c.name,
+          loomFlag: c.channels.loom,
+          variants: c.variants.length,
+        })),
+        payload,
+      },
+    };
+  }
+
   const res = await loomUpsert(payload);
 
   // Trust the response only when BOTH the HTTP status and the body's ok flag
