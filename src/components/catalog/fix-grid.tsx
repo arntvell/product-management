@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { FixRow } from "@/lib/master/fix-list";
@@ -40,6 +40,7 @@ export function FixGrid({
 }) {
   const [rows, setRows] = useState(initialRows);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [failed, setFailed] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<"all" | "blocked" | "warnings" | "fixable">("fixable");
   const [bulkField, setBulkField] = useState<Field>("manufacturerId");
@@ -110,9 +111,20 @@ export function FixGrid({
     );
   }
 
-  async function saveCell(row: FixRow, field: Field, value: string) {
+  // Returns whether the value actually persisted, so the cell can put itself
+  // back if it did not — an input left showing an unsaved value is worse than
+  // an error, because the screen then claims work that does not exist.
+  async function saveCell(row: FixRow, field: Field, value: string): Promise<boolean> {
     const patch = { [field]: value } as Partial<Record<Field, string | null>>;
-    if (await save([row.id], patch)) applyLocal(new Set([row.id]), patch);
+    const ok = await save([row.id], patch);
+    setFailed((prev) => {
+      const next = new Set(prev);
+      const key = `${row.id}:${field}`;
+      ok ? next.delete(key) : next.add(key);
+      return next;
+    });
+    if (ok) applyLocal(new Set([row.id]), patch);
+    return ok;
   }
 
   async function applyBulk() {
@@ -125,6 +137,8 @@ export function FixGrid({
       applyLocal(selected, patch);
       toast.success(`Updated ${selected.size} product(s)`);
       setBulkValue("");
+    } else {
+      toast.error(`Nothing was saved — all ${selected.size} product(s) unchanged`);
     }
   }
 
@@ -251,6 +265,7 @@ export function FixGrid({
                 mfrName={mfrName}
                 selected={selected.has(r.id)}
                 busy={busy}
+                failed={failed}
                 onToggle={() =>
                   setSelected((prev) => {
                     const next = new Set(prev);
@@ -279,6 +294,7 @@ function Row({
   mfrName,
   selected,
   busy,
+  failed,
   onToggle,
   onSave,
 }: {
@@ -287,9 +303,12 @@ function Row({
   mfrName: Map<string, string>;
   selected: boolean;
   busy: boolean;
+  failed: Set<string>;
   onToggle: () => void;
-  onSave: (row: FixRow, field: Field, value: string) => void;
+  onSave: (row: FixRow, field: Field, value: string) => Promise<boolean>;
 }) {
+  const didFail = (f: Field) => failed.has(`${row.id}:${f}`);
+  const rowFailed = [...failed].some((k) => k.startsWith(`${row.id}:`));
   const needs = (f: Field) => row.missing.includes(BLOCKER_FOR[f]);
   return (
     <tr className={cn("border-b align-top last:border-0", selected && "bg-muted/30")}>
@@ -313,12 +332,13 @@ function Row({
       </td>
       <td className="p-2">
         <select
-          defaultValue={row.values.manufacturerId ?? ""}
+          value={row.values.manufacturerId ?? ""}
           disabled={busy}
           onChange={(e) => onSave(row, "manufacturerId", e.target.value)}
           className={cn(
             "w-full rounded border bg-background px-1.5 py-1 text-xs",
-            needs("manufacturerId") && "border-rose-500/60"
+            needs("manufacturerId") && "border-rose-500/60",
+            didFail("manufacturerId") && "border-rose-600 bg-rose-500/10"
           )}
         >
           <option value="">— none —</option>
@@ -329,24 +349,25 @@ function Row({
           ))}
         </select>
       </td>
-      <Cell row={row} field="fiberComposition" value={row.values.fiberComposition} needs={needs("fiberComposition")} busy={busy} onSave={onSave} />
-      <Cell row={row} field="customsDescription" value={row.values.customsDescription} needs={needs("customsDescription")} busy={busy} onSave={onSave} />
-      <Cell row={row} field="hsCode" value={row.values.hsCode} needs={needs("hsCode")} busy={busy} onSave={onSave} />
-      <Cell row={row} field="weightKg" value={row.values.weightKg} needs={needs("weightKg")} busy={busy} onSave={onSave} />
+      <Cell row={row} field="fiberComposition" value={row.values.fiberComposition} needs={needs("fiberComposition")} failed={didFail("fiberComposition")} busy={busy} onSave={onSave} />
+      <Cell row={row} field="customsDescription" value={row.values.customsDescription} needs={needs("customsDescription")} failed={didFail("customsDescription")} busy={busy} onSave={onSave} />
+      <Cell row={row} field="hsCode" value={row.values.hsCode} needs={needs("hsCode")} failed={didFail("hsCode")} busy={busy} onSave={onSave} />
+      <Cell row={row} field="weightKg" value={row.values.weightKg} needs={needs("weightKg")} failed={didFail("weightKg")} busy={busy} onSave={onSave} />
+      <Cell
+        row={row}
+        field="countryOfOrigin"
+        value={{ value: row.values.countryOfOrigin, fromStyle: false }}
+        needs={needs("countryOfOrigin")}
+        failed={didFail("countryOfOrigin")}
+        busy={busy}
+        onSave={onSave}
+      />
       <td className="p-2">
-        <input
-          defaultValue={row.values.countryOfOrigin ?? ""}
-          disabled={busy}
-          onBlur={(e) => {
-            if (e.target.value !== (row.values.countryOfOrigin ?? "")) onSave(row, "countryOfOrigin", e.target.value);
-          }}
-          className={cn(
-            "w-full rounded border bg-background px-1.5 py-1 text-xs",
-            needs("countryOfOrigin") && "border-rose-500/60"
-          )}
-        />
-      </td>
-      <td className="p-2">
+        {rowFailed && (
+          <div className="mb-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700 dark:text-rose-400">
+            not saved
+          </div>
+        )}
         {row.missing.length === 0 ? (
           <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-green-700 dark:text-green-500">
             ready
@@ -371,6 +392,7 @@ function Cell({
   field,
   value,
   needs,
+  failed,
   busy,
   onSave,
 }: {
@@ -378,20 +400,33 @@ function Cell({
   field: Field;
   value: { value: string | null; fromStyle: boolean };
   needs: boolean;
+  failed: boolean;
   busy: boolean;
-  onSave: (row: FixRow, field: Field, value: string) => void;
+  onSave: (row: FixRow, field: Field, value: string) => Promise<boolean>;
 }) {
+  const persisted = value.value ?? "";
+  const [draft, setDraft] = useState(persisted);
+  // Follow the persisted value whenever it changes underneath us (a bulk apply,
+  // or a successful save elsewhere).
+  useEffect(() => setDraft(persisted), [persisted]);
+
   return (
     <td className="p-2">
       <input
-        defaultValue={value.value ?? ""}
+        value={draft}
         disabled={busy}
-        onBlur={(e) => {
-          if (e.target.value !== (value.value ?? "")) onSave(row, field, e.target.value);
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={async (e) => {
+          const next = e.target.value;
+          if (next === persisted) return;
+          // Put the field back if the write did not land, so the grid never
+          // shows a value the database does not have.
+          if (!(await onSave(row, field, next))) setDraft(persisted);
         }}
         className={cn(
           "w-full rounded border bg-background px-1.5 py-1 text-xs",
-          needs && "border-rose-500/60"
+          needs && "border-rose-500/60",
+          failed && "border-rose-600 bg-rose-500/10"
         )}
       />
       {value.value && value.fromStyle && (
