@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { FixRow } from "@/lib/master/fix-list";
@@ -41,33 +41,56 @@ export function FixGrid({
   const [rows, setRows] = useState(initialRows);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [failed, setFailed] = useState<Set<string>>(new Set());
+  // Rows edited in this session stay on screen even once they no longer match
+  // the active filter — a row vanishing the moment it is fixed makes it
+  // impossible to correct a mistake or set a second field.
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const [typeFilter, setTypeFilter] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<"all" | "blocked" | "warnings" | "fixable">("fixable");
   const [bulkField, setBulkField] = useState<Field>("manufacturerId");
   const [bulkValue, setBulkValue] = useState("");
 
-  const mfrName = useMemo(
-    () => new Map(manufacturers.map((m) => [m.id, m.name])),
-    [manufacturers]
-  );
-
-  const visible = useMemo(() => {
+  const matchesFilter = useCallback((r: FixRow) => {
     switch (filter) {
       case "blocked":
-        return rows.filter((r) => r.missing.length);
+        return r.missing.length > 0;
       case "warnings":
-        return rows.filter((r) => r.warnings.length);
+        return r.warnings.length > 0;
       // Blocked, but not ONLY by things this screen cannot fix.
       case "fixable":
-        return rows.filter(
-          (r) =>
-            (r.missing.length && r.missing.some((m) => !r.unfixableHere.includes(m))) ||
-            r.warnings.length
+        return (
+          (r.missing.length > 0 &&
+            r.missing.some((m) => !r.unfixableHere.includes(m))) ||
+          r.warnings.length > 0
         );
       default:
-        return rows;
+        return true;
     }
-  }, [rows, filter]);
+  }, [filter]);
+
+  const productTypes = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      if (!matchesFilter(r) && !touched.has(r.id)) continue;
+      const k = r.productType?.trim() || "(none)";
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0])
+    );
+  }, [rows, matchesFilter, touched]);
+
+  const visible = useMemo(
+    () =>
+      rows.filter((r) => {
+        if (!matchesFilter(r) && !touched.has(r.id)) return false;
+        if (typeFilter && (r.productType?.trim() || "(none)") !== typeFilter)
+          return false;
+        return true;
+      }),
+    [rows, matchesFilter, touched, typeFilter]
+  );
 
   async function save(colorwayIds: string[], patch: Partial<Record<Field, string | null>>) {
     setBusy(true);
@@ -120,10 +143,14 @@ export function FixGrid({
     setFailed((prev) => {
       const next = new Set(prev);
       const key = `${row.id}:${field}`;
-      ok ? next.delete(key) : next.add(key);
+      if (ok) next.delete(key);
+      else next.add(key);
       return next;
     });
-    if (ok) applyLocal(new Set([row.id]), patch);
+    if (ok) {
+      applyLocal(new Set([row.id]), patch);
+      setTouched((prev) => new Set(prev).add(row.id));
+    }
     return ok;
   }
 
@@ -135,6 +162,7 @@ export function FixGrid({
     const patch = { [bulkField]: bulkValue } as Partial<Record<Field, string | null>>;
     if (await save([...selected], patch)) {
       applyLocal(selected, patch);
+      setTouched((prev) => new Set([...prev, ...selected]));
       toast.success(`Updated ${selected.size} product(s)`);
       setBulkValue("");
     } else {
@@ -143,7 +171,6 @@ export function FixGrid({
   }
 
   const stillBlocked = rows.filter((r) => r.missing.length).length;
-  const readyNow = initialRows.length - stillBlocked;
 
   return (
     <div>
@@ -171,12 +198,53 @@ export function FixGrid({
             {label}
           </button>
         ))}
-        {readyNow > 0 && (
+        {touched.size > 0 && (
           <span className="ml-2 text-xs text-green-700 dark:text-green-500">
-            {readyNow} fixed this session
+            {touched.size} edited this session · rows stay listed until you reload
           </span>
         )}
       </div>
+
+      {/* Product type */}
+      {productTypes.length > 1 && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-medium text-muted-foreground">Type</span>
+          <button
+            type="button"
+            onClick={() => setTypeFilter("")}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+              !typeFilter
+                ? "border-foreground bg-foreground text-background"
+                : "text-muted-foreground hover:bg-muted"
+            )}
+          >
+            All
+          </button>
+          {productTypes.map(([type, count]) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setTypeFilter(type === typeFilter ? "" : type)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                type === typeFilter
+                  ? "border-foreground bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted"
+              )}
+            >
+              {type}{" "}
+              <span
+                className={
+                  type === typeFilter ? "text-background/70" : "text-muted-foreground/70"
+                }
+              >
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Bulk bar */}
       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
@@ -262,14 +330,14 @@ export function FixGrid({
                 key={r.id}
                 row={r}
                 manufacturers={manufacturers}
-                mfrName={mfrName}
                 selected={selected.has(r.id)}
                 busy={busy}
                 failed={failed}
                 onToggle={() =>
                   setSelected((prev) => {
                     const next = new Set(prev);
-                    next.has(r.id) ? next.delete(r.id) : next.add(r.id);
+                    if (next.has(r.id)) next.delete(r.id);
+                    else next.add(r.id);
                     return next;
                   })
                 }
@@ -291,7 +359,6 @@ export function FixGrid({
 function Row({
   row,
   manufacturers,
-  mfrName,
   selected,
   busy,
   failed,
@@ -300,7 +367,6 @@ function Row({
 }: {
   row: FixRow;
   manufacturers: { id: string; name: string; country: string | null }[];
-  mfrName: Map<string, string>;
   selected: boolean;
   busy: boolean;
   failed: Set<string>;
@@ -406,9 +472,14 @@ function Cell({
 }) {
   const persisted = value.value ?? "";
   const [draft, setDraft] = useState(persisted);
-  // Follow the persisted value whenever it changes underneath us (a bulk apply,
-  // or a successful save elsewhere).
-  useEffect(() => setDraft(persisted), [persisted]);
+  // Follow the persisted value when it changes underneath us (a bulk apply, or
+  // a successful save elsewhere). Adjusting during render rather than in an
+  // effect avoids a second render pass showing the stale value.
+  const [lastPersisted, setLastPersisted] = useState(persisted);
+  if (lastPersisted !== persisted) {
+    setLastPersisted(persisted);
+    setDraft(persisted);
+  }
 
   return (
     <td className="p-2">
