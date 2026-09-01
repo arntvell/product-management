@@ -3,6 +3,7 @@
 // customs block + manufacturer, channels, and per-season lifecycle flags.
 import { prisma } from "@/lib/db";
 import { loomMissing } from "@/lib/master/readiness";
+import { toLoomCategory } from "@/lib/master/loom-category";
 
 export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: string) {
   return prisma.colorway.findMany({
@@ -82,7 +83,7 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     color: cw.color ?? null,
     swatch: { hex: cw.swatchHex ?? null },
     tags: cw.tags,
-    product_type: cw.productType ?? null,
+    product_type: toLoomCategory(cw.productType),
     image: cw.seasonImages[0]?.url ?? null,
     ...customs,
     manufacturer_id: manufacturer?.manufacturer_id ?? null,
@@ -152,7 +153,7 @@ export function buildLoomPayloadFromColorways(
       style_name: s.styleName,
       gender: s.gender,
       unisex: s.unisex,
-      category: s.category,
+      category: toLoomCategory(s.category),
       colorways: cws.map((cw) => buildColorway(cw, archive)),
     };
   });

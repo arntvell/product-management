@@ -85,7 +85,9 @@ export async function pushColorwaysToLoom(
       skipped.push({ colorwayId: id, reason: `not in season ${seasonCode}` });
       continue;
     }
-    const missing = loomMissingForColorway(cw);
+    // A withdrawal still has to reach Loom, so an archived colorway bypasses the
+    // readiness gate — we are telling Loom to hide it, not to publish it.
+    const missing = cw.archived ? [] : loomMissingForColorway(cw);
     if (missing.length) {
       skipped.push({ colorwayId: id, reason: `missing ${missing.join(", ")}` });
       continue;
@@ -107,7 +109,11 @@ export async function pushColorwaysToLoom(
     };
   }
 
-  const archive = new Set(opts.archiveColorwayIds ?? []);
+  // A colorway archived in the master is withdrawn from Loom, always — sending
+  // one as live would resurrect a duplicate we deliberately retired. Callers can
+  // add more, but cannot send an archived product as published by omission.
+  const archive = new Set<string>(opts.archiveColorwayIds ?? []);
+  for (const c of sendable) if (c.archived) archive.add(c.id);
   const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive);
 
   if (opts.dryRun) {
@@ -191,7 +197,8 @@ export async function pushColorwaysToLoom(
     // statements rather than one upsert per colorway: a per-row round trip
     // overruns the 5 s transaction timeout well before a full season's worth
     // of products, which would fail the push *after* Loom already had the data.
-    const sentIds = sendable.map((c) => c.id);
+    const sentIds = sendable.filter((c) => !archive.has(c.id)).map((c) => c.id);
+    const withdrawnIds = sendable.filter((c) => archive.has(c.id)).map((c) => c.id);
     const pushedAt = new Date();
     await prisma.$transaction(
       [
@@ -209,6 +216,14 @@ export async function pushColorwaysToLoom(
           })),
           skipDuplicates: true, // rows the updateMany above already handled
         }),
+        ...(withdrawnIds.length
+          ? [
+              prisma.channelPublication.updateMany({
+                where: { colorwayId: { in: withdrawnIds }, channel: "LOOM" },
+                data: { published: false, lastPushedAt: pushedAt, lastPushStatus: "withdrawn" },
+              }),
+            ]
+          : []),
       ],
       { timeout: 60_000 }
     );
