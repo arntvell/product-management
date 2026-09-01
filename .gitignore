@@ -45,3 +45,4 @@ _scratch/
 
 # generated readiness/gap reports
 *.csv
+loom-payload-*.json

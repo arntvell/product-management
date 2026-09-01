@@ -114,6 +114,15 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
 
 export interface LoomPayload {
   season: string;
+  /** Always "full" — this feed sends a complete season, never a delta. */
+  mode: "full";
+  /**
+   * Stable id for THIS delivery. A retry after a connection failure carries the
+   * same event_id, so Loom dedupes instead of applying the batch twice — which
+   * matters because our first bulk push returned 200 and then failed, and the
+   * natural response to that is to send it again.
+   */
+  event_id: string;
   styles: Array<{
     style_id: string;
     style_sku: string;
@@ -126,6 +135,28 @@ export interface LoomPayload {
 }
 
 /**
+ * A stable id for a delivery: same season, same colorways, same withdrawals →
+ * same id, so a retry dedupes rather than re-applying.
+ */
+function deliveryId(
+  seasonCode: string,
+  colorways: LoomColorway[],
+  archive?: Set<string>
+): string {
+  const parts = [
+    seasonCode,
+    ...colorways.map((c) => `${c.id}:${archive?.has(c.id) ? "w" : "p"}`).sort(),
+  ].join("|");
+  // FNV-1a — enough to distinguish deliveries, and stable across processes.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < parts.length; i++) {
+    h ^= parts.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `origio-${seasonCode.toLowerCase()}-${h.toString(16).padStart(8, "0")}-${colorways.length}`;
+}
+
+/**
  * Group already-loaded colorways into the Loom payload shape.
  *
  * `archive` names colorways to withdraw from Loom — they are sent with
@@ -135,7 +166,8 @@ export interface LoomPayload {
 export function buildLoomPayloadFromColorways(
   colorways: LoomColorway[],
   seasonCode: string,
-  archive?: Set<string>
+  archive?: Set<string>,
+  eventId?: string
 ): LoomPayload {
   // Group colorways under their style.
   const byStyle = new Map<string, LoomColorway[]>();
@@ -158,7 +190,14 @@ export function buildLoomPayloadFromColorways(
     };
   });
 
-  return { season: seasonCode, styles };
+  return {
+    season: seasonCode,
+    mode: "full",
+    // Derived from the delivery's contents when not supplied, so the same set
+    // of products retried produces the same id.
+    event_id: eventId ?? deliveryId(seasonCode, colorways, archive),
+    styles,
+  };
 }
 
 export async function buildLoomPayload(
