@@ -1,0 +1,389 @@
+// Product Master — schema (Phase 0)
+// See docs/product-master-architecture.md §4 for the design rationale.
+// Runtime connects via a driver adapter (src/lib/db.ts); the CLI reads the
+// connection URL from prisma.config.ts. Nothing here touches the live-Shopify
+// screens — this is the new master store.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Reference entities
+// ---------------------------------------------------------------------------
+
+model Brand {
+  id        String         @id @default(cuid())
+  name      String         @unique // "Livid", external brand names
+  isLivid   Boolean        @default(false)
+  gender    String? // default gender for the brand's styles
+  styles    Style[]
+  colorways Colorway[]
+  template  BrandTemplate?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model Manufacturer {
+  id           String          @id @default(cuid())
+  threadflowId String?         @unique // Threadflow manufacturer_id (stable external key)
+  name         String
+  addrLine1    String?
+  addrLine2    String?
+  zip          String?
+  city         String?
+  country      String?
+  colorways    Colorway[]
+  templates    BrandTemplate[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+// Defaults for creating new products under a brand (plan §6). External brands
+// (footwear, accessories, scents, home…) reuse a saved template so only the
+// per-product bits are entered; customs defaults here flow to Loom.
+model BrandTemplate {
+  id                 String        @id @default(cuid())
+  brandId            String        @unique
+  brand              Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category           String?
+  gender             String?
+  unisex             Boolean       @default(false)
+  channels           Channel[]     @default([])
+  hsCode             String?
+  customsDescription String?
+  weightKg           Decimal?      @db.Decimal(8, 3)
+  fiberComposition   String?
+  countryOfOrigin    String?
+  manufacturerId     String?
+  manufacturer       Manufacturer? @relation(fields: [manufacturerId], references: [id])
+  sizes              String[]      @default([]) // default size set, e.g. XS,S,M,L,XL or 39-45
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model Season {
+  id           String        @id @default(cuid())
+  code         String        @unique // "SS27", "FW26"
+  name         String?
+  threadflowId String?       @unique // maps to TF seasonId
+  kind         SeasonKind    @default(REGULAR) // REGULAR | CONTINUITY (carry-over / season-less)
+  sortOrder    Int           @default(0)
+  entries      SeasonEntry[]
+  prices       Price[]
+  seasonImages SeasonImage[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Product hierarchy: Style -> Colorway -> Variant
+// ---------------------------------------------------------------------------
+
+model Style {
+  id                 String     @id @default(cuid())
+  source             Source // THREADFLOW | MANUAL | SHOPIFY_IMPORT
+  threadflowId       String?    @unique
+  styleSku           String     @unique
+  styleName          String
+  gender             String?
+  unisex             Boolean    @default(false)
+  category           String     @default("Uncategorized")
+  brandId            String?
+  brand              Brand?     @relation(fields: [brandId], references: [id])
+  // Customs block (TF exposes these at style level; Loom wants them per
+  // colorway — store the default here, allow a per-colorway override).
+  hsCode             String?
+  customsDescription String?
+  weightKg           Decimal?   @db.Decimal(8, 3) // kg — see plan §11.5
+  fiberComposition   String?
+  colorways          Colorway[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  @@index([brandId])
+}
+
+model Colorway {
+  id              String        @id @default(cuid())
+  source          Source
+  threadflowId    String?       @unique
+  colorwaySku     String        @unique
+  name            String
+  color           String?
+  swatchHex       String?
+  swatchImageUrl  String?
+  productType     String?
+  styleId         String
+  style           Style         @relation(fields: [styleId], references: [id])
+  brandId         String? // Loom needs brand per product (externals)
+  brand           Brand?        @relation(fields: [brandId], references: [id])
+  manufacturerId  String?
+  manufacturer    Manufacturer? @relation(fields: [manufacturerId], references: [id])
+  countryOfOrigin String?
+
+  // ---- Product properties (carried over from today's editor) ----
+  status ProductStatus @default(DRAFT)
+  tags   String[]
+  vendor String?
+
+  // A CORE product is a permanent production line, carried every season by
+  // design (as opposed to a seasonal product). Set from the CORE/Allseasons
+  // tags or manually; durable across seasons.
+  isCore Boolean @default(false)
+
+  // ---- Optional customs overrides (else inherit from Style) ----
+  hsCodeOverride             String?
+  customsDescriptionOverride String?
+  weightKgOverride           Decimal? @db.Decimal(8, 3)
+  fiberCompositionOverride   String?
+
+  // ---- Enrichment: the full custom.* metafield set, authored in the master ----
+  // Free text:
+  shortDescription String?
+  fullDescription  String?
+  details          String?
+  styleTagline     String?
+  styleName        String?
+  // Reference metafields (store target GIDs / ids; edited via the pickers):
+  sameProduct             String[] // list.product_reference — group auto-link
+  styleWith               String[] // list.product_reference
+  styleWithUnisexHerre    String[] // list.product_reference
+  styleWithUnisexDame     String[] // list.product_reference
+  carePageId              String? // page_reference (care picker)
+  fitguidePageId          String? // page_reference (fitguide picker)
+  recommendedCollectionId String? // collection_reference
+  modelInfoId             String? // metaobject_reference (fit model)
+  flatFileId              String? // file_reference (flat-lay)
+  menImages               String[] // list.file_reference (unisex)
+  womenImages             String[] // list.file_reference (unisex)
+
+  // ---- Relations ----
+  media          MediaAsset[]
+  variants       Variant[]
+  entries        SeasonEntry[]
+  prices         Price[]
+  publications   ChannelPublication[]
+  channelContent ChannelContent[]
+  seasonImages   SeasonImage[]
+
+  archived  Boolean  @default(false) // whole-channel archive (plan §8)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([styleId])
+  @@index([brandId])
+  @@index([manufacturerId])
+}
+
+model Variant {
+  id             String          @id @default(cuid()) // stable id — TF has none, we mint it
+  colorwayId     String
+  colorway       Colorway        @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  variantSku     String          @unique
+  barcode        String? // set once, never blanked (plan §5.2)
+  sizeLabel      String // "M" or "W32/L32"
+  dim1           String // "M" or waist "32"
+  dim2           String? // length "32" for 2-D
+  averageCostNok Decimal?        @db.Decimal(14, 2) // written back from Loom (plan §9)
+  seasonLinks    SeasonVariant[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([colorwayId])
+}
+
+// ---------------------------------------------------------------------------
+// Per-season data
+// ---------------------------------------------------------------------------
+
+model SeasonEntry {
+  id                    String          @id @default(cuid())
+  colorwayId            String
+  seasonId              String
+  colorway              Colorway        @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  season                Season          @relation(fields: [seasonId], references: [id])
+  cancelled             Boolean         @default(false) // = Threadflow "dropped" (plan §8)
+  approvedForProduction Boolean         @default(false)
+  // How this product entered THIS season: NEW = its origin season; CARRYOVER =
+  // pulled forward from an earlier season. (CORE is a product-level trait; see
+  // Colorway.isCore.) Relative to the season, so it lives on the entry.
+  origin                EntryOrigin     @default(NEW)
+  merchPosition         Int? // preserved across cancel/restore
+  variants              SeasonVariant[]
+
+  @@unique([colorwayId, seasonId])
+  @@index([seasonId])
+}
+
+model SeasonVariant {
+  seasonEntryId String
+  variantId     String
+  seasonEntry   SeasonEntry @relation(fields: [seasonEntryId], references: [id], onDelete: Cascade)
+  variant       Variant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@id([seasonEntryId, variantId])
+  @@index([variantId])
+}
+
+model Price {
+  id         String    @id @default(cuid())
+  seasonId   String
+  colorwayId String
+  season     Season    @relation(fields: [seasonId], references: [id])
+  colorway   Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  currency   String // "NOK" | "EUR" | "USD"
+  priceType  PriceType // MSRP | WHOLESALE
+  amount     Decimal   @db.Decimal(14, 2)
+
+  @@unique([seasonId, colorwayId, currency, priceType])
+  @@index([colorwayId])
+}
+
+model SeasonImage {
+  id         String    @id @default(cuid())
+  seasonId   String
+  colorwayId String
+  season     Season    @relation(fields: [seasonId], references: [id])
+  colorway   Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  slot       ImageSlot // MAIN | ALT
+  url        String
+  shopifyFileId String? // GID once uploaded to Shopify (reused on re-push)
+
+  @@unique([seasonId, colorwayId, slot])
+  @@index([colorwayId])
+}
+
+model MediaAsset {
+  id             String      @id @default(cuid())
+  colorwayId     String
+  colorway       Colorway    @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  url            String // Blob URL (owned) or external ref (Shopify CDN / Threadflow)
+  source         MediaSource @default(BLOB)
+  role           MediaRole   @default(GALLERY) // maps to Shopify file metafields on push
+  blobPathname   String? // set when owned in Blob, so we can delete the object
+  alt            String?
+  mediaType      String      @default("IMAGE") // IMAGE | VIDEO | MODEL_3D
+  position       Int // sort order for reorder
+  shopifyMediaId String? // GID once pushed to Shopify
+
+  @@index([colorwayId])
+}
+
+// ---------------------------------------------------------------------------
+// Channels, content overrides, lifecycle
+// ---------------------------------------------------------------------------
+
+model ChannelPublication {
+  id             String    @id @default(cuid())
+  colorwayId     String
+  colorway       Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  channel        Channel // SHOPIFY | LOOM
+  published      Boolean   @default(false)
+  externalId     String? // Shopify product GID / Loom key once pushed
+  lastPushedAt   DateTime?
+  lastPushStatus String?
+
+  @@unique([colorwayId, channel])
+}
+
+model ChannelContent {
+  id         String   @id @default(cuid())
+  colorwayId String
+  colorway   Colorway @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  channel    Channel // SHOPIFY (B2C) | LOOM (B2B)
+  field      String // e.g. "fullDescription", "styleWith", "tags"
+  value      String // scalar, or JSON-encoded list for list fields
+
+  @@unique([colorwayId, channel, field])
+}
+
+// ---------------------------------------------------------------------------
+// Sync infrastructure (field ownership + audit)
+// ---------------------------------------------------------------------------
+
+model FieldOwner {
+  id         String    @id @default(cuid())
+  entityType String // "style" | "colorway"
+  entityId   String
+  field      String
+  owner      Source // THREADFLOW | MANUAL | SHOPIFY_IMPORT
+  lockedAt   DateTime?
+
+  @@unique([entityType, entityId, field])
+  @@index([entityType, entityId])
+}
+
+model SyncRun {
+  id         String    @id @default(cuid())
+  source     String // "threadflow" | "shopify-import" | "loom-cost"
+  mode       String // "full" | "prices-only" | "no-images" | ...
+  seasonCode String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     String // "running" | "ok" | "partial" | "failed"
+  counts     Json?
+  errors     Json?
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Source {
+  THREADFLOW
+  MANUAL
+  SHOPIFY_IMPORT
+  CIN7_IMPORT
+}
+
+enum SeasonKind {
+  REGULAR
+  CONTINUITY
+}
+
+enum EntryOrigin {
+  NEW // this product's origin (first) season
+  CARRYOVER // carried forward from an earlier season
+}
+
+enum PriceType {
+  MSRP
+  WHOLESALE
+}
+
+enum ImageSlot {
+  MAIN
+  ALT
+}
+
+enum Channel {
+  SHOPIFY
+  LOOM
+}
+
+enum ProductStatus {
+  ACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+enum MediaSource {
+  BLOB // owned in Vercel Blob
+  SHOPIFY // referenced from Shopify CDN
+  THREADFLOW // referenced via the Threadflow image proxy
+  EXTERNAL // any other absolute URL
+}
+
+enum MediaRole {
+  GALLERY // normal product image
+  FLAT // custom.flat (flat-lay)
+  MEN // custom.men_images (unisex)
+  WOMEN // custom.women_images (unisex)
+  SWATCH // colour swatch
+}

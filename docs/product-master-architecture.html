@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<title>Product Master — Architecture</title>
+<style>
+  :root {
+    --paper:    #f5f6f9;
+    --surface:  #ffffff;
+    --surface-2:#eef0f6;
+    --ink:      #171a21;
+    --ink-soft: #4c515d;
+    --faint:    #868c9a;
+    --line:     #e1e4ec;
+    --line-2:   #cfd4e0;
+    --accent:   #3c4e9c;
+    --accent-2: #5a6dc0;
+    --accent-soft:#e9ecf8;
+    --rivet:    #a9673a;
+    --ok:       #3c7757;
+    --warn:     #916318;
+    --crit:     #a5443c;
+    --code-bg:  #f3f4f9;
+    --shadow:   0 1px 2px rgba(20,25,40,.04), 0 6px 20px rgba(20,25,40,.05);
+
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, "Cascadia Code", "Roboto Mono", monospace;
+    --measure: 68ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:    #0f1116;
+      --surface:  #161922;
+      --surface-2:#1c202b;
+      --ink:      #e9ebf1;
+      --ink-soft: #a6abb8;
+      --faint:    #6c7280;
+      --line:     #262b36;
+      --line-2:   #333a48;
+      --accent:   #8a9bdb;
+      --accent-2: #a3b1e6;
+      --accent-soft:#1a2032;
+      --rivet:    #cf9060;
+      --ok:       #5aa77d;
+      --warn:     #c69540;
+      --crit:     #cf6b62;
+      --code-bg:  #12151d;
+      --shadow:   0 1px 2px rgba(0,0,0,.3), 0 8px 26px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:#0f1116; --surface:#161922; --surface-2:#1c202b; --ink:#e9ebf1;
+    --ink-soft:#a6abb8; --faint:#6c7280; --line:#262b36; --line-2:#333a48;
+    --accent:#8a9bdb; --accent-2:#a3b1e6; --accent-soft:#1a2032; --rivet:#cf9060;
+    --ok:#5aa77d; --warn:#c69540; --crit:#cf6b62; --code-bg:#12151d;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 26px rgba(0,0,0,.35);
+  }
+  :root[data-theme="light"] {
+    --paper:#f5f6f9; --surface:#ffffff; --surface-2:#eef0f6; --ink:#171a21;
+    --ink-soft:#4c515d; --faint:#868c9a; --line:#e1e4ec; --line-2:#cfd4e0;
+    --accent:#3c4e9c; --accent-2:#5a6dc0; --accent-soft:#e9ecf8; --rivet:#a9673a;
+    --ok:#3c7757; --warn:#916318; --crit:#a5443c; --code-bg:#f3f4f9;
+    --shadow:0 1px 2px rgba(20,25,40,.04),0 6px 20px rgba(20,25,40,.05);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); line-height: 1.65;
+    font-size: 16px; -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-soft); }
+
+  .shell {
+    display: grid; grid-template-columns: 1fr; gap: 0;
+    max-width: 1180px; margin: 0 auto; padding: 0 clamp(18px, 4vw, 40px);
+  }
+  @media (min-width: 1080px) {
+    .shell { grid-template-columns: 220px minmax(0, 1fr); gap: 56px; }
+  }
+
+  /* ---- Table of contents rail ---- */
+  .toc { display: none; }
+  @media (min-width: 1080px) {
+    .toc {
+      display: block; position: sticky; top: 0; align-self: start;
+      height: 100vh; overflow-y: auto; padding: 88px 0 40px;
+    }
+    .toc-label {
+      font-family: var(--mono); font-size: .68rem; letter-spacing: .16em;
+      text-transform: uppercase; color: var(--faint); margin: 0 0 14px;
+    }
+    .toc ol { list-style: none; margin: 0; padding: 0; counter-reset: toc; }
+    .toc li { counter-increment: toc; margin: 0; }
+    .toc a {
+      display: grid; grid-template-columns: 1.8em 1fr; gap: .3em;
+      padding: 5px 0; color: var(--ink-soft); text-decoration: none;
+      font-size: .855rem; line-height: 1.35; border-left: 2px solid transparent;
+      padding-left: 12px; margin-left: -14px; transition: color .15s, border-color .15s;
+    }
+    .toc a::before {
+      content: counter(toc, decimal-leading-zero);
+      font-family: var(--mono); font-size: .72rem; color: var(--faint);
+      font-variant-numeric: tabular-nums;
+    }
+    .toc a:hover { color: var(--accent); }
+    .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+  }
+
+  main.doc { padding: 64px 0 120px; min-width: 0; }
+
+  /* ---- Masthead ---- */
+  .masthead { margin-bottom: 8px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 18px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .eyebrow::after {
+    content: ""; flex: 1; height: 0;
+    border-top: 2px dashed var(--rivet); opacity: .5;
+  }
+  h1 {
+    font-size: clamp(2.1rem, 5vw, 3.1rem); line-height: 1.04;
+    letter-spacing: -.02em; font-weight: 680; margin: 0 0 20px;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 1.14rem; line-height: 1.6; color: var(--ink-soft);
+    max-width: var(--measure); margin: 0 0 28px;
+  }
+  .lede b { color: var(--ink); font-weight: 620; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 10px 10px; align-items: center;
+    padding: 16px 0 0; border-top: 1px solid var(--line);
+  }
+  .pill {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .04em;
+    padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line-2);
+    color: var(--ink-soft); background: var(--surface);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .pill.status { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line-2)); }
+  .pill.status .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--warn); }
+
+  /* ---- Sections ---- */
+  section { padding-top: 64px; scroll-margin-top: 24px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 20px; }
+  .sec-num {
+    font-family: var(--mono); font-size: .82rem; color: var(--accent);
+    font-variant-numeric: tabular-nums; padding-top: .35em; flex-shrink: 0;
+  }
+  h2 {
+    font-size: clamp(1.4rem, 3vw, 1.72rem); line-height: 1.15; letter-spacing: -.015em;
+    font-weight: 640; margin: 0; text-wrap: balance;
+  }
+  h3 {
+    font-size: 1.06rem; font-weight: 640; letter-spacing: -.005em;
+    margin: 34px 0 12px; color: var(--ink);
+  }
+  p, li { max-width: var(--measure); }
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  strong { font-weight: 640; }
+  code {
+    font-family: var(--mono); font-size: .855em;
+    background: var(--code-bg); padding: .12em .4em; border-radius: 5px;
+    border: 1px solid var(--line); color: var(--ink);
+  }
+  ul, ol { margin: 0 0 16px; padding-left: 1.4em; }
+  li { margin: 0 0 8px; padding-left: .2em; }
+  li::marker { color: var(--faint); }
+  ol li::marker { font-family: var(--mono); font-size: .9em; }
+
+  /* ---- Callouts ---- */
+  .call {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: var(--surface); border-radius: 8px; padding: 16px 20px;
+    margin: 22px 0; box-shadow: var(--shadow); max-width: var(--measure);
+  }
+  .call p:last-child { margin-bottom: 0; }
+  .call .tag {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 8px;
+  }
+  .call.gap { border-left-color: var(--rivet); }
+  .call.gap .tag { color: var(--rivet); }
+
+  /* ---- Code blocks ---- */
+  .code-panel {
+    margin: 22px 0; border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; box-shadow: var(--shadow); background: var(--code-bg);
+  }
+  .code-tab {
+    font-family: var(--mono); font-size: .74rem; letter-spacing: .04em;
+    color: var(--ink-soft); padding: 9px 16px; border-bottom: 1px solid var(--line);
+    background: var(--surface-2); display: flex; align-items: center; gap: 8px;
+  }
+  .code-tab .glyph { color: var(--accent); }
+  pre {
+    margin: 0; padding: 18px 20px; overflow-x: auto; font-family: var(--mono);
+    font-size: .82rem; line-height: 1.6; color: var(--ink); tab-size: 2;
+  }
+  pre .c { color: var(--faint); font-style: italic; }
+  pre .k { color: var(--accent-2); }
+  pre .t { color: var(--rivet); }
+
+  /* ---- Tables ---- */
+  .scroll { overflow-x: auto; margin: 22px 0; border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 520px; }
+  th, td { text-align: left; padding: 11px 16px; vertical-align: top;
+    border-bottom: 1px solid var(--line); }
+  thead th {
+    font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint); font-weight: 500;
+    background: var(--surface-2); position: sticky; top: 0;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+  td code { background: transparent; border: none; padding: 0; color: var(--accent); }
+  td.f code { font-size: .82em; }
+
+  .chip {
+    font-family: var(--mono); font-size: .7rem; padding: 2px 8px; border-radius: 5px;
+    white-space: nowrap; border: 1px solid transparent;
+  }
+  .chip.ok   { color: var(--ok);   background: color-mix(in srgb, var(--ok) 12%, transparent);   border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+  .chip.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 13%, transparent); border-color: color-mix(in srgb, var(--warn) 32%, transparent); }
+  .chip.crit { color: var(--crit); background: color-mix(in srgb, var(--crit) 12%, transparent); border-color: color-mix(in srgb, var(--crit) 30%, transparent); }
+  .req { color: var(--accent); font-weight: 700; }
+  .opt { color: var(--faint); }
+
+  /* ---- Flow diagram ---- */
+  .flow {
+    display: grid; gap: 14px; margin: 26px 0; align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 720px) {
+    .flow { grid-template-columns: 1fr auto 1.15fr auto 1fr; align-items: center; }
+  }
+  .flow-col { display: grid; gap: 12px; }
+  .node {
+    border: 1px solid var(--line-2); background: var(--surface); border-radius: 9px;
+    padding: 13px 15px; font-size: .86rem; box-shadow: var(--shadow); line-height: 1.35;
+  }
+  .node b { display: block; font-weight: 620; }
+  .node span { display: block; font-family: var(--mono); font-size: .68rem;
+    color: var(--faint); letter-spacing: .02em; margin-top: 3px; }
+  .node.master {
+    border: 1.5px solid var(--accent); background: var(--accent-soft);
+    padding: 18px 18px;
+  }
+  .node.master b { color: var(--accent); font-family: var(--mono); font-size: .78rem;
+    letter-spacing: .1em; text-transform: uppercase; }
+  .node.master .big { font-family: var(--sans); font-size: 1.02rem; text-transform: none;
+    letter-spacing: -.01em; color: var(--ink); margin-top: 6px; }
+  .node.writeback { border-style: dashed; border-color: var(--rivet); }
+  .node.writeback span { color: var(--rivet); }
+  .conn {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    font-family: var(--mono); font-size: .66rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--faint);
+  }
+  .conn .arw { color: var(--accent); font-size: 1.1rem; line-height: 1; }
+  @media (max-width: 719px) {
+    .conn { padding: 2px 0; }
+    .conn .arw { transform: rotate(90deg); display: inline-block; }
+  }
+
+  /* ---- Roadmap ---- */
+  .phases { display: grid; gap: 12px; margin: 24px 0; max-width: 780px; }
+  .phase {
+    display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start;
+    border: 1px solid var(--line); border-radius: 10px; padding: 15px 18px;
+    background: var(--surface); box-shadow: var(--shadow);
+  }
+  .phase-tag {
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .06em;
+    color: var(--accent); background: var(--accent-soft); border-radius: 6px;
+    padding: 5px 9px; white-space: nowrap; font-variant-numeric: tabular-nums;
+    height: fit-content;
+  }
+  .phase.later .phase-tag { color: var(--ink-soft); background: var(--surface-2); }
+  .phase h4 { margin: 1px 0 5px; font-size: .98rem; font-weight: 640; }
+  .phase p { margin: 0; font-size: .89rem; color: var(--ink-soft); max-width: none; }
+
+  hr.stitch {
+    border: none; border-top: 2px dashed var(--line-2); margin: 8px 0 0; opacity: .8;
+  }
+  .foot {
+    margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line);
+    font-size: .84rem; color: var(--faint); max-width: var(--measure);
+  }
+  .foot code { font-size: .82em; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; transition: none !important; }
+  }
+  html { scroll-behavior: smooth; }
+</style>
+
+<div class="shell">
+  <aside class="toc" aria-label="Contents">
+    <p class="toc-label">Contents</p>
+    <nav>
+      <ol>
+        <li><a href="#tldr">Summary</a></li>
+        <li><a href="#progress">Build progress</a></li>
+        <li><a href="#principles">Guiding principles</a></li>
+        <li><a href="#topology">Where this sits</a></li>
+        <li><a href="#coexist">Coexistence</a></li>
+        <li><a href="#model">Data model</a></li>
+        <li><a href="#ingest">Threadflow ingestion</a></li>
+        <li><a href="#external">External products</a></li>
+        <li><a href="#publish">Publishing</a></li>
+        <li><a href="#lifecycle">Lifecycle</a></li>
+        <li><a href="#pricing">Pricing &amp; cost</a></li>
+        <li><a href="#sync">Sync mechanics</a></li>
+        <li><a href="#questions">Open questions</a></li>
+        <li><a href="#roadmap">Roadmap</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <main class="doc">
+    <header class="masthead">
+      <p class="eyebrow">Architecture proposal</p>
+      <h1>Product Master</h1>
+      <p class="lede">
+        Turning <b>product-management</b> from a stateless Shopify editor into the
+        single source of truth for all product data — Livid products pulled from
+        <b>Threadflow</b>, plus manually-created external-brand products — that decides,
+        per product, which channels it publishes to (<b>Shopify&nbsp;&rarr;&nbsp;Sitoo</b>,
+        <b>Loom</b> B2B) and pushes that data outward.
+      </p>
+      <div class="meta">
+        <span class="pill status"><span class="dot"></span>Proposal — for review</span>
+        <span class="pill">2026-07-13</span>
+        <span class="pill">Companion to <code>handoff.md</code></span>
+        <span class="pill">No code yet</span>
+      </div>
+    </header>
+
+    <section id="tldr">
+      <div class="sec-head"><span class="sec-num">00</span><h2>Summary</h2></div>
+      <ol>
+        <li>Add a <strong>Postgres&nbsp;+&nbsp;Prisma</strong> persistence layer — the app has none today. This is the foundational change everything else depends on.</li>
+        <li>Model products as <strong>Style&nbsp;&rarr;&nbsp;Colorway&nbsp;&rarr;&nbsp;Variant</strong>, with <strong>per-season</strong> data (prices, size availability, images, dropped/approved) and a global customs block + manufacturer + brand — mirroring Loom's model so the feed maps cleanly.</li>
+        <li><strong>Ingest</strong> from Threadflow (<code>GET /products?seasonId=…</code> + <code>/manufacturers</code>) on a <strong>daily schedule + manual trigger</strong>, with modes (full / prices-only / with-or-without images).</li>
+        <li>Support <strong>manual creation</strong> of external-brand products (no Threadflow source).</li>
+        <li>Track <strong>three independent lifecycle axes</strong>: per-channel publish state, per-season cancelled/dropped, archived. Missing-from-feed is never a delete.</li>
+        <li><strong>Publish</strong> per product to Shopify and/or Loom; reuse the existing Shopify mutations for the Shopify push, build the Loom feed per <code>handoff.md</code>.</li>
+        <li><strong>Coexist</strong>: the current live-Shopify screens keep running untouched; the master is built alongside under a new nav section.</li>
+        <li>Accept the <strong>one write-back</strong>: per-variant weighted-average cost from Loom &rarr; store &rarr; forward to Shopify.</li>
+      </ol>
+    </section>
+
+    <section id="progress">
+      <div class="sec-head"><span class="sec-num">★</span><h2>Build progress</h2></div>
+      <p style="max-width:var(--measure)">Built on branch <code>phase-0-product-master</code> (local commits, not pushed). SS27 synced: <strong>171 styles · 532 colorways · 4,451 variants</strong>. Updated 2026-07-13.</p>
+      <div class="phases" style="max-width:780px">
+        <div class="phase"><span class="phase-tag" style="color:var(--ok);background:color-mix(in srgb, var(--ok) 12%, transparent)">Done · 0</span><div><h4>Foundations</h4><p>Postgres + Prisma 7 (Vercel Postgres/Neon, driver adapter), full schema, migrations, Catalog shell.</p></div></div>
+        <div class="phase"><span class="phase-tag" style="color:var(--ok);background:color-mix(in srgb, var(--ok) 12%, transparent)">Done · 1</span><div><h4>Threadflow ingestion</h4><p>Typed client, bulk idempotent sync (barcode set-once, don't-clobber customs, dropped→cancelled, all currencies, images), manual trigger, browse + season filter, image proxy.</p></div></div>
+        <div class="phase"><span class="phase-tag" style="color:var(--ok);background:color-mix(in srgb, var(--ok) 12%, transparent)">Done · 2</span><div><h4>Enrichment &amp; external products</h4><p>Colorway editor (all metafields, <strong>channel-split content incl. tags</strong>, field ownership, vendor/type from Threadflow) · <strong>bulk grid editor</strong> (virtualized, fill-down) · <strong>brand-template product builder</strong> · <strong>Shopify carry-over importer</strong> (vendor-scoped, dry-run, archived + sold-out-sale exclusions, removal) · <strong>media manager</strong> on Vercel Blob (upload, reorder, adopt-to-Blob).</p></div></div>
+        <div class="phase"><span class="phase-tag" style="color:var(--warn);background:color-mix(in srgb, var(--warn) 13%, transparent)">In progress · 3</span><div><h4>Channels + Shopify push</h4><p>Channel targeting, Publishing overview, and a <strong>Shopify dry-run preview</strong> are built. <strong>The live Shopify write is intentionally not wired yet</strong> — to be done together.</p></div></div>
+        <div class="phase later"><span class="phase-tag">Next · 4–7</span><div><h4>Loom push · Pricing &amp; cost write-back · Scheduling · Retire legacy plumbing</h4><p>Not started.</p></div></div>
+      </div>
+      <div class="call gap">
+        <span class="tag">Known follow-ups</span>
+        <p>Reference pickers (care/fitguide/collection/model — deferred, Shopify-GID-based) · Livid HS-code/customs-description/weight empty from Threadflow (source-side Customs Defaults gap) · mixed row-id scheme (cuid vs uuid, harmless) · <code>SeasonImage</code>↔<code>MediaAsset</code> not yet unified.</p>
+      </div>
+    </section>
+
+    <section id="principles">
+      <div class="sec-head"><span class="sec-num">01</span><h2>Guiding principles</h2></div>
+      <ul>
+        <li><strong>The master owns the truth.</strong> Once a product lives here, the master decides what every channel sees. Channels are push targets, not editors.</li>
+        <li><strong>Explicit lifecycle, never inference.</strong> A product vanishing from a Threadflow page does <em>not</em> delete it. Removal is an explicit archive/cancel signal — the rule Loom already enforces.</li>
+        <li><strong>Stable internal IDs.</strong> The master mints its own immutable id per Style/Colorway/Variant <em>and</em> stores each source system's ids (Threadflow ids, Shopify GIDs, Loom keys). Matching is always on stable ids, never on renameable display strings.</li>
+        <li><strong>Field ownership is explicit.</strong> Every field is owned by exactly one source at a time (Threadflow, Shopify-import, or authored-in-master). Syncs never clobber manager-authored data — see §5.3.</li>
+        <li><strong>Idempotent, at-least-once sync.</strong> Re-running a sync or re-delivering a push is always safe.</li>
+        <li><strong>Non-destructive coexistence.</strong> Nothing here changes or risks the existing Shopify editor until we deliberately migrate it.</li>
+      </ul>
+    </section>
+
+    <section id="topology">
+      <div class="sec-head"><span class="sec-num">02</span><h2>Where this sits</h2></div>
+      <div class="flow">
+        <div class="flow-col">
+          <div class="node"><b>Threadflow</b><span>Livid · read-only · season-scoped</span></div>
+          <div class="node"><b>Shopify carry-over</b><span>import external / continuity</span></div>
+          <div class="node"><b>Manual create</b><span>external brands</span></div>
+        </div>
+        <div class="conn"><span class="arw">&rarr;</span>pull</div>
+        <div class="node master">
+          <b>Product Master</b>
+          <span class="big">Postgres · Prisma</span>
+          <span>Style → Colorway → Variant · seasons · channels · lifecycle · customs</span>
+        </div>
+        <div class="conn"><span class="arw">&rarr;</span>push</div>
+        <div class="flow-col">
+          <div class="node"><b>Shopify</b><span>&rarr; Sitoo (downstream)</span></div>
+          <div class="node"><b>Loom</b><span>B2B catalogue</span></div>
+          <div class="node writeback"><b>&#8617; Avg cost</b><span>writeback → Shopify</span></div>
+        </div>
+      </div>
+      <p>Threadflow feeds Livid products in; external and carry-over goods enter by manual creation or a Shopify import. The master resolves everything into one model and pushes outward per-channel. Exactly one value flows back: weighted-average cost from Loom.</p>
+    </section>
+
+    <section id="coexist">
+      <div class="sec-head"><span class="sec-num">03</span><h2>Coexistence strategy</h2></div>
+      <p>We keep the current app fully functional and build the master next to it. No existing route, hook, or component is modified in the early phases.</p>
+
+      <div class="call">
+        <span class="tag">The editor is core, not legacy</span>
+        <p>The rich editing today's app provides is not something we retire — it <em>is</em> the master's enrichment layer, reborn on a real data model. The only change underneath is the plumbing: instead of writing live to Shopify, every edit lands on the master record and the master pushes it outward. All of this stays first-class in the new Catalog, now editing <strong>master data</strong>:</p>
+        <ul>
+          <li><strong>Product properties</strong> — tags, status, vendor/brand, product type.</li>
+          <li><strong>All ~17 <code>custom.*</code> metafields</strong> — descriptions, details, taglines, style name, <code>color_hex</code>, and the reference fields (<code>same_product</code>, <code>style_with</code>, <code>care_page</code>, <code>fitguide</code>, <code>model_info</code>, recommended collection, unisex style-with, men/women images).</li>
+          <li><strong>Media</strong> — upload, gallery, drag-to-reorder, per-slot assignment.</li>
+          <li><strong>Prices</strong> — variant price / compare-at, extended to season scope (§9).</li>
+          <li><strong>Power tools</strong> — inline cell editing, find &amp; replace, column picker, the care/fitguide/collection/model pickers, group auto-linking, and fit models.</li>
+          <li><strong>Split by channel</strong> — descriptive fields can hold <strong>different values for Shopify (B2C) and Loom (B2B)</strong>; the wholesale buyer reads different copy than the retail shopper (§4.3).</li>
+        </ul>
+        <p>Carried into the master with the same UI components — <em>what they write</em> changes, not <em>what they do</em>.</p>
+      </div>
+
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Area</th><th>Current — keep running</th><th>New — build</th></tr></thead>
+          <tbody>
+            <tr><td>Nav</td><td>Products / Groups / Models / Media (live Shopify)</td><td><strong>Catalog</strong> → Seasons, Styles, Colorways, Sync, Publishing, External products</td></tr>
+            <tr><td>Data</td><td>Live reads from Shopify, no store</td><td>Postgres via Prisma</td></tr>
+            <tr><td>Shopify client</td><td><code>src/lib/shopify/*</code></td><td><strong>Reused</strong> for the Shopify <em>push</em> target</td></tr>
+            <tr><td>Editing UI</td><td><code>product-table</code>, <code>tags-cell</code>, media grid/upload, metafield editors, pickers, find&nbsp;&amp;&nbsp;replace, groups, models</td><td><strong>Carried into the master</strong> — same components, now editing master records</td></tr>
+            <tr><td>Types</td><td><code>src/types</code> (Shopify-shaped)</td><td>Prisma-generated <code>Style</code>/<code>Colorway</code>/<code>Variant</code> + view models</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The master lives under new routes (<code>/catalog/*</code>) and new libs (<code>src/lib/{master,threadflow,loom}</code>). The old live-Shopify pages keep running until the master's editing surfaces reach parity — then we retire the <em>live-Shopify plumbing</em>, not the functionality, which already lives in the master by then (Phase&nbsp;7).</p>
+    </section>
+
+    <section id="model">
+      <div class="sec-head"><span class="sec-num">04</span><h2>Data model</h2></div>
+      <p>Business vocabulary, aligned with Loom's so the feed maps cleanly:</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Concept</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Style</strong></td><td>The garment (parent) — e.g. "Beth".</td></tr>
+            <tr><td><strong>Colorway</strong></td><td>One colour of a style. <strong>This is the master "product" record.</strong></td></tr>
+            <tr><td><strong>Variant</strong></td><td>The sellable size unit (SKU + barcode).</td></tr>
+            <tr><td><strong>Season</strong></td><td>Selling season; prices, sizes, images, dropped flag are scoped to it.</td></tr>
+            <tr><td><strong>Brand</strong></td><td>Livid or external.</td></tr>
+            <tr><td><strong>Manufacturer</strong></td><td>Factory with address; used for Loom customs invoices.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Prisma schema sketch</h3>
+      <div class="code-panel">
+        <div class="code-tab"><span class="glyph">◈</span> schema.prisma <span style="color:var(--faint)">— illustrative; finalised in Phase&nbsp;0</span></div>
+<pre><span class="k">model</span> Style {
+  id             String   @id @default(cuid())
+  source         Source                   <span class="c">// THREADFLOW | MANUAL | SHOPIFY_IMPORT</span>
+  threadflowId   String?  @unique
+  styleSku       String   @unique
+  styleName      String
+  gender         String?
+  unisex         Boolean  @default(false)
+  category       String   @default(<span class="t">"Uncategorized"</span>)
+  brandId        String?
+  <span class="c">// Customs — TF exposes these at style level; Loom wants them per colorway.</span>
+  <span class="c">// Store the default here; allow a per-colorway override (§4.2).</span>
+  hsCode             String?
+  customsDescription String?
+  weightKg           Decimal? @db.Decimal(8,3)   <span class="c">// kg — see §11.5</span>
+  fiberComposition   String?
+  colorways      Colorway[]
+}
+
+<span class="k">model</span> Colorway {                          <span class="c">// = the master "product"</span>
+  id             String   @id @default(cuid())
+  source         Source
+  threadflowId   String?  @unique
+  colorwaySku    String   @unique
+  name           String
+  color          String?
+  swatchHex      String?
+  styleId        String
+  brandId        String?                  <span class="c">// Loom needs brand per product (externals)</span>
+  manufacturerId String?
+  countryOfOrigin String?
+  <span class="c">// ---- Product properties (carried over from today's editor) ----</span>
+  status         ProductStatus @default(DRAFT)  <span class="c">// ACTIVE | DRAFT | ARCHIVED</span>
+  tags           String[]
+  vendor         String?
+  <span class="c">// ---- Enrichment: the full custom.* metafield set, authored in the master ----</span>
+  shortDescription String?
+  fullDescription  String?
+  details          String?
+  styleTagline     String?
+  styleName        String?
+  sameProduct              String[]  <span class="c">// list.product_reference — group auto-link</span>
+  styleWith                String[]  <span class="c">// list.product_reference</span>
+  styleWithUnisexHerre     String[]
+  styleWithUnisexDame      String[]
+  carePageId               String?   <span class="c">// page_reference (care picker)</span>
+  fitguidePageId           String?   <span class="c">// page_reference (fitguide picker)</span>
+  recommendedCollectionId  String?   <span class="c">// collection_reference</span>
+  modelInfoId              String?   <span class="c">// metaobject_reference (fit model)</span>
+  flatFileId               String?   <span class="c">// file_reference (flat-lay)</span>
+  menImages                String[]  <span class="c">// list.file_reference (unisex)</span>
+  womenImages              String[]
+  media          MediaAsset[]        <span class="c">// full gallery: upload + reorder</span>
+  variants       Variant[]
+  entries        SeasonEntry[]            <span class="c">// per-season data</span>
+  prices         Price[]
+  publications   ChannelPublication[]     <span class="c">// per-channel publish state</span>
+  archived       Boolean  @default(false) <span class="c">// whole-channel archive (§8)</span>
+}
+
+<span class="k">model</span> MediaAsset {                        <span class="c">// product gallery — upload + drag-reorder</span>
+  id            String   @id @default(cuid())
+  colorwayId    String
+  url           String                     <span class="c">// object-storage URL after upload</span>
+  alt           String?
+  position      Int                         <span class="c">// sort order</span>
+  shopifyMediaId String?                    <span class="c">// GID once pushed to Shopify</span>
+}
+
+<span class="k">model</span> Variant {
+  id            String  @id @default(cuid())  <span class="c">// stable id — TF has none, we mint it</span>
+  colorwayId    String
+  variantSku    String   @unique
+  barcode       String?                   <span class="c">// set once, never blanked (§5.2)</span>
+  sizeLabel     String                    <span class="c">// "M" or "W32/L32"</span>
+  dim1          String                    <span class="c">// "M" or waist "32"</span>
+  dim2          String?                   <span class="c">// length "32" for 2-D</span>
+  averageCostNok Decimal? @db.Decimal(14,2) <span class="c">// written back from Loom (§9)</span>
+}
+
+<span class="k">model</span> SeasonEntry {                       <span class="c">// colorway × season</span>
+  colorwayId    String
+  seasonId      String
+  cancelled     Boolean  @default(false)  <span class="c">// = Threadflow "dropped" (§8)</span>
+  approvedForProduction Boolean @default(false)
+  merchPosition Int?                        <span class="c">// preserved across cancel/restore</span>
+  @@unique([colorwayId, seasonId])
+}
+
+<span class="k">model</span> Price {                             <span class="c">// season × colorway × currency × type</span>
+  seasonId    String
+  colorwayId  String
+  currency    String                       <span class="c">// NOK | EUR | USD</span>
+  priceType   PriceType                     <span class="c">// MSRP | WHOLESALE</span>
+  amount      Decimal  @db.Decimal(14,2)
+  @@unique([seasonId, colorwayId, currency, priceType])
+}
+
+<span class="k">model</span> ChannelPublication {                <span class="c">// per product per channel (§8)</span>
+  colorwayId  String
+  channel     Channel                       <span class="c">// SHOPIFY | LOOM</span>
+  published   Boolean  @default(false)
+  externalId  String?                        <span class="c">// Shopify GID / Loom key once pushed</span>
+  @@unique([colorwayId, channel])
+}
+
+<span class="k">model</span> ChannelContent {                    <span class="c">// §4.3 — per-channel override of a splittable field</span>
+  colorwayId  String
+  channel     Channel                      <span class="c">// SHOPIFY (B2C) | LOOM (B2B)</span>
+  field       String                       <span class="c">// "fullDescription", "styleWith", "tags"…</span>
+  value       String                       <span class="c">// scalar, or JSON list for list fields</span>
+  @@unique([colorwayId, channel, field])
+}
+
+<span class="c">// + Brand, Manufacturer, Season, SeasonVariant, SeasonImage,</span>
+<span class="c">//   FieldOwner (§5.3), SyncRun (audit). Enums: Source, PriceType,</span>
+<span class="c">//   Channel, SeasonKind { REGULAR | CONTINUITY }, ImageSlot,</span>
+<span class="c">//   ProductStatus { ACTIVE | DRAFT | ARCHIVED }.</span></pre>
+      </div>
+
+      <h3>Notes on the model</h3>
+      <ul>
+        <li><strong>The editor's fields all have a home.</strong> Everything editable today maps onto the master: product props (<code>status</code>, <code>tags</code>, <code>vendor</code>), the full <code>custom.*</code> metafield set (free-text + reference fields, edited via the same pickers), and the full media gallery (<code>MediaAsset</code>, upload + reorder). These are <strong>master-authored</strong> and pushed to Shopify via the existing mutations.</li>
+        <li><strong>Reference metafields store target ids.</strong> <code>sameProduct</code>, <code>styleWith</code>, etc. hold GIDs / ids as today; <strong>Groups</strong> still populates <code>sameProduct</code>, <strong>Models</strong> still manages the fit-model metaobjects behind <code>modelInfoId</code>. Whether these Shopify page/collection/file references need master-native equivalents once Shopify is a pure push target is an open question (§11).</li>
+        <li><strong>Customs placement.</strong> Threadflow returns customs at <em>style</em> level; Loom wants them at <em>colorway</em> level. We store the style-level value and expose a per-colorway override that falls back to the style.</li>
+        <li><strong>Threadflow has no stable <code>variant_id</code>.</strong> Its variants carry only <code>sku</code>, <code>barcode</code>, <code>dimensions</code>, so the master mints the stable variant id and matches on <code>variantSku</code> within a colorway. Style/colorway <em>do</em> have TF ids.</li>
+        <li><strong><code>CONTINUITY</code> season</strong> models carry-over / external non-seasonal products, so everything still has season context (Loom needs it) without forcing a wrong real season.</li>
+      </ul>
+
+      <h3>4.3 · Channel-split content (B2B vs B2C)</h3>
+      <p>The copy a <strong>B2B</strong> buyer reads in Loom is not the copy a <strong>B2C</strong> shopper reads in Shopify/Sitoo. So editable content is not one value fanned out identically — it is a <strong>base value plus per-channel overrides</strong>.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Class</th><th>Fields</th><th>Behaviour</th></tr></thead>
+          <tbody>
+            <tr><td><span class="chip ok">Shared</span></td><td>identity / SKUs, barcode, customs block, manufacturer, weight, country of origin</td><td>Single-valued — same on every channel by definition.</td></tr>
+            <tr><td><span class="chip warn">Channel-split</span></td><td>descriptions, <code>details</code>, tagline, style name, <code>tags</code>, product type, <code>styleWith</code> / recommendations, media selection &amp; order</td><td>Base value + optional per-channel override (<code>ChannelContent</code>). Set exact list — §11.11.</td></tr>
+            <tr><td><span class="chip crit">Price-split</span></td><td>wholesale → Loom · MSRP/retail → Shopify</td><td>Already handled by <code>PriceType</code> (§9), not <code>ChannelContent</code>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="call">
+        <span class="tag">Resolution &amp; editor</span>
+        <p>The effective value for a <code>(colorway, channel, field)</code> is the <code>ChannelContent</code> override if present, <strong>otherwise the base column</strong>. A field with no override inherits the base — you only author a channel-specific version when it actually differs.</p>
+        <p>In the editor, a channel-splittable field shows a base plus a <strong>Shopify / Loom</strong> switch (or side-by-side columns) with an <em>"inherit from base"</em> default; overriding one channel never touches the other. Publish (§7) sends each channel its <strong>resolved</strong> value. Overrides are always <code>MANUAL</code>-owned (§5.3), so a Threadflow sync updates the base but never rewrites a channel override.</p>
+      </div>
+    </section>
+
+    <section id="ingest">
+      <div class="sec-head"><span class="sec-num">05</span><h2>Threadflow ingestion</h2></div>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Purpose</th><th>Endpoint</th></tr></thead>
+          <tbody>
+            <tr><td>Full nested catalog for a season</td><td class="f"><code>GET /api/external/v1/products?seasonId=…</code> — paginated at style level</td></tr>
+            <tr><td>Manufacturer master (name + address)</td><td class="f"><code>GET /manufacturers</code> and <code>/manufacturers/:id</code></td></tr>
+            <tr><td>Images</td><td class="f"><code>GET /images/&lt;path&gt;</code> with the same API key</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Auth is a static API key (<code>THREADFLOW_API_KEY</code>, base <code>THREADFLOW_URL</code>). To capture SS27 fully — including not-yet-approved and dropped colorways — sync with <code>includeUnapproved=true&amp;includeDropped=true</code> and record the <code>dropped</code> / <code>approved_for_production</code> flags into <code>SeasonEntry</code> (they change each sync).</p>
+
+      <h3>5.2 · Upsert rules</h3>
+      <ul>
+        <li><strong>Match</strong> Style/Colorway on <code>threadflowId</code>, Variant on <code>variantSku</code>. Create-or-update; never delete on absence.</li>
+        <li><strong>Barcode set-once:</strong> if incoming barcode is empty and we already have one, keep it (SS27 barcodes are blank until production).</li>
+        <li><strong>Customs "don't clobber with empty":</strong> never overwrite a populated customs field with a blank value.</li>
+        <li><strong>Prices:</strong> upsert <code>(season, colorway, currency, type)</code> rows from the <code>prices</code> object. Livid prices are Threadflow-owned (the calc lives there).</li>
+      </ul>
+
+      <div class="call gap">
+        <span class="tag">5.3 · Critical — field ownership / locking</span>
+        <p>Text will eventually be authored in the manager, but for now Threadflow text may be imported for SS27. To let both coexist without a sync wiping manual edits: each field has an <strong>owner</strong>. TF-sourced fields default to <code>THREADFLOW</code>; editing a field in the manager flips its owner to <code>MANUAL</code> (locked). <strong>A sync only writes fields it owns</strong> — manager-owned fields are skipped. A "revert to Threadflow" action re-hands ownership and re-pulls.</p>
+      </div>
+
+      <h3>5.4 · Sync modes</h3>
+      <p>Selectable per run and per schedule: <code>full</code> · <code>no-images</code> · <code>prices-only</code> · <code>single-season</code> · <code>single-style</code>. Each is recorded in <code>SyncRun</code> with counts and errors; one bad style never blocks the batch.</p>
+
+      <h3>5.5 · Shopify carry-over import</h3>
+      <p>Carry-over and external products already in Shopify need to reach Loom. A secondary importer reads existing Shopify products (reusing the current client) and creates Colorways with <code>source = SHOPIFY_IMPORT</code> into a <code>CONTINUITY</code> season. These then require the customs block filled before they can publish to Loom.</p>
+    </section>
+
+    <section id="external">
+      <div class="sec-head"><span class="sec-num">06</span><h2>External product creation</h2></div>
+      <ul>
+        <li>Create Style → Colorway → Variant by hand for external brands (<code>source = MANUAL</code>).</li>
+        <li>A <strong>channel-target dialog</strong> on create/edit: choose Shopify and/or Loom (some products are B2B-only).</li>
+        <li><strong>Input fields differ by destination.</strong> The form is grouped — <em>master fields</em> (brand, category, gender, customs, manufacturer) required for Loom; <em>Shopify enrichment</em> (descriptions, taglines, media) required for Shopify — and validates the required set per selected channel before publish is allowed.</li>
+        <li>Manufacturers can be created/edited here too, since external goods need the customs block for Loom.</li>
+      </ul>
+    </section>
+
+    <section id="publish">
+      <div class="sec-head"><span class="sec-num">07</span><h2>Publishing</h2></div>
+      <p>Per-colorway <code>ChannelPublication</code> rows drive everything. A product is pushed to a channel only when <code>published = true</code> for it. Each channel receives the <strong>resolved</strong> content — the <code>ChannelContent</code> override where one exists, otherwise the base (§4.3) — so Shopify gets the B2C copy and Loom gets the B2B copy from the same record.</p>
+
+      <h3>7.1 · Shopify → Sitoo</h3>
+      <p>Map master fields → Shopify product + <code>custom.*</code> metafields, <strong>reusing</strong> <code>src/lib/shopify/mutations.ts</code> (product update, metafields set, variant/price and media mutations). Store the resulting product GID in <code>ChannelPublication.externalId</code>. Sitoo is downstream of Shopify — no direct integration needed.</p>
+
+      <h3>7.2 · Loom (B2B)</h3>
+      <p>Build the Loom feed payload exactly per <code>handoff.md</code>: stable ids at every level, <code>brand</code> per product, the <code>channels</code> object, per-season <code>cancelled</code>/<code>approved_for_production</code>, <code>prices</code> as <code>(currency × {msrp, ws})</code>, the full customs block, <code>manufacturer_id</code>, and variants with <code>barcode</code> + <code>dimensions</code> using the 2-D SKU suffix rule (<code>waist+length</code> digits, no <code>W</code>/<code>L</code>).</p>
+      <ul>
+        <li><strong>Delivery is an open question</strong> (§11.1) — webhook push vs. Loom pull. Design the payload now; wire transport once agreed.</li>
+        <li><strong>Change propagation via an outbox:</strong> any edit to a Loom-published colorway enqueues an event; a worker pushes to Loom keyed on stable ids, at-least-once, with a monotonic version so Loom drops stale/duplicate deliveries.</li>
+        <li><strong>Images to Loom:</strong> likely re-host synced images in object storage and hand Loom fetchable URLs (§11.6).</li>
+      </ul>
+
+      <h3>7.3 · Field mapping reference</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Master field</th><th>From Threadflow</th><th>To Loom</th><th>To Shopify</th></tr></thead>
+          <tbody>
+            <tr><td>Style id / sku / name</td><td class="f"><code>style_*</code></td><td class="f"><code>style_*</code></td><td>product title</td></tr>
+            <tr><td>gender / unisex / category</td><td>same</td><td>same</td><td>tags / type</td></tr>
+            <tr><td>Customs (hs/desc/weight/fiber)</td><td>style-level</td><td>colorway-level (resolved)</td><td>metafields</td></tr>
+            <tr><td>Colorway id/sku/name/hex</td><td class="f"><code>colorway_*</code>, <code>swatch.hex</code></td><td class="f"><code>colorway_*</code></td><td>title, <code>custom.color_hex</code></td></tr>
+            <tr><td>brand</td><td>TF hard-codes Livid</td><td class="f"><code>brand</code> (per product)</td><td>vendor</td></tr>
+            <tr><td>manufacturer_id + address</td><td class="f"><code>manufacturer_id</code> + <code>/manufacturers/:id</code></td><td class="f"><code>manufacturer_id</code></td><td>—</td></tr>
+            <tr><td>country_of_origin</td><td>colorway-level</td><td class="f"><code>country_of_origin</code></td><td>—</td></tr>
+            <tr><td>prices (NOK/EUR/USD × msrp/ws)</td><td class="f"><code>prices</code></td><td>per season</td><td>variant price / compareAt</td></tr>
+            <tr><td>dropped → cancelled (per season)</td><td class="f"><code>dropped</code></td><td>per-season <code>cancelled</code></td><td>status / archival</td></tr>
+            <tr><td>variants (sku/barcode/dims)</td><td class="f"><code>variants[]</code></td><td class="f"><code>variants[]</code></td><td>Shopify variants</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="lifecycle">
+      <div class="sec-head"><span class="sec-num">08</span><h2>Lifecycle — three axes</h2></div>
+      <p>Treat these as three separate signals, not one status enum.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Axis</th><th>Stored</th><th>Set by</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="chip crit">Channel publish</span></td>
+              <td class="f"><code>ChannelPublication.published</code></td>
+              <td>Manager toggle, per product per channel</td>
+              <td><code>loom:false</code> (after true) → archive in Loom. Explicit, never inferred.</td>
+            </tr>
+            <tr>
+              <td><span class="chip warn">Cancelled / dropped</span></td>
+              <td class="f"><code>SeasonEntry.cancelled</code></td>
+              <td>Threadflow <code>dropped</code>, per season — changes each sync</td>
+              <td>Hidden that season in Loom; existing orders struck-through; reversible.</td>
+            </tr>
+            <tr>
+              <td><span class="chip ok">Archived</span></td>
+              <td class="f"><code>Colorway.archived</code></td>
+              <td>Manager / channel-off</td>
+              <td>Hidden across all seasons in Loom; history kept; reversible.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Hard delete is not exposed via the feed. Future-season products that never go to production and sit on no Loom orders can be deleted only via a deliberate admin action later — never via sync.</p>
+    </section>
+
+    <section id="pricing">
+      <div class="sec-head"><span class="sec-num">09</span><h2>Pricing &amp; cost write-back</h2></div>
+      <ul>
+        <li><strong>Season-scoped prices</strong> as <code>(season × colorway × currency × type)</code> rows; MSRP in NOK, wholesale in NOK/EUR/USD; inherited by all variants (no per-size pricing). Precision <code>Decimal(14,2)</code>.</li>
+        <li><strong>Livid prices</strong> flow <em>from</em> Threadflow (the calc lives there) → master → channels. <strong>External prices</strong> are edited in the master.</li>
+        <li>Provide a <strong>calculation / margin view</strong> (in-price vs. out-price, gross margin) and keep <strong>season-level price history</strong> so buy/sell prices are visible over time.</li>
+        <li><strong>Cost write-back — the only inbound write:</strong> an endpoint receives per-variant weighted-average cost (NOK) from Loom on each goods receipt, stores it on <code>Variant.averageCostNok</code>, and forwards it to Shopify (Sitoo picks it up natively). Contract shape is open (§11.7).</li>
+      </ul>
+    </section>
+
+    <section id="sync">
+      <div class="sec-head"><span class="sec-num">10</span><h2>Sync mechanics &amp; scheduling</h2></div>
+      <ul>
+        <li><strong>Daily scheduled</strong> ingest + <strong>manual trigger</strong> per season/mode. On Vercel: a Cron route (<code>/api/cron/threadflow-sync</code>) protected by a secret; elsewhere a scheduled worker.</li>
+        <li><strong>Idempotent, at-least-once</strong>; every entity carries a version / <code>updated_at</code> so re-delivery is safe.</li>
+        <li><strong>Reconciliation:</strong> a periodic full snapshot per season as a safety net for missed pushes (cadence TBD, §11.8).</li>
+        <li><strong>Observability:</strong> the <code>SyncRun</code> log surfaced in the UI — last run, counts, errors, retry.</li>
+      </ul>
+    </section>
+
+    <section id="questions">
+      <div class="sec-head"><span class="sec-num">11</span><h2>Open questions</h2></div>
+      <p>To resolve with the Loom and Threadflow owners. The numbering is referenced throughout this doc.</p>
+      <ol>
+        <li><strong>Loom ingest contract</strong> — webhook push vs. pull; envelope, auth, batch size, event ids, versioning.</li>
+        <li><strong>Variant SKU ownership</strong> — master sends <code>variant_sku</code> (preferred) vs. Loom derives; confirm the 2-D suffix rule or plan a migration. Also confirm SKU is a safe match key given TF exposes no stable variant id.</li>
+        <li><strong>Manufacturer delivery to Loom</strong> — embedded in payload vs. separate endpoint.</li>
+        <li><strong>Season-less / continuity / external mapping</strong> — confirm the <code>CONTINUITY</code> season approach vs. a season-less mode.</li>
+        <li><strong>Weight unit</strong> — confirm Threadflow <code>/products</code> <code>weight</code> is kg (doc says yes; older feed was grams). Master stores kg.</li>
+        <li><strong>Image delivery to Loom</strong> — public URLs, signed URLs, or proxied bytes; per-season imagery.</li>
+        <li><strong>Cost write-back endpoint</strong> — confirm shape/auth for per-variant avg cost from Loom → master.</li>
+        <li><strong>Reconciliation cadence</strong> — frequency of full/delta snapshots.</li>
+        <li><s><strong>Hosting / deploy target</strong></s> — <strong>Resolved:</strong> Vercel → <strong>Vercel Postgres</strong> (Neon-backed) + <strong>Vercel Cron</strong>. Env in <code>.env.local</code> locally + Vercel Project Settings for deploy.</li>
+        <li><strong>Threadflow season identifiers</strong> — map TF <code>seasonId</code>/<code>seasonCode</code> to master <code>Season</code> records (a settings step).</li>
+        <li><strong>Channel-split field set</strong> — confirm exactly which fields are channel-splittable vs. shared (§4.3), and whether the split stays per-channel or later needs per-market / per-language granularity.</li>
+      </ol>
+    </section>
+
+    <section id="roadmap">
+      <div class="sec-head"><span class="sec-num">12</span><h2>Phased roadmap</h2></div>
+      <p>Each phase is independently shippable and leaves the existing Shopify editor untouched.</p>
+      <div class="phases">
+        <div class="phase">
+          <span class="phase-tag">Phase 0</span>
+          <div><h4>Foundations</h4><p>Add Prisma + <strong>Vercel Postgres</strong>, <code>schema.prisma</code>, first migration, env wiring (<code>DATABASE_URL</code>; <code>THREADFLOW_*</code> / <code>SHOPIFY_*</code> already set). New <strong>Catalog</strong> nav shell and lib dirs. No behaviour change to existing screens.</p></div>
+        </div>
+        <div class="phase">
+          <span class="phase-tag">Phase 1</span>
+          <div><h4>Threadflow ingestion (read-only)</h4><p>Typed TF client + manufacturer resolution; upsert engine with barcode set-once and don't-clobber-customs; manual sync trigger + season/mode selector; read-only browse. <strong>Goal: pull SS27 in and browse it.</strong></p></div>
+        </div>
+        <div class="phase">
+          <span class="phase-tag">Phase 2</span>
+          <div><h4>Enrichment editor &amp; external products</h4><p>Carry the full editing suite onto the master — inline tags/status/vendor, all metafields, pickers, find&nbsp;&amp;&nbsp;replace, column picker, group auto-link, fit models, and the media manager (upload + reorder) — with field ownership/locking. Plus manual external-product creation with per-channel validation and the Shopify carry-over importer.</p></div>
+        </div>
+        <div class="phase">
+          <span class="phase-tag">Phase 3</span>
+          <div><h4>Channel model + Shopify push</h4><p>Publication UI (destinations per product); Shopify push mapping reusing existing mutations; store GIDs; publish / unpublish flow.</p></div>
+        </div>
+        <div class="phase">
+          <span class="phase-tag">Phase 4</span>
+          <div><h4>Loom push</h4><p>Finalise the Loom ingest contract; build the feed payload; outbox + change-propagation worker; lifecycle signals; image re-hosting.</p></div>
+        </div>
+        <div class="phase">
+          <span class="phase-tag">Phase 5</span>
+          <div><h4>Pricing &amp; cost write-back</h4><p>Season-scoped price editing, margin view, price history; cost write-back endpoint → variant cost → forward to Shopify.</p></div>
+        </div>
+        <div class="phase">
+          <span class="phase-tag">Phase 6</span>
+          <div><h4>Scheduling &amp; hardening</h4><p>Daily cron, reconciliation snapshots, monitoring/alerting on sync failures.</p></div>
+        </div>
+        <div class="phase later">
+          <span class="phase-tag">Later · 7</span>
+          <div><h4>Retire the live-Shopify plumbing</h4><p>The editor's functionality already lives in the master (Phase&nbsp;2). This phase only removes the old wiring — the pages that read/write Shopify directly — once the push flow is at parity. <strong>No editing capability is lost</strong>: it moved, it wasn't retired.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <hr class="stitch" />
+    <p class="foot">
+      Loom-side references: <code>handoff.md</code>; data model <code>prisma/schema.prisma</code>;
+      current sync <code>threadflow.ts</code>. Threadflow: External Read-Only API
+      (<code>/api/external/v1/*</code>). Canonical source for this document:
+      <code>docs/product-master-architecture.md</code>.
+    </p>
+  </main>
+</div>
+
+</body>
+</html>

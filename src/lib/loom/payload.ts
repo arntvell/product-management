@@ -1,0 +1,156 @@
+// Build the Loom feed payload from master data, per handoff.md.
+// Style -> Colorway -> Variant, with stable ids, per-season prices, the full
+// customs block + manufacturer, channels, and per-season lifecycle flags.
+import { prisma } from "@/lib/db";
+import { loomMissing } from "@/lib/master/readiness";
+
+export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: string) {
+  return prisma.colorway.findMany({
+    where: { id: { in: colorwayIds } },
+    include: {
+      style: true,
+      brand: true,
+      manufacturer: true,
+      variants: { orderBy: { sizeLabel: "asc" } },
+      prices: { where: { season: { code: seasonCode } } },
+      seasonImages: { where: { slot: "MAIN", season: { code: seasonCode } } },
+      entries: { where: { season: { code: seasonCode } } },
+      publications: true,
+    },
+  });
+}
+
+export type LoomColorway = Awaited<ReturnType<typeof loadColorwaysForLoom>>[number];
+
+function has(v: string | null | undefined): string | null {
+  return v && v.trim() ? v : null;
+}
+
+/** Required fields missing for THIS colorway's Loom push (empty = ready). */
+export function loomMissingForColorway(cw: LoomColorway): string[] {
+  return loomMissing({
+    hasVariants: cw.variants.length > 0,
+    hasPrice: cw.prices.some((p) => p.priceType === "MSRP"),
+    hsCode: has(cw.hsCodeOverride) ?? cw.style.hsCode,
+    customsDescription: has(cw.customsDescriptionOverride) ?? cw.style.customsDescription,
+    weightKg: cw.weightKgOverride ?? cw.style.weightKg,
+    fiberComposition: has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition,
+    countryOfOrigin: cw.countryOfOrigin,
+    hasManufacturer: !!cw.manufacturerId,
+  });
+}
+
+function buildColorway(cw: LoomColorway) {
+  const entry = cw.entries[0];
+  // Customs: colorway override falls back to the style.
+  const customs = {
+    hs_code: has(cw.hsCodeOverride) ?? cw.style.hsCode ?? null,
+    customs_description: has(cw.customsDescriptionOverride) ?? cw.style.customsDescription ?? null,
+    weight_kg: (cw.weightKgOverride ?? cw.style.weightKg)?.toString() ?? null,
+    fiber_composition: has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition ?? null,
+    country_of_origin: cw.countryOfOrigin ?? null,
+  };
+
+  // Prices: { CUR: { msrp, ws } } for this season.
+  const prices: Record<string, { msrp?: number; ws?: number }> = {};
+  for (const p of cw.prices) {
+    const cur = (prices[p.currency] ??= {});
+    if (p.priceType === "MSRP") cur.msrp = Number(p.amount);
+    if (p.priceType === "WHOLESALE") cur.ws = Number(p.amount);
+  }
+
+  const manufacturer = cw.manufacturer
+    ? {
+        // Loom keys manufacturers by the Threadflow id where present.
+        manufacturer_id: cw.manufacturer.threadflowId ?? cw.manufacturer.id,
+        name: cw.manufacturer.name,
+        address: {
+          line1: cw.manufacturer.addrLine1 ?? null,
+          line2: cw.manufacturer.addrLine2 ?? null,
+          zip: cw.manufacturer.zip ?? null,
+          city: cw.manufacturer.city ?? null,
+          country: cw.manufacturer.country ?? null,
+        },
+      }
+    : null;
+
+  return {
+    colorway_id: cw.id,
+    colorway_sku: cw.colorwaySku,
+    name: cw.name,
+    brand: cw.brand?.name ?? null,
+    color: cw.color ?? null,
+    swatch: { hex: cw.swatchHex ?? null },
+    tags: cw.tags,
+    product_type: cw.productType ?? null,
+    image: cw.seasonImages[0]?.url ?? null,
+    ...customs,
+    manufacturer_id: manufacturer?.manufacturer_id ?? null,
+    manufacturer,
+    channels: {
+      loom: cw.publications.some((p) => p.channel === "LOOM"),
+      shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
+    },
+    dropped: entry?.cancelled ?? false,
+    approved_for_production: entry?.approvedForProduction ?? false,
+    prices,
+    variants: cw.variants.map((v) => ({
+      variant_id: v.id,
+      variant_sku: v.variantSku,
+      barcode: v.barcode ?? null,
+      dimensions: v.dim2
+        ? { waist: v.dim1, length: v.dim2 }
+        : { size: v.dim1 },
+    })),
+  };
+}
+
+export interface LoomPayload {
+  season: string;
+  styles: Array<{
+    style_id: string;
+    style_sku: string;
+    style_name: string;
+    gender: string | null;
+    unisex: boolean;
+    category: string;
+    colorways: ReturnType<typeof buildColorway>[];
+  }>;
+}
+
+/** Group already-loaded colorways into the Loom payload shape. */
+export function buildLoomPayloadFromColorways(
+  colorways: LoomColorway[],
+  seasonCode: string
+): LoomPayload {
+  // Group colorways under their style.
+  const byStyle = new Map<string, LoomColorway[]>();
+  for (const cw of colorways) {
+    const list = byStyle.get(cw.styleId) ?? [];
+    list.push(cw);
+    byStyle.set(cw.styleId, list);
+  }
+
+  const styles = [...byStyle.values()].map((cws) => {
+    const s = cws[0].style;
+    return {
+      style_id: s.id,
+      style_sku: s.styleSku,
+      style_name: s.styleName,
+      gender: s.gender,
+      unisex: s.unisex,
+      category: s.category,
+      colorways: cws.map(buildColorway),
+    };
+  });
+
+  return { season: seasonCode, styles };
+}
+
+export async function buildLoomPayload(
+  colorwayIds: string[],
+  seasonCode: string
+): Promise<LoomPayload> {
+  const colorways = await loadColorwaysForLoom(colorwayIds, seasonCode);
+  return buildLoomPayloadFromColorways(colorways, seasonCode);
+}

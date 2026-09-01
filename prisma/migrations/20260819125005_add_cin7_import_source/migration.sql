@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "Source" ADD VALUE 'CIN7_IMPORT';
