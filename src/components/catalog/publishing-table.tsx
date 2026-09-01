@@ -14,6 +14,23 @@ interface PushReport {
   issues: string[]; // failures, warnings, and skips — one line each
 }
 
+/** Result of a Loom dry run — what a push would do, before it does it. */
+interface LoomPreview {
+  season: string;
+  wouldSend: number;
+  styles: number;
+  /** Products that would go out with channels.loom=true, so Loom publishes them. */
+  willPublish: number;
+  /** Products that would arrive as data only and need a second push to go live. */
+  dataOnly: number;
+  newToLoom: number;
+  missingImage: number;
+  currencies: string[];
+  skipped: string[];
+  /** Set after a real push, to explain what still needs a second push. */
+  pushedDataOnly?: number;
+}
+
 export function PublishingTable({
   rows,
   season,
@@ -28,12 +45,52 @@ export function PublishingTable({
   const [pushing, setPushing] = useState(false);
   const [pushingLoom, setPushingLoom] = useState(false);
   const [report, setReport] = useState<PushReport | null>(null);
+  const [preview, setPreview] = useState<LoomPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   // Map a colorway id to its readable name for the report.
   const nameOf = (id: string) => {
     const r = items.find((x) => x.id === id);
     return r ? `${r.styleName} / ${r.name}` : id;
   };
+
+  // Dry run first: build the payload server-side and report what WOULD be sent,
+  // without transmitting or marking anything published.
+  async function previewLoom() {
+    if (!selected.size) return;
+    if (!season) {
+      toast.error("Pick a season first — Loom pushes are per-season.");
+      return;
+    }
+    setPreviewing(true);
+    setReport(null);
+    try {
+      const res = await fetch("/api/catalog/push/loom", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colorwayIds: [...selected], seasonCode: season, dryRun: true }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Preview failed");
+      setPreview({
+        wouldSend: d.preview?.wouldSend ?? 0,
+        styles: d.preview?.styles ?? 0,
+        willPublish: d.preview?.channelsLoomTrue ?? 0,
+        dataOnly: d.preview?.channelsLoomFalse ?? 0,
+        newToLoom: d.preview?.newToLoom ?? 0,
+        missingImage: d.preview?.missingImage ?? 0,
+        currencies: d.preview?.currencies ?? [],
+        skipped: (d.skipped ?? []).map(
+          (x: { colorwayId: string; reason: string }) => `${nameOf(x.colorwayId)} — ${x.reason}`
+        ),
+        season,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Preview failed");
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   async function pushLoomSelected() {
     if (selected.size === 0) return;
@@ -73,7 +130,14 @@ export function PublishingTable({
         total: data.requested ?? ids.length,
         issues: skipped.map((s) => `${nameOf(s.colorwayId)} — skipped: ${s.reason}`),
       });
-      if (data.ok) toast.success(`Pushed ${data.sent} to Loom (${season})${skipped.length ? `, ${skipped.length} skipped` : ""}`);
+      if (data.ok) {
+        toast.success(`Pushed ${data.sent} to Loom (${season})${skipped.length ? `, ${skipped.length} skipped` : ""}`);
+        // A product Loom has not seen goes out with channels.loom=false, so it
+        // arrives as data but is not published. Say so plainly and leave the
+        // selection intact so a second push can publish it.
+        const dataOnly = preview?.dataOnly ?? 0;
+        setPreview((prev: LoomPreview | null) => (prev ? { ...prev, pushedDataOnly: dataOnly } : prev));
+      }
       else toast.error(`Loom push failed — ${data.sent ?? 0} sent, ${skipped.length} skipped`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Loom push failed");
@@ -240,6 +304,88 @@ export function PublishingTable({
         ))}
       </div>
 
+      {preview && (
+        <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-sm">
+          <div className="flex items-baseline justify-between">
+            <h3 className="font-semibold">
+              {preview.pushedDataOnly === undefined ? "Preview" : "Pushed"} — Loom, {preview.season}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setPreview(null)}
+              className="text-xs text-muted-foreground underline underline-offset-4"
+            >
+              dismiss
+            </button>
+          </div>
+
+          <p className="mt-1 text-muted-foreground">
+            {preview.wouldSend} product{preview.wouldSend !== 1 ? "s" : ""} across{" "}
+            {preview.styles} style{preview.styles !== 1 ? "s" : ""}
+            {preview.skipped.length > 0 && ` · ${preview.skipped.length} skipped as not ready`}
+          </p>
+
+          {/* The two-stage publish gate, stated plainly. */}
+          {preview.dataOnly > 0 && (
+            <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[13px] text-amber-800 dark:text-amber-400">
+              <b>{preview.dataOnly}</b> of these have never been pushed to Loom, so they go
+              out marked <code>loom: false</code> — Loom receives the data but does{" "}
+              <b>not</b> publish them. Push a second time to publish.{" "}
+              {preview.willPublish > 0 && (
+                <>The other <b>{preview.willPublish}</b> publish immediately.</>
+              )}
+            </div>
+          )}
+          {preview.dataOnly === 0 && preview.wouldSend > 0 && (
+            <div className="mt-2 rounded border border-green-500/40 bg-green-500/10 p-2 text-[13px] text-green-800 dark:text-green-400">
+              All {preview.willPublish} publish immediately — Loom has seen them before.
+            </div>
+          )}
+
+          {preview.missingImage > 0 && (
+            <p className="mt-2 text-[13px] text-muted-foreground">
+              ⚠ {preview.missingImage} have no product image — buyers would see them without
+              a picture.
+            </p>
+          )}
+          {preview.currencies.length > 0 && (
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Currencies: {preview.currencies.join(", ")}
+            </p>
+          )}
+
+          {preview.skipped.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-[13px] text-muted-foreground">
+                {preview.skipped.length} skipped — why
+              </summary>
+              <ul className="mt-1 list-inside list-disc text-[13px] text-muted-foreground">
+                {preview.skipped.slice(0, 30).map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          {preview.pushedDataOnly === undefined ? (
+            <Button
+              size="sm"
+              className="mt-3"
+              disabled={pushingLoom || !preview.wouldSend}
+              onClick={pushLoomSelected}
+            >
+              {pushingLoom ? "Pushing…" : `Push ${preview.wouldSend} to Loom`}
+            </Button>
+          ) : preview.pushedDataOnly > 0 ? (
+            <Button size="sm" className="mt-3" disabled={pushingLoom} onClick={pushLoomSelected}>
+              {pushingLoom
+                ? "Publishing…"
+                : `Push again to publish ${preview.pushedDataOnly}`}
+            </Button>
+          ) : null}
+        </div>
+      )}
+
       {/* Bulk toolbar */}
       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
         <span className="px-1 text-xs text-muted-foreground tabular-nums">
@@ -260,6 +406,15 @@ export function PublishingTable({
         <div className="ml-auto flex flex-wrap gap-1.5">
           <Button size="sm" variant="outline" disabled={busy || !selected.size} onClick={() => bulk("SHOPIFY", "target")}>
             Target Shopify
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={previewing || !selected.size}
+            onClick={previewLoom}
+            title="Build the payload and show what would be sent — nothing is transmitted"
+          >
+            {previewing ? "Checking…" : "Preview Loom push"}
           </Button>
           <Button size="sm" variant="outline" disabled={busy || !selected.size} onClick={() => bulk("LOOM", "target")}>
             Target Loom
