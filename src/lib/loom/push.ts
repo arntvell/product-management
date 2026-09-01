@@ -177,6 +177,7 @@ export async function pushColorwaysToLoom(
     const settled: LoomJob | null = await waitForLoomJob(jobId);
     if (!settled) {
       job = { status: "unknown", unconfirmed: true };
+      ok = false; // never observed a result — do not claim success
     } else {
       job = {
         status: settled.status,
@@ -187,8 +188,12 @@ export async function pushColorwaysToLoom(
         shapeWarnings: settled.summary?.shapeWarnings,
         unconfirmed: settled.status === "running" || settled.status === "queued",
       };
-      // Loom finished and reported a failure — do not mark anything published.
+      // Only a finished, successful job means published. An errored job clearly
+      // is not; neither is one still running when our budget ran out — marking
+      // those published records a state we have not observed, which is how the
+      // 26 August failure went unnoticed in the first place.
       if (settled.status === "error") ok = false;
+      if (job.unconfirmed) ok = false;
     }
   }
 

@@ -59,8 +59,10 @@ export async function waitForLoomJob(
   jobId: string,
   opts: { timeoutMs?: number; intervalMs?: number } = {}
 ): Promise<LoomJob | null> {
-  const timeout = opts.timeoutMs ?? 120_000;
-  const interval = opts.intervalMs ?? 2_000;
+  // A 217-colorway push took 128 s of Loom-side work, so a two-minute budget
+  // times out on a routine full-season delivery and reports it as unconfirmed.
+  const timeout = opts.timeoutMs ?? 600_000;
+  const interval = opts.intervalMs ?? 3_000;
   const deadline = Date.now() + timeout;
   let last: LoomJob | null = null;
   while (Date.now() < deadline) {
