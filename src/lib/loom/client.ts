@@ -10,8 +10,11 @@ export async function loomUpsert<T = unknown>(body: unknown): Promise<{
   data: T | null;
   raw: string;
 }> {
-  const token = process.env.LOOM_LOCAL_TOKEN;
-  if (!token) throw new Error("Missing LOOM_LOCAL_TOKEN env var");
+  // Local dev uses LOOM_LOCAL_TOKEN; the deployed environments were set up
+  // with LOOM_TOKEN. Accept either rather than have the push throw depending
+  // on where it runs.
+  const token = process.env.LOOM_LOCAL_TOKEN ?? process.env.LOOM_TOKEN;
+  if (!token) throw new Error("Missing LOOM_LOCAL_TOKEN / LOOM_TOKEN env var");
 
   const res = await fetch(LOOM_UPSERT_URL, {
     method: "POST",
