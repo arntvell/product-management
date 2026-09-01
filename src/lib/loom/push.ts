@@ -6,7 +6,7 @@ import {
   loomMissingForColorway,
   type LoomPayload,
 } from "./payload";
-import { loomUpsert } from "./client";
+import { loomUpsert, waitForLoomJob, type LoomJob } from "./client";
 
 export interface LoomSkipped {
   colorwayId: string;
@@ -24,6 +24,18 @@ export interface LoomPushResult {
   raw: string;
   /** True when nothing was transmitted and nothing was marked published. */
   dryRun?: boolean;
+  /** Loom's job id, and what the job actually did once it finished. */
+  jobId?: string;
+  job?: {
+    status: string;
+    created?: number;
+    updated?: number;
+    archived?: number;
+    fatalError?: string;
+    shapeWarnings?: string[];
+    /** The job never settled inside our polling window. */
+    unconfirmed?: boolean;
+  };
   /** Dry run only: what WOULD be sent, so it can be inspected before it goes. */
   preview?: {
     wouldSend: number;
@@ -45,6 +57,14 @@ export interface LoomPushResult {
 export interface LoomPushOptions {
   /** Build and report the payload without transmitting or recording anything. */
   dryRun?: boolean;
+  /**
+   * Colorways to WITHDRAW from Loom rather than publish. Sent with
+   * channels.loom = false, which archives them in Loom while keeping every
+   * order, purchase order and receipt intact.
+   */
+  archiveColorwayIds?: string[];
+  /** Skip waiting for the job to finish. Reports acceptance only. */
+  skipJobWait?: boolean;
 }
 
 export async function pushColorwaysToLoom(
@@ -87,7 +107,8 @@ export async function pushColorwaysToLoom(
     };
   }
 
-  const payload = buildLoomPayloadFromColorways(sendable, seasonCode);
+  const archive = new Set(opts.archiveColorwayIds ?? []);
+  const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive);
 
   if (opts.dryRun) {
     // Nothing leaves the process and no ChannelPublication is touched.
@@ -138,7 +159,32 @@ export async function pushColorwaysToLoom(
     res.data == null || typeof (res.data as { ok?: unknown }).ok !== "boolean"
       ? true
       : (res.data as { ok: boolean }).ok;
-  const ok = res.ok && bodyOk;
+  let ok = res.ok && bodyOk;
+
+  // An upsert responds as soon as the payload is ACCEPTED. The job can still
+  // fail afterwards, and did once — Loom's database was briefly unreachable and
+  // nothing was written, while we recorded 217 products as pushed. Wait for the
+  // job to settle so a push is only reported as done when it is done.
+  const jobId = (res.data as { jobId?: string } | null)?.jobId;
+  let job: LoomPushResult["job"];
+  if (ok && jobId && !opts.skipJobWait) {
+    const settled: LoomJob | null = await waitForLoomJob(jobId);
+    if (!settled) {
+      job = { status: "unknown", unconfirmed: true };
+    } else {
+      job = {
+        status: settled.status,
+        created: settled.summary?.created,
+        updated: settled.summary?.updated,
+        archived: settled.summary?.archived,
+        fatalError: settled.summary?.fatalError,
+        shapeWarnings: settled.summary?.shapeWarnings,
+        unconfirmed: settled.status === "running" || settled.status === "queued",
+      };
+      // Loom finished and reported a failure — do not mark anything published.
+      if (settled.status === "error") ok = false;
+    }
+  }
 
   if (ok) {
     // Mark published ONLY for the colorways actually transmitted. Two bulk
@@ -172,10 +218,12 @@ export async function pushColorwaysToLoom(
     ok,
     status: res.status,
     styles: payload.styles.length,
-    sent: sendable.length,
+    sent: ok ? sendable.length : 0,
     requested: colorwayIds.length,
     skipped,
     response: res.data,
     raw: res.raw,
+    jobId,
+    job,
   };
 }

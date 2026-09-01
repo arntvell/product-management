@@ -40,7 +40,7 @@ export function loomMissingForColorway(cw: LoomColorway): string[] {
   });
 }
 
-function buildColorway(cw: LoomColorway) {
+function buildColorway(cw: LoomColorway, archive?: Set<string>) {
   const entry = cw.entries[0];
   // Customs: colorway override falls back to the style.
   const customs = {
@@ -88,7 +88,13 @@ function buildColorway(cw: LoomColorway) {
     manufacturer_id: manufacturer?.manufacturer_id ?? null,
     manufacturer,
     channels: {
-      loom: cw.publications.some((p) => p.channel === "LOOM"),
+      // Loom treats loom:false as ARCHIVE — it hides the product across
+      // catalogue, order builder, curation and pricing. It is a withdrawal
+      // signal, not "not published yet", so it must express intent: true for
+      // anything we are deliberately putting on Loom, false only when we mean
+      // to withdraw it. Deriving it from whether a publication row happened to
+      // exist meant every product's FIRST push archived it on arrival.
+      loom: !archive?.has(cw.id),
       shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
     },
     dropped: entry?.cancelled ?? false,
@@ -118,10 +124,17 @@ export interface LoomPayload {
   }>;
 }
 
-/** Group already-loaded colorways into the Loom payload shape. */
+/**
+ * Group already-loaded colorways into the Loom payload shape.
+ *
+ * `archive` names colorways to withdraw from Loom — they are sent with
+ * channels.loom = false, which archives them there while preserving orders,
+ * purchase orders and receipts. Everything else is sent as published.
+ */
 export function buildLoomPayloadFromColorways(
   colorways: LoomColorway[],
-  seasonCode: string
+  seasonCode: string,
+  archive?: Set<string>
 ): LoomPayload {
   // Group colorways under their style.
   const byStyle = new Map<string, LoomColorway[]>();
@@ -140,7 +153,7 @@ export function buildLoomPayloadFromColorways(
       gender: s.gender,
       unisex: s.unisex,
       category: s.category,
-      colorways: cws.map(buildColorway),
+      colorways: cws.map((cw) => buildColorway(cw, archive)),
     };
   });
 
