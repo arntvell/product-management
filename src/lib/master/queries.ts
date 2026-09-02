@@ -80,7 +80,8 @@ export async function listColorwaysForPublishing(
       },
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
       entries: { select: { cancelled: true, season: { select: { code: true } } } },
-      _count: { select: { variants: true } },
+      channelContent: { select: { channel: true, field: true, value: true } },
+      _count: { select: { variants: true, media: true } },
     },
   });
 
@@ -94,7 +95,22 @@ export async function listColorwaysForPublishing(
     const hasVariants = cw._count.variants > 0;
     const hasPrice = cw.prices.length > 0;
 
-    const shopifyMiss = shopifyMissing({ hasVariants, hasPrice });
+    const shopDesc =
+      cw.channelContent.find(
+        (c) => c.channel === "SHOPIFY" && c.field === "fullDescription"
+      )?.value ??
+      cw.fullDescription ??
+      cw.shortDescription;
+    const shopifyMiss = shopifyMissing({
+      hasVariants,
+      hasPrice,
+      description: shopDesc,
+      hasImage: cw._count.media > 0 || cw.seasonImages.length > 0,
+      hasTags: cw.tags.length > 0,
+      swatchHex: cw.swatchHex,
+      carePageId: cw.carePageId,
+      fitguidePageId: cw.fitguidePageId,
+    });
     const loomMiss = loomMissing({
       hasVariants,
       hasPrice,

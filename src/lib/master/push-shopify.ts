@@ -13,7 +13,7 @@ import {
 } from "@/lib/shopify/mutations";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
-import { shopifyMissing } from "./readiness";
+import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
 
 // Fetch the live product's fields we must MERGE with (not overwrite): tags a
 // merchant added in Shopify admin, and current publish status.
@@ -129,7 +129,10 @@ export interface PushResult {
 
 export async function pushColorwayToShopify(
   id: string,
-  seasonCode?: string
+  seasonCode?: string,
+  /** Publish despite missing merchandising fields (never despite missing
+   *  variants or price). A deliberate choice, not a default. */
+  allowIncomplete = false
 ): Promise<PushResult> {
   const cw = await getColorwayForPublish(id, seasonCode);
   if (!cw) throw new Error("Colorway not found");
@@ -141,12 +144,29 @@ export async function pushColorwayToShopify(
   // --- Readiness gate: never push a product that can't publish correctly. ---
   const hasVariants = preview.variants.length > 0;
   const hasPrice = cw.prices.some((p) => p.currency === "NOK" && p.priceType === "MSRP");
-  const missing = shopifyMissing({ hasVariants, hasPrice });
-  if (missing.length)
+  const shopDesc =
+    cw.channelContent.find((c) => c.channel === "SHOPIFY" && c.field === "fullDescription")?.value ??
+    cw.fullDescription ??
+    cw.shortDescription;
+  const missing = shopifyMissing({
+    hasVariants,
+    hasPrice,
+    description: shopDesc,
+    hasImage: cw.media.length > 0 || cw.seasonImages.length > 0,
+    hasTags: cw.tags.length > 0,
+    swatchHex: cw.swatchHex,
+    carePageId: cw.carePageId,
+    fitguidePageId: cw.fitguidePageId,
+  });
+  // Variants and price are absolute; the merchandising fields can be waived
+  // deliberately, but never by omission — publishing a product page with no
+  // description or photograph should take a decision, not a default.
+  const blocking = shopifyBlockingMissing({ hasVariants, hasPrice });
+  if (blocking.length || (missing.length && !allowIncomplete))
     throw new Error(
       `Not ready for Shopify — missing: ${missing.join(", ")}${
         seasonCode ? ` (season ${seasonCode})` : ""
-      }.`
+      }.${blocking.length ? "" : " Pass allowIncomplete to publish anyway."}`
     );
 
   const warnings: string[] = [];

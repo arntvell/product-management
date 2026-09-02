@@ -13,14 +13,41 @@ function has(v: string | null | undefined): boolean {
 export interface ShopifyReadinessInput {
   hasVariants: boolean;
   hasPrice: boolean;
+  /** Shopify-resolved description (override -> base). */
+  description?: string | null;
+  /** At least one image the storefront can show. */
+  hasImage?: boolean;
+  hasTags?: boolean;
+  swatchHex?: string | null;
+  carePageId?: string | null;
+  fitguidePageId?: string | null;
 }
 
-/** Missing fields that block a Shopify push. Empty array = ready. */
+/**
+ * Missing fields that block a Shopify push. Empty array = ready.
+ *
+ * Variants and price make a product *orderable*; they do not make it
+ * *sellable*. A product page with no description and no photograph is not
+ * something to put in front of a customer, and checking only the commerce
+ * fields meant the app reported 226 FW26 products ready when none had either.
+ * The merchandising fields are part of the gate for that reason.
+ */
 export function shopifyMissing(i: ShopifyReadinessInput): string[] {
   const missing: string[] = [];
   if (!i.hasVariants) missing.push("variants");
   if (!i.hasPrice) missing.push("price");
+  if (!has(i.description)) missing.push("description");
+  if (i.hasImage === false) missing.push("image");
+  if (i.hasTags === false) missing.push("tags");
+  if (!has(i.swatchHex)) missing.push("swatch");
+  if (!has(i.carePageId)) missing.push("care page");
+  if (!has(i.fitguidePageId)) missing.push("fit guide");
   return missing;
+}
+
+/** The subset that stops a product being orderable at all. */
+export function shopifyBlockingMissing(i: ShopifyReadinessInput): string[] {
+  return shopifyMissing(i).filter((m) => m === "variants" || m === "price");
 }
 
 export interface LoomReadinessInput {

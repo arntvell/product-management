@@ -214,11 +214,17 @@ model SeasonEntry {
   // pulled forward from an earlier season. (CORE is a product-level trait; see
   // Colorway.isCore.) Relative to the season, so it lives on the entry.
   origin                EntryOrigin     @default(NEW)
+  // Which delivery of the season this product belongs to ("Drop 1", "Drop 2").
+  // A drop is a slice of ONE season, so it lives on the entry rather than the
+  // colorway — the same garment can land in different drops across seasons.
+  // Free text so merchandising can name them without a migration.
+  drop                  String?
   merchPosition         Int? // preserved across cancel/restore
   variants              SeasonVariant[]
 
   @@unique([colorwayId, seasonId])
   @@index([seasonId])
+  @@index([seasonId, drop])
 }
 
 model SeasonVariant {
