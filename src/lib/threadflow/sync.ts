@@ -76,6 +76,130 @@ async function runBatched(ops: Prisma.PrismaPromise<unknown>[]): Promise<void> {
   }
 }
 
+/**
+ * Make every colorway's SKU reachable before the updates run.
+ *
+ * Two things break a naive rename, and both are Threadflow's shape rather than
+ * ours:
+ *
+ *  - Rotation. Threadflow can move a SKU from one colorway to another in the
+ *    same season — Fuller Chino's "Oyster" SKU moving from Khaki to Beige while
+ *    Khaki takes a new one. Applying those one at a time hits the unique index
+ *    whichever order you choose, so every changing row goes to a temporary SKU
+ *    first and lands on its real one after.
+ *
+ *  - Per-season duplicates. Threadflow issues a colorway id per season, so the
+ *    same garment can exist twice under one SKU — an empty FW26 record and a
+ *    sized SS27 one. Only one can hold the SKU here. The empty record yields it
+ *    and keeps a parked SKU, so nothing is deleted and the sized record wins.
+ *
+ * Returns human-readable notes; the caller surfaces them on the run.
+ */
+async function reconcileColorwaySkus(
+  desired: Map<string, string>
+): Promise<string[]> {
+  const notes: string[] = [];
+  const ids = [...desired.keys()];
+  if (!ids.length) return notes;
+
+  const current = await chunkedFind(ids, (chunk) =>
+    prisma.colorway.findMany({
+      where: { id: { in: chunk } },
+      select: { id: true, colorwaySku: true },
+    })
+  );
+  const currentSku = new Map(current.map((c) => [c.id, c.colorwaySku]));
+
+  const changing = ids.filter(
+    (id) => currentSku.has(id) && currentSku.get(id) !== desired.get(id)
+  );
+  if (!changing.length) return notes;
+
+  // Anything else already sitting on a SKU we need.
+  const wanted = changing.map((id) => desired.get(id)!);
+  const blockers = (
+    await chunkedFind(wanted, (chunk) =>
+      prisma.colorway.findMany({
+        where: { colorwaySku: { in: chunk } },
+        select: {
+          id: true,
+          colorwaySku: true,
+          name: true,
+          threadflowId: true,
+          _count: { select: { variants: true } },
+        },
+      })
+    )
+  ).filter((b) => !changing.includes(b.id));
+
+  for (const b of blockers) {
+    if (b._count.variants > 0) {
+      // A record with sizes is somebody's real product. Refuse rather than
+      // quietly move a SKU off it.
+      notes.push(
+        `SKU ${b.colorwaySku} is held by "${b.name}" which has ${b._count.variants} variants — ` +
+          `not reassigned. Threadflow wants it for another colorway; resolve by hand.`
+      );
+      for (const id of [...changing]) {
+        if (desired.get(id) === b.colorwaySku) {
+          changing.splice(changing.indexOf(id), 1);
+          desired.delete(id);
+        }
+      }
+      continue;
+    }
+    const parked = `${b.colorwaySku}--dup-${(b.threadflowId ?? b.id).slice(0, 8)}`;
+    await prisma.colorway.update({
+      where: { id: b.id },
+      data: { colorwaySku: parked },
+    });
+    notes.push(
+      `SKU ${b.colorwaySku} was held by an empty duplicate ("${b.name}", 0 variants); ` +
+        `parked as ${parked} so the sized colorway can take it.`
+    );
+  }
+
+  // Two-phase so a rotation cannot collide with itself.
+  const stamp = Date.now().toString(36);
+  for (let i = 0; i < changing.length; i++) {
+    await prisma.colorway.update({
+      where: { id: changing[i] },
+      data: { colorwaySku: `--sync-${stamp}-${i}` },
+    });
+  }
+  for (const id of changing) {
+    const from = currentSku.get(id)!;
+    const to = desired.get(id)!;
+    await prisma.colorway.update({ where: { id }, data: { colorwaySku: to } });
+
+    // Variant SKUs are derived from the colorway's, and the sync matches
+    // variants on that SKU — so leaving them behind makes the incoming set look
+    // new and every size ends up duplicated, the old copies stranded under the
+    // same colorway. Carry them across with the rename.
+    const vars = await prisma.variant.findMany({
+      where: { colorwayId: id, variantSku: { startsWith: `${from}-` } },
+      select: { id: true, variantSku: true },
+    });
+    let carried = 0;
+    for (const v of vars) {
+      const nextSku = `${to}${v.variantSku.slice(from.length)}`;
+      // Only if nothing else already holds it — a collision here means the
+      // incoming set genuinely differs, and the normal variant sync handles it.
+      const taken = await prisma.variant.findUnique({
+        where: { variantSku: nextSku },
+        select: { id: true },
+      });
+      if (taken) continue;
+      await prisma.variant.update({ where: { id: v.id }, data: { variantSku: nextSku } });
+      carried++;
+    }
+    notes.push(
+      `SKU ${from} -> ${to}` + (carried ? ` (${carried} variant SKUs carried across)` : "")
+    );
+  }
+  return notes;
+}
+
 /** Read existing rows in chunks (keeps the `IN (...)` param count sane). */
 async function chunkedFind<T>(
   keys: string[],
@@ -259,6 +383,10 @@ export async function syncSeason(
       return { id, wasNew: !existingId };
     };
 
+    // Where each colorway's SKU must end up, so collisions can be resolved
+    // before the updates run rather than crashing on the unique index.
+    const desiredSku = new Map<string, string>();
+
     // 5. Build write ops.
     const styleCreates: Prisma.StyleCreateManyInput[] = [];
     const styleUpdates: Prisma.PrismaPromise<unknown>[] = [];
@@ -327,6 +455,7 @@ export async function syncSeason(
 
       for (const c of s.colorways) {
         const resolved = resolveColorway(c.colorway_id, c.colorway_sku);
+        desiredSku.set(resolved.id, c.colorway_sku);
         buildColorway(c, {
           styleId,
           brandId: brand.id,
@@ -363,6 +492,8 @@ export async function syncSeason(
 
     if (colorwayCreates.length)
       await prisma.colorway.createMany({ data: colorwayCreates });
+    const skuNotes = await reconcileColorwaySkus(desiredSku);
+    errors.push(...skuNotes);
     await runBatched(colorwayUpdates);
 
     if (variantCreates.length)
