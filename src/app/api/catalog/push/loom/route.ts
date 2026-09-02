@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     dryRun?: boolean;
     archiveColorwayIds?: string[];
     skipJobWait?: boolean;
+    eventId?: string;
   };
   try {
     body = await req.json();
@@ -32,6 +33,7 @@ export async function POST(req: Request) {
       dryRun: body.dryRun,
       archiveColorwayIds: body.archiveColorwayIds,
       skipJobWait: body.skipJobWait,
+      eventId: body.eventId,
     });
     return NextResponse.json(result, { status: result.ok ? 200 : 502 });
   } catch (err) {

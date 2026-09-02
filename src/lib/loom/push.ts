@@ -65,6 +65,13 @@ export interface LoomPushOptions {
   archiveColorwayIds?: string[];
   /** Skip waiting for the job to finish. Reports acceptance only. */
   skipJobWait?: boolean;
+  /**
+   * Override the delivery id. The default is derived from the contents, so an
+   * identical resend carries the same id and Loom dedupes it — correct for a
+   * retry after a connection failure, wrong when Loom has asked for the same
+   * products to be applied again.
+   */
+  eventId?: string;
 }
 
 export async function pushColorwaysToLoom(
@@ -114,7 +121,7 @@ export async function pushColorwaysToLoom(
   // add more, but cannot send an archived product as published by omission.
   const archive = new Set<string>(opts.archiveColorwayIds ?? []);
   for (const c of sendable) if (c.archived) archive.add(c.id);
-  const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive);
+  const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive, opts.eventId);
 
   if (opts.dryRun) {
     // Nothing leaves the process and no ChannelPublication is touched.
