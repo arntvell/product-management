@@ -24,7 +24,11 @@ interface LoomPreview {
   /** Products that would arrive as data only and need a second push to go live. */
   dataOnly: number;
   newToLoom: number;
+  /** How many carry is_core in this delivery. */
+  core: number;
   missingImage: number;
+  /** Set after a failed push, so the retry can use a different id. */
+  failedEventId?: string;
   currencies: string[];
   skipped: string[];
   /** Set after a real push, to explain what still needs a second push. */
@@ -78,6 +82,7 @@ export function PublishingTable({
         willPublish: d.preview?.channelsLoomTrue ?? 0,
         dataOnly: d.preview?.channelsLoomFalse ?? 0,
         newToLoom: d.preview?.newToLoom ?? 0,
+        core: d.preview?.core ?? 0,
         missingImage: d.preview?.missingImage ?? 0,
         currencies: d.preview?.currencies ?? [],
         skipped: (d.skipped ?? []).map(
@@ -106,7 +111,13 @@ export function PublishingTable({
       const res = await fetch("/api/catalog/push/loom", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ colorwayIds: ids, seasonCode: season }),
+        body: JSON.stringify({
+          colorwayIds: ids,
+          seasonCode: season,
+          ...(preview?.failedEventId
+            ? { eventId: `${preview.failedEventId}-retry-${Date.now().toString(36)}` }
+            : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok && data.sent === undefined)
@@ -138,7 +149,20 @@ export function PublishingTable({
         const dataOnly = preview?.dataOnly ?? 0;
         setPreview((prev: LoomPreview | null) => (prev ? { ...prev, pushedDataOnly: dataOnly } : prev));
       }
-      else toast.error(`Loom push failed — ${data.sent ?? 0} sent, ${skipped.length} skipped`);
+      else {
+        const why = data.job?.fatalError
+          ? String(data.job.fatalError).replace(/\s+/g, " ").slice(0, 120)
+          : data.job?.status === "error"
+            ? "Loom reported an error"
+            : "the job did not confirm";
+        toast.error(`Loom push failed — ${why}`);
+        // Loom keeps the event id of a failed job, so pushing again under the
+        // same id returns that same failure. Remember it, and offer a retry
+        // that carries a new one.
+        setPreview((prev: LoomPreview | null) =>
+          prev ? { ...prev, failedEventId: data.eventId ?? "unknown" } : prev
+        );
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Loom push failed");
     } finally {
@@ -339,6 +363,22 @@ export function PublishingTable({
           {preview.dataOnly === 0 && preview.wouldSend > 0 && (
             <div className="mt-2 rounded border border-green-500/40 bg-green-500/10 p-2 text-[13px] text-green-800 dark:text-green-400">
               All {preview.willPublish} publish immediately — Loom has seen them before.
+            </div>
+          )}
+
+          {preview.core > 0 && (
+            <p className="mt-2 text-[13px] text-muted-foreground">
+              <b>{preview.core}</b> of these are marked <b>Core</b> and will be sent as{" "}
+              <code>is_core: true</code> for {preview.season}.
+            </p>
+          )}
+
+          {preview.failedEventId && (
+            <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 p-2 text-[13px] text-rose-800 dark:text-rose-300">
+              The last attempt failed and Loom has kept its delivery id
+              (<code>{preview.failedEventId}</code>). Pushing again from here now
+              sends a <b>new</b> id, so it will actually be retried rather than
+              returning the same failure.
             </div>
           )}
 

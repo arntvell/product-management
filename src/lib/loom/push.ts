@@ -25,6 +25,9 @@ export interface LoomPushResult {
   raw: string;
   /** True when nothing was transmitted and nothing was marked published. */
   dryRun?: boolean;
+  /** The delivery id sent. A failed job keeps its id on Loom's side, so a
+   *  retry must use a different one or it returns the stale failure. */
+  eventId?: string;
   /** Loom's job id, and what the job actually did once it finished. */
   jobId?: string;
   job?: {
@@ -46,6 +49,8 @@ export interface LoomPushResult {
     alreadyPublished: number;
     channelsLoomTrue: number;
     channelsLoomFalse: number;
+    /** How many carry is_core — visible before sending, not after. */
+    core: number;
     dropped: number;
     approvedForProduction: number;
     currencies: string[];
@@ -141,6 +146,7 @@ export async function pushColorwaysToLoom(
       response: null,
       raw: "Dry run — nothing was sent to Loom.",
       dryRun: true,
+      eventId: payload.event_id,
       preview: {
         wouldSend: all.length,
         styles: payload.styles.length,
@@ -152,6 +158,7 @@ export async function pushColorwaysToLoom(
         ).length,
         channelsLoomTrue: all.filter((c) => c.channels.loom).length,
         channelsLoomFalse: all.filter((c) => !c.channels.loom).length,
+        core: all.filter((c) => c.is_core).length,
         dropped: all.filter((c) => c.dropped).length,
         approvedForProduction: all.filter((c) => c.approved_for_production).length,
         currencies: [...currencies].sort(),
@@ -253,6 +260,7 @@ export async function pushColorwaysToLoom(
     skipped,
     response: res.data,
     raw: res.raw,
+    eventId: payload.event_id,
     jobId,
     job,
   };
