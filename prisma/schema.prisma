@@ -334,7 +334,13 @@ model SyncRun {
   finishedAt DateTime?
   status     String // "running" | "ok" | "partial" | "failed"
   counts     Json?
+  // Real failures only. Informational notes (SKU renames, parked duplicates)
+  // live in `warnings`, and deliberately-unwritten items in `skipped` — mixing
+  // them into `errors` made a healthy run look broken and buried the real
+  // message. Historic rows predate the split and still have notes in `errors`.
   errors     Json?
+  warnings   Json?
+  skipped    Json?
 }
 
 // ---------------------------------------------------------------------------
