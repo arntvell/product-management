@@ -82,7 +82,16 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     brand: cw.brand?.name ?? null,
     color: cw.color ?? null,
     swatch: { hex: cw.swatchHex ?? null },
-    tags: cw.tags,
+    // CORE is a first-class trait in the master — the permanent production
+    // line — but it only ever reached Loom by accident, when a product happened
+    // to carry a CORE tag. Send it as a field, and also fold it into tags so it
+    // is visible through a field Loom already consumes rather than waiting on a
+    // contract change. Derived here; the master's own tags are untouched.
+    core: cw.isCore,
+    tags:
+      cw.isCore && !cw.tags.some((t) => /^core$/i.test(t.trim()))
+        ? [...cw.tags, "CORE"]
+        : cw.tags,
     product_type: toLoomCategory(cw.productType),
     image: cw.seasonImages[0]?.url ?? null,
     ...customs,
