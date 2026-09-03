@@ -1,5 +1,6 @@
 // Push master products to Loom's upsert endpoint.
 import { prisma } from "@/lib/db";
+import type { LoomMode } from "./payload";
 import {
   loadColorwaysForLoom,
   buildLoomPayloadFromColorways,
@@ -72,6 +73,8 @@ export interface LoomPushOptions {
    * products to be applied again.
    */
   eventId?: string;
+  /** "full" for a whole season, "data" for a targeted update. */
+  mode?: LoomMode;
 }
 
 export async function pushColorwaysToLoom(
@@ -121,7 +124,7 @@ export async function pushColorwaysToLoom(
   // add more, but cannot send an archived product as published by omission.
   const archive = new Set<string>(opts.archiveColorwayIds ?? []);
   for (const c of sendable) if (c.archived) archive.add(c.id);
-  const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive, opts.eventId);
+  const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive, opts.eventId, opts.mode);
 
   if (opts.dryRun) {
     // Nothing leaves the process and no ChannelPublication is touched.

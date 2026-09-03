@@ -82,16 +82,12 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     brand: cw.brand?.name ?? null,
     color: cw.color ?? null,
     swatch: { hex: cw.swatchHex ?? null },
-    // CORE is a first-class trait in the master — the permanent production
-    // line — but it only ever reached Loom by accident, when a product happened
-    // to carry a CORE tag. Send it as a field, and also fold it into tags so it
-    // is visible through a field Loom already consumes rather than waiting on a
-    // contract change. Derived here; the master's own tags are untouched.
-    core: cw.isCore,
-    tags:
-      cw.isCore && !cw.tags.some((t) => /^core$/i.test(t.trim()))
-        ? [...cw.tags, "CORE"]
-        : cw.tags,
+    // Loom stores this per colorway PER SEASON, in product_season_entries, and
+    // takes the season from the top of the feed. Our own isCore is a durable
+    // product-level trait, so it is sent as the value for whichever season this
+    // delivery carries.
+    is_core: cw.isCore,
+    tags: cw.tags,
     product_type: toLoomCategory(cw.productType),
     image: cw.seasonImages[0]?.url ?? null,
     ...customs,
@@ -121,10 +117,15 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
   };
 }
 
+export type LoomMode = "full" | "data";
+
 export interface LoomPayload {
   season: string;
-  /** Always "full" — this feed sends a complete season, never a delta. */
-  mode: "full";
+  /**
+   * "full" for a complete season delivery; "data" for a targeted update that
+   * should not be read as the whole picture.
+   */
+  mode: LoomMode;
   /**
    * Stable id for THIS delivery. A retry after a connection failure carries the
    * same event_id, so Loom dedupes instead of applying the batch twice — which
@@ -176,7 +177,8 @@ export function buildLoomPayloadFromColorways(
   colorways: LoomColorway[],
   seasonCode: string,
   archive?: Set<string>,
-  eventId?: string
+  eventId?: string,
+  mode: LoomMode = "full"
 ): LoomPayload {
   // Group colorways under their style.
   const byStyle = new Map<string, LoomColorway[]>();
@@ -201,7 +203,7 @@ export function buildLoomPayloadFromColorways(
 
   return {
     season: seasonCode,
-    mode: "full",
+    mode,
     // Derived from the delivery's contents when not supplied, so the same set
     // of products retried produces the same id.
     event_id: eventId ?? deliveryId(seasonCode, colorways, archive),
