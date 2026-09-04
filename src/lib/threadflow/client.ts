@@ -97,6 +97,35 @@ export interface GetProductsOptions {
 }
 
 /**
+ * Trim the identifiers Threadflow hands us.
+ *
+ * A SKU is typed by a person, so it can arrive padded — Keri's SS27 "Japan
+ * Black" came through as "  \t LIV-KR-JPN-BLCK", tab and all, on the colorway
+ * and on all 21 of its variants. Whitespace is invisible in every UI but the
+ * database compares it byte for byte, so the padded record read as a different
+ * product from the FW26 one under the same SKU: two colorways, two SKUs, a
+ * collision on the next sync and a duplicate in Loom.
+ *
+ * The value is an identifier, not prose, so leading and trailing whitespace can
+ * never be meaningful. Normalise once, at the boundary, so nothing downstream
+ * has to know. Names are trimmed for the same reason.
+ */
+function normaliseStyle(s: TFStyle): TFStyle {
+  const t = (v: string) => v.trim();
+  return {
+    ...s,
+    style_sku: t(s.style_sku),
+    style_name: t(s.style_name),
+    colorways: s.colorways.map((c) => ({
+      ...c,
+      colorway_sku: t(c.colorway_sku),
+      name: t(c.name),
+      variants: c.variants.map((v) => ({ ...v, sku: t(v.sku) })),
+    })),
+  };
+}
+
+/**
  * All styles (with colorways + variants) for a season. Pagination is at the
  * style level; every colorway/variant of an included style is returned in full.
  * Returns the resolved season descriptor alongside the styles.
@@ -118,7 +147,7 @@ export async function getSeasonProducts(
       cursor,
     });
     season ??= page.season;
-    styles.push(...page.data);
+    styles.push(...page.data.map(normaliseStyle));
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
 
