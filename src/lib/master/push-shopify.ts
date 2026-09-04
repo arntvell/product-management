@@ -132,7 +132,18 @@ export async function pushColorwayToShopify(
   seasonCode?: string,
   /** Publish despite missing merchandising fields (never despite missing
    *  variants or price). A deliberate choice, not a default. */
-  allowIncomplete = false
+  allowIncomplete = false,
+  /**
+   * Delete managed custom.* metafields that are blank in the master.
+   *
+   * Off by default, because blank in the master usually means "we have not
+   * written this yet", not "erase what the shop has". Carry-overs were
+   * merchandised in Shopify long before this master existed, so treating an
+   * empty cell as an instruction to delete would wipe live copy the first time
+   * anyone re-pushed a product. Clearing a field live is a deliberate act, so it
+   * takes a deliberate flag.
+   */
+  clearEmptied = false
 ): Promise<PushResult> {
   const cw = await getColorwayForPublish(id, seasonCode);
   if (!cw) throw new Error("Colorway not found");
@@ -322,8 +333,9 @@ export async function pushColorwayToShopify(
 
   // Clear metafields the user emptied in master (productSet only upserts the
   // keys it's given; it never removes omitted ones). Skip keys we just set.
-  // Only meaningful on update — a fresh create has nothing to delete.
-  if (action === "update") {
+  // Only meaningful on update — a fresh create has nothing to delete — and only
+  // when the caller asked for it: see clearEmptied.
+  if (action === "update" && clearEmptied) {
     const setKeys = new Set(metafields.map((m) => m.key));
     const toDelete = preview.emptyMetafieldKeys.filter((k) => !setKeys.has(k));
     if (toDelete.length) {
@@ -339,6 +351,14 @@ export async function pushColorwayToShopify(
         warnings.push(`Could not clear ${toDelete.length} emptied metafield(s) on Shopify.`);
       }
     }
+  } else if (action === "update" && preview.emptyMetafieldKeys.length) {
+    const setKeys = new Set(metafields.map((m) => m.key));
+    const left = preview.emptyMetafieldKeys.filter((k) => !setKeys.has(k));
+    if (left.length)
+      warnings.push(
+        `Left ${left.length} field(s) untouched on Shopify because the master is blank ` +
+          `(${left.join(", ")}). Tick "clear emptied fields" to delete them instead.`
+      );
   }
 
   await prisma.channelPublication.upsert({
@@ -385,7 +405,8 @@ export interface BulkPushRow {
 // in the client). One product's failure never blocks the rest.
 export async function bulkPushToShopify(
   ids: string[],
-  seasonCode?: string
+  seasonCode?: string,
+  opts: { allowIncomplete?: boolean; clearEmptied?: boolean } = {}
 ): Promise<BulkPushRow[]> {
   const CONCURRENCY = 3;
   const results: BulkPushRow[] = [];
@@ -394,7 +415,12 @@ export async function bulkPushToShopify(
     const rows = await Promise.all(
       batch.map(async (colorwayId): Promise<BulkPushRow> => {
         try {
-          const r = await pushColorwayToShopify(colorwayId, seasonCode);
+          const r = await pushColorwayToShopify(
+            colorwayId,
+            seasonCode,
+            opts.allowIncomplete ?? false,
+            opts.clearEmptied ?? false
+          );
           return { colorwayId, ok: true, action: r.action, variants: r.variants, warnings: r.warnings };
         } catch (err) {
           return { colorwayId, ok: false, error: err instanceof Error ? err.message : "Push failed" };

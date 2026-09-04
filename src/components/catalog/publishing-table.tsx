@@ -47,6 +47,10 @@ export function PublishingTable({
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [busy, setBusy] = useState(false);
   const [pushing, setPushing] = useState(false);
+  // Off by default: a field left blank in the master means "not written yet",
+  // not "erase what the shop has". Carry-overs were merchandised in Shopify
+  // before this master existed.
+  const [clearEmptied, setClearEmptied] = useState(false);
   const [pushingLoom, setPushingLoom] = useState(false);
   const [report, setReport] = useState<PushReport | null>(null);
   const [preview, setPreview] = useState<LoomPreview | null>(null);
@@ -172,7 +176,14 @@ export function PublishingTable({
 
   async function pushSelected() {
     if (selected.size === 0) return;
-    if (!confirm(`Push ${selected.size} product(s) to Shopify now? Creates/updates the live Shopify products. Not-ready products are skipped.`))
+    if (
+      !confirm(
+        `Push ${selected.size} product(s) to Shopify now? Creates/updates the live Shopify products. Not-ready products are skipped.` +
+          (clearEmptied
+            ? "\n\nFields left blank in the master WILL BE DELETED from Shopify."
+            : "\n\nFields left blank in the master are left alone on Shopify.")
+      )
+    )
       return;
     setPushing(true);
     setReport(null);
@@ -181,7 +192,7 @@ export function PublishingTable({
       const res = await fetch("/api/catalog/push/shopify/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ colorwayIds: ids, seasonCode: season }),
+        body: JSON.stringify({ colorwayIds: ids, seasonCode: season, clearEmptied }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Bulk push failed");
@@ -466,6 +477,20 @@ export function PublishingTable({
             Untarget Loom
           </Button>
           <div className="mx-1 w-px self-stretch bg-border" />
+          <label
+            className={cn(
+              "flex items-center gap-1.5 text-xs",
+              clearEmptied ? "font-medium text-destructive" : "text-muted-foreground"
+            )}
+            title="A blank field in the master normally leaves Shopify untouched. Tick this to delete it live instead."
+          >
+            <input
+              type="checkbox"
+              checked={clearEmptied}
+              onChange={(e) => setClearEmptied(e.target.checked)}
+            />
+            Clear emptied fields
+          </label>
           <Button size="sm" disabled={pushing || !selected.size} onClick={pushSelected}>
             {pushing ? "Pushing…" : `Push ${selected.size || ""} to Shopify`.replace("  ", " ")}
           </Button>
