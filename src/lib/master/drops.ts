@@ -175,10 +175,150 @@ export async function setDrop(
   drop: string | null
 ): Promise<{ updated: number }> {
   if (!entryIds.length) return { updated: 0 };
-  const value = drop && drop.trim() ? drop.trim() : null;
   const res = await prisma.seasonEntry.updateMany({
     where: { id: { in: entryIds } },
-    data: { drop: value },
+    data: { drop: normaliseDropName(drop) },
   });
   return { updated: res.count };
+}
+
+/** Empty, blank or whitespace-only means "no drop", not a drop called " ". */
+function normaliseDropName(drop: string | null): string | null {
+  return drop && drop.trim() ? drop.trim() : null;
+}
+
+/**
+ * Reduce a Shopify handle or a SKU to one comparable form.
+ *
+ * The Shopify handle we push is the SKU lowercased (see master/publish.ts), but
+ * a handle copied back out of Shopify has been through Shopify's own slug rules:
+ * lowercased, every run of non-alphanumerics collapsed to a single dash, ends
+ * trimmed. Applying the same reduction to both sides means a pasted handle, a
+ * pasted SKU and a pasted product URL all land on the same product.
+ *
+ * A trailing "-1"/"-2" that Shopify adds to break a handle collision is left
+ * alone — a SKU can legitimately end in a number, and guessing wrong would
+ * assign the wrong product. Such a token reports as unmatched instead.
+ */
+export function normaliseHandle(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Split a pasted blob into handles. Accepts commas, semicolons, newlines or
+ * plain spaces as separators, and full Shopify URLs — people copy the address
+ * bar, not the handle.
+ */
+export function parseHandleList(input: string): string[] {
+  return input
+    .split(/[\s,;]+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => {
+      const path = t.split(/[?#]/)[0];
+      return path.split("/").filter(Boolean).pop() ?? path;
+    })
+    .filter(Boolean);
+}
+
+export interface DropByHandleResult {
+  updated: number;
+  matched: { handle: string; colorwaySku: string; entryId: string }[];
+  /** Nothing in the catalogue reduces to this handle. */
+  unmatched: string[];
+  /** Found, but the product is archived — a different problem to a typo. */
+  archived: { handle: string; colorwaySku: string }[];
+  /** Found and live, but it has no entry in this season, so it has no drop. */
+  notInSeason: { handle: string; colorwaySku: string }[];
+  /** Two live products reduce to the same handle; refuse rather than guess. */
+  ambiguous: { handle: string; colorwaySkus: string[] }[];
+}
+
+/**
+ * Assign a drop to products named by Shopify handle (or SKU, or product URL).
+ *
+ * Resolved on the server against the whole catalogue rather than the rows the
+ * board happens to be showing, so a pasted list works from any tab and can name
+ * products currently filtered out of view. Every token that does not end up
+ * assigned comes back in a bucket saying why — a silently ignored handle is how
+ * half a drop goes missing.
+ */
+export async function setDropByHandles(
+  seasonCode: string,
+  handles: string[],
+  drop: string | null
+): Promise<DropByHandleResult> {
+  const season = await prisma.season.findUnique({
+    where: { code: seasonCode },
+    select: { id: true },
+  });
+  if (!season) throw new Error(`Unknown season ${seasonCode}`);
+
+  const [colorways, entries] = await Promise.all([
+    prisma.colorway.findMany({
+      select: { id: true, colorwaySku: true, archived: true },
+    }),
+    prisma.seasonEntry.findMany({
+      where: { seasonId: season.id },
+      select: { id: true, colorwayId: true },
+    }),
+  ]);
+  const entryByColorway = new Map(entries.map((e) => [e.colorwayId, e.id]));
+
+  const byHandle = new Map<string, typeof colorways>();
+  for (const c of colorways) {
+    const key = normaliseHandle(c.colorwaySku);
+    byHandle.set(key, [...(byHandle.get(key) ?? []), c]);
+  }
+
+  const result: DropByHandleResult = {
+    updated: 0,
+    matched: [],
+    unmatched: [],
+    archived: [],
+    notInSeason: [],
+    ambiguous: [],
+  };
+
+  const seen = new Set<string>();
+  for (const raw of handles) {
+    const handle = normaliseHandle(raw);
+    if (!handle || seen.has(handle)) continue;
+    seen.add(handle);
+
+    const candidates = byHandle.get(handle) ?? [];
+    const live = candidates.filter((c) => !c.archived);
+
+    if (!candidates.length) {
+      result.unmatched.push(raw);
+      continue;
+    }
+    if (!live.length) {
+      result.archived.push({ handle: raw, colorwaySku: candidates[0].colorwaySku });
+      continue;
+    }
+    if (live.length > 1) {
+      result.ambiguous.push({ handle: raw, colorwaySkus: live.map((c) => c.colorwaySku) });
+      continue;
+    }
+    const entryId = entryByColorway.get(live[0].id);
+    if (!entryId) {
+      result.notInSeason.push({ handle: raw, colorwaySku: live[0].colorwaySku });
+      continue;
+    }
+    result.matched.push({ handle: raw, colorwaySku: live[0].colorwaySku, entryId });
+  }
+
+  if (result.matched.length) {
+    const res = await prisma.seasonEntry.updateMany({
+      where: { id: { in: result.matched.map((m) => m.entryId) } },
+      data: { drop: normaliseDropName(drop) },
+    });
+    result.updated = res.count;
+  }
+  return result;
 }

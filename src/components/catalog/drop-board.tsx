@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DropRow, DropSummary } from "@/lib/master/drops";
@@ -24,6 +25,16 @@ const BULK_FIELDS: { field: Field; label: string; hint?: string }[] = [
   { field: "details", label: "Details" },
   { field: "tags", label: "Tags", hint: "comma separated" },
 ];
+
+/** What the server could and could not do with a pasted list of handles. */
+interface HandleResult {
+  updated: number;
+  matched: { handle: string; colorwaySku: string }[];
+  unmatched: string[];
+  archived: { handle: string; colorwaySku: string }[];
+  notInSeason: { handle: string; colorwaySku: string }[];
+  ambiguous: { handle: string; colorwaySkus: string[] }[];
+}
 
 const GAP_LABEL: Record<string, string> = {
   description: "description",
@@ -49,6 +60,7 @@ export function DropBoard({
   selectedDrop: string | null | undefined;
   fieldGaps: { field: string; missing: number }[];
 }) {
+  const router = useRouter();
   const [rows, setRows] = useState(initialRows);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -56,12 +68,47 @@ export function DropBoard({
   const [bulkValue, setBulkValue] = useState("");
   const [dropValue, setDropValue] = useState("");
   const [onlyBlocked, setOnlyBlocked] = useState(false);
+  const [query, setQuery] = useState("");
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteDrop, setPasteDrop] = useState("");
+  const [pasteResult, setPasteResult] = useState<HandleResult | null>(null);
 
-  const visible = useMemo(
-    () => (onlyBlocked ? rows.filter((r) => r.missing.length) : rows),
-    [rows, onlyBlocked]
-  );
+  // The server component re-renders with fresh rows after router.refresh().
+  useEffect(() => setRows(initialRows), [initialRows]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (onlyBlocked && !r.missing.length) return false;
+      if (!q) return true;
+      // Everything you might reasonably recognise a product by.
+      return [
+        r.styleName,
+        r.name,
+        r.colorwaySku,
+        r.productType,
+        r.drop,
+        r.values.tags.join(" "),
+      ]
+        .filter(Boolean)
+        .some((f) => String(f).toLowerCase().includes(q));
+    });
+  }, [rows, onlyBlocked, query]);
+
   const readyCount = rows.filter((r) => !r.missing.length).length;
+  const visibleIds = useMemo(() => new Set(visible.map((r) => r.colorwayId)), [visible]);
+  const selectedVisible = [...selected].filter((id) => visibleIds.has(id)).length;
+  // A selection can outlive the filter that made it. Say so rather than
+  // silently acting on rows the user can no longer see.
+  const selectedHidden = selected.size - selectedVisible;
+
+  const allCheckbox = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (allCheckbox.current)
+      allCheckbox.current.indeterminate =
+        selectedVisible > 0 && selectedVisible < visible.length;
+  }, [selectedVisible, visible.length]);
 
   const dropHref = (d: string | null | undefined) =>
     d === undefined
@@ -165,6 +212,37 @@ export function DropBoard({
         prev.map((r) => (selected.has(r.colorwayId) ? { ...r, drop: value } : r))
       );
       setDropValue("");
+      // The drop tabs and their ready/total counts are server-derived.
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function assignByHandles() {
+    if (!pasteText.trim()) return toast.error("Paste some handles first");
+    setBusy(true);
+    setPasteResult(null);
+    try {
+      const res = await fetch("/api/catalog/drops", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          handles: pasteText,
+          seasonCode: season,
+          drop: pasteDrop.trim() || null,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Failed");
+      setPasteResult(d as HandleResult);
+      const target = pasteDrop.trim() || "no drop";
+      if (d.updated) toast.success(`Moved ${d.updated} product(s) to ${target}`);
+      else toast.error("Nothing matched — see the breakdown below");
+      // Rows may now include products this view was not showing.
+      router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -231,7 +309,22 @@ export function DropBoard({
 
       {/* Bulk bar */}
       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-        <span className="text-xs font-medium">{selected.size} selected</span>
+        <span className="text-xs font-medium">
+          {selected.size} selected
+          {selectedHidden > 0 && (
+            <span className="ml-1 font-normal text-muted-foreground">
+              ({selectedHidden} hidden by filter)
+            </span>
+          )}
+        </span>
+        <button
+          type="button"
+          onClick={() => setSelected(new Set())}
+          disabled={!selected.size}
+          className="rounded border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+        >
+          Clear
+        </button>
         <div className="h-4 w-px bg-border" />
         <input
           value={dropValue}
@@ -286,12 +379,114 @@ export function DropBoard({
         </button>
       </div>
 
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <div className="relative">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search style, colour, SKU, type, tag…"
+            className="w-72 rounded border bg-background px-2 py-1 pr-6 text-xs"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {visible.length} of {rows.length} shown
+        </span>
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <input type="checkbox" checked={onlyBlocked} onChange={(e) => setOnlyBlocked(e.target.checked)} />
           Only show products that are not ready
         </label>
+        <button
+          type="button"
+          onClick={() => setPasteOpen((v) => !v)}
+          className="ml-auto rounded border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
+        >
+          {pasteOpen ? "Hide paste list" : "Assign by handle…"}
+        </button>
       </div>
+
+      {/* Assign a drop to a pasted list of handles. Resolved server-side against
+          the whole catalogue, so it works from any tab and can name products
+          this view is filtering out. */}
+      {pasteOpen && (
+        <div className="mt-2 rounded-lg border bg-muted/20 p-3">
+          <p className="text-xs text-muted-foreground">
+            Paste Shopify handles, SKUs or product URLs — separated by commas,
+            spaces or new lines. Case and punctuation do not matter.
+          </p>
+          <textarea
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            rows={4}
+            placeholder="liv-kr-jpn-blck, liv-kr-jpn-dwn, LIV-BX-BLCK-NPP"
+            className="mt-2 w-full rounded border bg-background px-2 py-1 font-mono text-xs"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              value={pasteDrop}
+              onChange={(e) => setPasteDrop(e.target.value)}
+              placeholder="Drop 1"
+              className="w-28 rounded border bg-background px-2 py-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={assignByHandles}
+              disabled={busy || !pasteText.trim()}
+              className="rounded bg-foreground px-2.5 py-1 text-xs font-medium text-background disabled:opacity-40"
+            >
+              {busy ? "Assigning…" : "Assign drop"}
+            </button>
+            <span className="text-xs text-muted-foreground">
+              Leave the drop blank to clear it on the pasted products.
+            </span>
+          </div>
+
+          {pasteResult && (
+            <div className="mt-3 space-y-1.5 text-xs">
+              <p className="font-medium">
+                {pasteResult.updated} assigned
+                {pasteResult.matched.length !== pasteResult.updated &&
+                  ` (${pasteResult.matched.length} matched)`}
+              </p>
+              <HandleBucket
+                label="not found"
+                tone="bad"
+                items={pasteResult.unmatched}
+                hint="No product in the catalogue has this handle or SKU."
+              />
+              <HandleBucket
+                label="archived"
+                tone="warn"
+                items={pasteResult.archived.map((a) => `${a.handle} → ${a.colorwaySku}`)}
+                hint="The product exists but is retired, so it takes no drop."
+              />
+              <HandleBucket
+                label={`not in ${season}`}
+                tone="warn"
+                items={pasteResult.notInSeason.map((a) => `${a.handle} → ${a.colorwaySku}`)}
+                hint="A drop is a slice of one season, so the product needs a season entry first."
+              />
+              <HandleBucket
+                label="ambiguous"
+                tone="bad"
+                items={pasteResult.ambiguous.map(
+                  (a) => `${a.handle} → ${a.colorwaySkus.join(" / ")}`
+                )}
+                hint="Two live products share this handle; assign them from the grid instead."
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Grid */}
       <div className="mt-3 overflow-x-auto rounded-lg border">
@@ -300,10 +495,15 @@ export function DropBoard({
             <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <th className="w-8 p-2">
                 <input
+                  ref={allCheckbox}
                   type="checkbox"
-                  checked={visible.length > 0 && selected.size === visible.length}
-                  onChange={(e) =>
-                    setSelected(e.target.checked ? new Set(visible.map((r) => r.colorwayId)) : new Set())
+                  checked={visible.length > 0 && selectedVisible === visible.length}
+                  // Any existing selection clears; only an empty one selects all.
+                  // Otherwise a partial selection could never be undone here.
+                  onChange={() =>
+                    setSelected(
+                      selected.size ? new Set() : new Set(visible.map((r) => r.colorwayId))
+                    )
                   }
                 />
               </th>
@@ -343,6 +543,41 @@ export function DropBoard({
       {visible.length === 0 && (
         <p className="mt-8 text-center text-sm text-muted-foreground">Nothing here.</p>
       )}
+    </div>
+  );
+}
+
+/** One reason-bucket from a pasted list. Hidden when empty. */
+function HandleBucket({
+  label,
+  tone,
+  items,
+  hint,
+}: {
+  label: string;
+  tone: "bad" | "warn";
+  items: string[];
+  hint: string;
+}) {
+  if (!items.length) return null;
+  return (
+    <div>
+      <span
+        className={cn(
+          "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+          tone === "bad"
+            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400"
+            : "bg-amber-500/10 text-amber-700 dark:text-amber-500"
+        )}
+      >
+        {items.length} {label}
+      </span>
+      <span className="ml-1.5 text-muted-foreground">{hint}</span>
+      <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] text-muted-foreground">
+        {items.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
     </div>
   );
 }
