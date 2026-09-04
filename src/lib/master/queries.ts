@@ -270,6 +270,12 @@ export interface GridRow {
   priceNok: string;
   mediaCount: number;
   dropped: boolean;
+  /** The drop this product sits in, for the selected season. */
+  drop: string;
+  /** How it entered the selected season — a carry-over is already live. */
+  origin: string; // "NEW" | "CARRYOVER" | ""
+  /** Already has a Shopify product, so a push updates rather than creates. */
+  onShopify: boolean;
   // Reference metafields (single = Shopify GID; multi = master colorway ids)
   refs: {
     carePageId: string;
@@ -296,6 +302,15 @@ function isDropped(
   return entries.some((e) => e.cancelled);
 }
 
+/** The entry for the chosen season, or the only one if a product has just one. */
+function entryFor<T extends { season: { code: string } }>(
+  entries: T[],
+  seasonCode?: string
+): T | undefined {
+  if (seasonCode) return entries.find((e) => e.season.code === seasonCode);
+  return entries.length === 1 ? entries[0] : undefined;
+}
+
 const GRID_TEXT_FIELDS = [
   "shortDescription",
   "fullDescription",
@@ -316,7 +331,15 @@ export async function listColorwaysForEdit(
       style: { select: { styleName: true, gender: true, unisex: true } },
       channelContent: true,
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
-      entries: { select: { cancelled: true, season: { select: { code: true } } } },
+      entries: {
+        select: {
+          cancelled: true,
+          drop: true,
+          origin: true,
+          season: { select: { code: true } },
+        },
+      },
+      publications: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
       prices: {
         where: {
           currency: "NOK",
@@ -359,6 +382,11 @@ export async function listColorwaysForEdit(
       priceNok: cw.prices[0]?.amount.toString() ?? "",
       mediaCount: cw._count.media,
       dropped: isDropped(cw.entries, seasonCode),
+      // Drop and origin live on the season entry, so they only mean anything
+      // once a season is chosen.
+      drop: entryFor(cw.entries, seasonCode)?.drop ?? "",
+      origin: seasonCode ? entryFor(cw.entries, seasonCode)?.origin ?? "" : "",
+      onShopify: cw.publications.some((p) => !!p.externalId),
       refs: {
         carePageId: cw.carePageId ?? "",
         fitguidePageId: cw.fitguidePageId ?? "",

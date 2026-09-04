@@ -96,6 +96,8 @@ export function CatalogGrid({
     status: "",
     source: "",
     needs: "",
+    drop: "",
+    origin: "",
   });
   const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -144,6 +146,7 @@ export function CatalogGrid({
       productType: distinct((r) => r.productType),
       gender: distinct((r) => r.gender),
       source: distinct((r) => r.source),
+      drop: distinct((r) => r.drop),
     };
   }, [rows]);
 
@@ -172,6 +175,10 @@ export function CatalogGrid({
       if (filters.gender && r.gender !== filters.gender) return false;
       if (filters.status && r.status !== filters.status) return false;
       if (filters.source && r.source !== filters.source) return false;
+      // "__none" is the work queue: everything not yet placed in a drop.
+      if (filters.drop === "__none" ? !!r.drop : filters.drop && r.drop !== filters.drop)
+        return false;
+      if (filters.origin && r.origin !== filters.origin) return false;
       if (filters.needs && !needsMatch(r)) return false;
       if (!q) return true;
       return (
@@ -564,6 +571,28 @@ export function CatalogGrid({
           onChange={(v) => setFilters((f) => ({ ...f, status: v }))} />
         <FilterSelect label="Source" value={filters.source} options={filterOptions.source}
           onChange={(v) => setFilters((f) => ({ ...f, source: v }))} />
+        {season && (
+          <>
+            <FilterSelect
+              label="Drop"
+              value={filters.drop}
+              options={[
+                { value: "__none", label: "No drop yet" },
+                ...filterOptions.drop.map((d) => ({ value: d, label: d })),
+              ]}
+              onChange={(v) => setFilters((f) => ({ ...f, drop: v }))}
+            />
+            <FilterSelect
+              label="Origin"
+              value={filters.origin}
+              options={[
+                { value: "NEW", label: "New this season" },
+                { value: "CARRYOVER", label: "Carry-over" },
+              ]}
+              onChange={(v) => setFilters((f) => ({ ...f, origin: v }))}
+            />
+          </>
+        )}
         <FilterSelect
           label="Needs"
           value={filters.needs}
@@ -578,7 +607,7 @@ export function CatalogGrid({
         {Object.values(filters).some(Boolean) && (
           <button
             onClick={() =>
-              setFilters({ vendor: "", productType: "", gender: "", status: "", source: "", needs: "" })
+              setFilters({ vendor: "", productType: "", gender: "", status: "", source: "", needs: "", drop: "", origin: "" })
             }
             className="text-xs font-medium text-muted-foreground underline underline-offset-4"
           >
@@ -740,6 +769,23 @@ export function CatalogGrid({
                       </a>
                       <span className="block truncate text-[10px] text-muted-foreground">
                         {row.styleName}
+                        {row.drop && <> · {row.drop}</>}
+                        {row.origin === "CARRYOVER" && (
+                          <span
+                            title="Carried over from an earlier season"
+                            className="ml-1 uppercase"
+                          >
+                            carry-over
+                          </span>
+                        )}
+                        {row.onShopify && (
+                          <span
+                            title="Already has a Shopify product — a push updates it"
+                            className="ml-1 uppercase"
+                          >
+                            · live
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>
