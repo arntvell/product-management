@@ -1304,10 +1304,28 @@ export function CatalogGrid({
                             <button
                               type="button"
                               disabled={disabled}
+                              onFocus={() => {
+                                activeRowIdRef.current = row.id;
+                              }}
                               onClick={() => openPanel(row, c.key)}
-                              title={value || placeholder || "Click to write"}
+                              // Making this cell read-only took away the
+                              // obvious way to empty it — select the text and
+                              // hit delete. Give that back on the key itself,
+                              // so clearing one cell does not mean opening a
+                              // panel to delete and apply.
+                              onKeyDown={(e) => {
+                                if (e.key === "Delete" || e.key === "Backspace") {
+                                  e.preventDefault();
+                                  if (value) setCell(row, c.key, "");
+                                }
+                              }}
+                              title={
+                                value
+                                  ? `${value}\n\nClick to edit · Delete to clear`
+                                  : placeholder || "Click to write"
+                              }
                               className={cn(
-                                "h-full w-full truncate px-2 text-left text-xs hover:bg-muted/60 disabled:opacity-40",
+                                "h-full w-full truncate px-2 text-left text-xs hover:bg-muted/60 focus:bg-background focus:outline focus:outline-1 disabled:opacity-40",
                                 !value && "text-muted-foreground/50"
                               )}
                             >
