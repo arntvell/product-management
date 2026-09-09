@@ -5,6 +5,11 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import {
   CHANNELS,
@@ -69,6 +74,15 @@ const LONG_TEXT_FIELDS = new Set([
   "details",
   "styleTagline",
 ]);
+
+/** Human label for every writable key, for the copy-down field picker. */
+const FIELD_LABELS: Record<string, string> = {
+  swatchHex: "Swatch",
+  priceNok: "NOK price",
+  ...Object.fromEntries(COLUMNS.map((c) => [c.key, c.label])),
+  ...Object.fromEntries(REF_SINGLE.map((c) => [c.key, c.label])),
+  ...Object.fromEntries(REF_MULTI.map((c) => [c.key, c.label])),
+};
 
 const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
@@ -334,6 +348,32 @@ export function CatalogGrid({
     ];
   }, [isRefs, isBase, layer]);
 
+  /**
+   * What copy-down can offer in this view, each with the layer it writes to.
+   * Derived from editableCols so it can never drift from what the grid will
+   * actually accept, plus the multi-value references, which copy verbatim as
+   * JSON. Price is omitted without a season — it is season-scoped and there
+   * would be nowhere to put it.
+   */
+  const copyDownFields = useMemo(() => {
+    const base = editableCols
+      .filter((c) => !(c.key === "priceNok" && !seasonId))
+      .map((c) => ({
+        key: c.key,
+        label: FIELD_LABELS[c.key] ?? c.key,
+        atLayer: c.atLayer,
+      }));
+    if (!isRefs) return base;
+    return [
+      ...base,
+      ...REF_MULTI.map((c) => ({
+        key: c.key as string,
+        label: c.label,
+        atLayer: "BASE" as EditLayer,
+      })),
+    ];
+  }, [editableCols, isRefs, seasonId]);
+
   const colIndexByField = useMemo(
     () => new Map(editableCols.map((c, i) => [c.key, i])),
     [editableCols]
@@ -555,6 +595,79 @@ export function CatalogGrid({
       `Copied ${entries.length} field(s) to ${targetRows.length} row(s) — still needs Save`
     );
   }
+
+  /**
+   * Copy chosen fields from one row to the rest of the selection.
+   *
+   * The source is the row you last put the cursor in, falling back to the first
+   * selected row — and the picker names it either way, so it is never a guess
+   * about which product you are copying from.
+   */
+  function copyDown(fieldKeys: string[]) {
+    if (fieldKeys.length === 0 || targetRows.length < 2) return;
+    const source =
+      targetRows.find((r) => r.id === activeRowIdRef.current) ?? targetRows[0];
+    const others = targetRows.filter((r) => r.id !== source.id);
+    if (!others.length) return;
+
+    const chosen = copyDownFields.filter((f) => fieldKeys.includes(f.key));
+    setDirty((prev) => {
+      const next = new Map(prev);
+      for (const f of chosen) {
+        const value = cellValue(source, f.atLayer, f.key);
+        for (const row of others) {
+          const key = dkey(row.id, f.atLayer, f.key);
+          if (value === originalValue(row, f.atLayer, f.key)) next.delete(key);
+          else next.set(key, value);
+        }
+      }
+      return next;
+    });
+    toast.success(
+      `Copied ${chosen.length} field(s) from ${source.styleName} · ${source.name} ` +
+        `to ${others.length} row(s)`
+    );
+  }
+
+  /**
+   * Empty chosen fields across the selection.
+   *
+   * On a channel layer this removes the override rather than blanking the
+   * value, so the row falls back to its base text — which is what "clear" means
+   * when you are editing overrides.
+   */
+  function clearFields(fieldKeys: string[]) {
+    if (fieldKeys.length === 0 || !targetRows.length) return;
+    const chosen = copyDownFields.filter((f) => fieldKeys.includes(f.key));
+    if (
+      targetRows.length >= 25 &&
+      !confirm(
+        `Clear ${chosen.length} field(s) on ${targetRows.length} products?`
+      )
+    )
+      return;
+    setDirty((prev) => {
+      const next = new Map(prev);
+      for (const f of chosen) {
+        // Multi-value references are JSON arrays; empty is "[]", not "".
+        const empty = REF_MULTI.some((r) => r.key === f.key) ? "[]" : "";
+        for (const row of targetRows) {
+          const key = dkey(row.id, f.atLayer, f.key);
+          if (empty === originalValue(row, f.atLayer, f.key)) next.delete(key);
+          else next.set(key, empty);
+        }
+      }
+      return next;
+    });
+    toast.success(
+      `Cleared ${chosen.length} field(s) on ${targetRows.length} row(s)` +
+        (layer === "BASE" ? "" : ` (${layer} overrides removed)`)
+    );
+  }
+
+  /** The row copy-down would take its values from, for the picker to name. */
+  const copySource =
+    targetRows.find((r) => r.id === activeRowIdRef.current) ?? targetRows[0] ?? null;
 
   // ---- bulk reference apply (over visible rows) ----
   function applySingleRef(field: string, value: string) {
@@ -865,6 +978,14 @@ export function CatalogGrid({
             these rows. Shift-click a checkbox to select a range.
           </p>
           <AddTagToSelected count={selected.size} onAdd={addTagToSelected} />
+          <FieldBulkPicker
+            fields={copyDownFields}
+            source={copySource}
+            selectedCount={targetRows.length}
+            layer={layer}
+            onCopy={copyDown}
+            onClear={clearFields}
+          />
           <button
             onClick={() => setCopyOpen(true)}
             className="h-7 rounded border px-2 text-xs font-medium hover:bg-muted"
@@ -1246,6 +1367,121 @@ export function CatalogGrid({
 
 const SINGLE_REF_KEYS = new Set(REF_SINGLE.map((c) => c.key));
 const MULTI_REF_KEYS = new Set(REF_MULTI.map((c) => c.key as string));
+
+/**
+ * Pick fields, then copy them down from one selected row or clear them.
+ *
+ * The same shape as the legacy editor's Copy Down, with two changes: the source
+ * is named rather than left as "the first selected product", and clearing lives
+ * here too. Clearing is the same operation with an empty value, so it belongs
+ * behind the same field picker rather than in a mechanism of its own.
+ */
+function FieldBulkPicker({
+  fields,
+  source,
+  selectedCount,
+  layer,
+  onCopy,
+  onClear,
+}: {
+  fields: { key: string; label: string }[];
+  source: GridRow | null;
+  selectedCount: number;
+  layer: EditLayer;
+  onCopy: (keys: string[]) => void;
+  onClear: (keys: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const others = Math.max(selectedCount - 1, 0);
+
+  const toggle = (key: string) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const run = (fn: (keys: string[]) => void) => {
+    fn([...chosen]);
+    setChosen(new Set());
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          disabled={selectedCount < 1}
+          className="h-7 rounded border px-2 text-xs font-medium hover:bg-muted disabled:opacity-40"
+          title="Copy chosen fields from one selected row to the rest, or clear them"
+        >
+          Copy down / clear…
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 p-0">
+        <div className="border-b px-3 py-2">
+          <p className="text-sm font-medium">Which fields?</p>
+          <p className="text-xs text-muted-foreground">
+            {source ? (
+              <>
+                Copying takes them from <b>{source.styleName} · {source.name}</b>{" "}
+                to the {others} other{others === 1 ? "" : "s"} — click a cell in
+                a different row to copy from that one instead. Clearing empties
+                them on all {selectedCount}.
+              </>
+            ) : (
+              <>Select some rows first.</>
+            )}
+          </p>
+        </div>
+        <div className="max-h-[220px] space-y-0.5 overflow-auto p-2">
+          {fields.map((f) => (
+            <label
+              key={f.key}
+              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50"
+            >
+              <input
+                type="checkbox"
+                checked={chosen.has(f.key)}
+                onChange={() => toggle(f.key)}
+              />
+              {f.label}
+            </label>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 border-t px-3 py-2">
+          <button
+            onClick={() => setChosen(new Set(fields.map((f) => f.key)))}
+            className="text-xs text-muted-foreground underline underline-offset-4"
+          >
+            Select all
+          </button>
+          <button
+            onClick={() => run(onClear)}
+            disabled={!chosen.size || selectedCount < 1}
+            className="ml-auto rounded border px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-40"
+            title={
+              layer === "BASE"
+                ? "Empty these fields on every selected row"
+                : `Remove these ${layer} overrides on every selected row`
+            }
+          >
+            Clear ({chosen.size})
+          </button>
+          <Button
+            size="sm"
+            onClick={() => run(onCopy)}
+            disabled={!chosen.size || !source || others < 1}
+          >
+            Copy ({chosen.size})
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /**
  * Where the pending edits stand. With autosave on, the Save button is mostly
