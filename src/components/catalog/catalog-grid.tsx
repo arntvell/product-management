@@ -16,6 +16,8 @@ import { usePages } from "@/hooks/use-pages";
 import { useCollections } from "@/hooks/use-collections";
 import { useModels } from "@/hooks/use-models";
 import { CellPanel, type CellPanelTarget } from "./cell-panel";
+import { CopyFieldsDialog } from "./copy-fields-dialog";
+import type { CopyableField } from "@/lib/master/copy-fields";
 import type { GridRow } from "@/lib/master/queries";
 import type { BulkChange, EditLayer } from "@/lib/master/edit";
 
@@ -72,6 +74,7 @@ const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
 const ROW_H = 40;
 
+
 function dkey(id: string, layer: EditLayer, field: string) {
   return `${id}|${layer}|${field}`;
 }
@@ -114,6 +117,7 @@ export function CatalogGrid({
   });
   const [saving, setSaving] = useState(false);
   const [panel, setPanel] = useState<CellPanelTarget | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastClickedRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -427,15 +431,6 @@ export function CatalogGrid({
   }
 
   /** Write one field on one row into the pending-changes map. */
-  function setCellValue(row: GridRow, l: EditLayer, field: string, value: string) {
-    setDirty((prev) => {
-      const next = new Map(prev);
-      const key = dkey(row.id, l, field);
-      if (value === originalValue(row, l, field)) next.delete(key);
-      else next.set(key, value);
-      return next;
-    });
-  }
 
   /** The same value across every row the bulk actions target. */
   function applyToTargets(l: EditLayer, field: string, value: string) {
@@ -498,6 +493,55 @@ export function CatalogGrid({
     if (added)
       toast.success(`Added "${tag}" to ${added} row(s) — still needs Save`);
     else toast.info(`Every selected row already has "${tag}"`);
+  }
+
+  /**
+   * Land a source product's fields on every targeted row as pending edits.
+   *
+   * Split fields are written at the layer being edited; the rest are
+   * base-level, so a copy in the Shopify view creates Shopify overrides for the
+   * text and touches base for type and references — the same rule the grid
+   * already follows everywhere else.
+   */
+  function copyFieldsToTargets(
+    values: Partial<Record<CopyableField, string>>,
+    tagsMode: "replace" | "add"
+  ) {
+    if (!targetRows.length) return;
+    const entries = Object.entries(values) as [CopyableField, string][];
+    if (!entries.length) return;
+
+    setDirty((prev) => {
+      const next = new Map(prev);
+      for (const row of targetRows) {
+        for (const [field, incoming] of entries) {
+          const split = COLUMNS.find((c) => c.key === field)?.split ?? false;
+          const l: EditLayer = split ? layer : "BASE";
+          const key = dkey(row.id, l, field);
+
+          let value = incoming;
+          if (field === "tags" && tagsMode === "add") {
+            const current = (next.get(key) ?? originalValue(row, l, "tags"))
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean);
+            const lower = new Set(current.map((t) => t.toLowerCase()));
+            const added = incoming
+              .split(",")
+              .map((t) => t.trim())
+              .filter((t) => t && !lower.has(t.toLowerCase()));
+            value = [...current, ...added].join(", ");
+          }
+
+          if (value === originalValue(row, l, field)) next.delete(key);
+          else next.set(key, value);
+        }
+      }
+      return next;
+    });
+    toast.success(
+      `Copied ${entries.length} field(s) to ${targetRows.length} row(s) — still needs Save`
+    );
   }
 
   // ---- bulk reference apply (over visible rows) ----
@@ -740,6 +784,13 @@ export function CatalogGrid({
             these rows. Shift-click a checkbox to select a range.
           </p>
           <AddTagToSelected count={selected.size} onAdd={addTagToSelected} />
+          <button
+            onClick={() => setCopyOpen(true)}
+            className="h-7 rounded border px-2 text-xs font-medium hover:bg-muted"
+            title="Take the description and other fields off a product that is already written"
+          >
+            Copy fields from a product…
+          </button>
           <button
             onClick={() => setSelected(new Set())}
             className="text-xs font-medium text-muted-foreground underline underline-offset-4"
@@ -1081,6 +1132,13 @@ export function CatalogGrid({
         </div>
       </div>
 
+      <CopyFieldsDialog
+        open={copyOpen}
+        onOpenChange={setCopyOpen}
+        targetCount={targetRows.length}
+        onCopy={copyFieldsToTargets}
+      />
+
       {panel && (
         <CellPanel
           // Remount per cell so the textarea seeds from the new value without
@@ -1094,7 +1152,7 @@ export function CatalogGrid({
           onClose={() => setPanel(null)}
           onApply={(value) => {
             const row = rows.find((r) => r.id === panel.rowId);
-            if (row) setCellValue(row, panel.layer, panel.field, value);
+            if (row) setCell(row, panel.field, value, panel.layer);
           }}
           onApplyToSelected={(value) =>
             applyToTargets(panel.layer, panel.field, value)
