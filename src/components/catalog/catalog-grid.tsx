@@ -342,9 +342,15 @@ export function CatalogGrid({
 
   // Paste a TSV block (from Excel/Sheets) starting at the focused cell: rows go
   // down, tab-separated columns go across (skipping selects and locked price).
+  //
+  // The tab is what identifies a spreadsheet block, not the newline. Prose has
+  // newlines — a description copied out of a document nearly always does — and
+  // treating those as row separators scattered one description across as many
+  // products as it had paragraphs, overwriting each one. Anything without a tab
+  // is a single value and goes to the browser's own paste.
   function onCellPaste(e: React.ClipboardEvent, rowIndex: number, field: string) {
     const text = e.clipboardData.getData("text");
-    if (!text || !/[\n\t]/.test(text)) return; // single value → default paste
+    if (!text || !text.includes("\t")) return; // single value → default paste
     e.preventDefault();
     const lines = text.replace(/\r/g, "").replace(/\n+$/, "").split("\n");
     const startCol = colIndexByField.get(field) ?? 0;
