@@ -15,6 +15,7 @@ import { catalogImageSrc } from "@/lib/catalog-image";
 import { usePages } from "@/hooks/use-pages";
 import { useCollections } from "@/hooks/use-collections";
 import { useModels } from "@/hooks/use-models";
+import { CellPanel, type CellPanelTarget } from "./cell-panel";
 import type { GridRow } from "@/lib/master/queries";
 import type { BulkChange, EditLayer } from "@/lib/master/edit";
 
@@ -54,6 +55,18 @@ const COLUMNS: ColDef[] = [
   { key: "styleTagline", label: "Tagline", width: 170, kind: "text", split: true },
   { key: "styleName", label: "Style name", width: 150, kind: "text", split: true },
 ];
+
+/**
+ * Fields you write prose into. These get a read-only cell that opens the side
+ * panel; a 200px single-line input is not somewhere anyone can write a product
+ * description. The short attributes (vendor, type, status, tags) stay inline.
+ */
+const LONG_TEXT_FIELDS = new Set([
+  "shortDescription",
+  "fullDescription",
+  "details",
+  "styleTagline",
+]);
 
 const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
@@ -100,6 +113,7 @@ export function CatalogGrid({
     origin: "",
   });
   const [saving, setSaving] = useState(false);
+  const [panel, setPanel] = useState<CellPanelTarget | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const lastClickedRef = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -387,7 +401,15 @@ export function CatalogGrid({
   // ---- fill down: copy the focused (or top) row's value to target rows ----
   function fillDown(field: string) {
     if (targetRows.length === 0) return;
-    const source = targetRows.find((r) => r.id === activeRowIdRef.current) ?? targetRows[0];
+    // Only ever fill from the row the user actually put the cursor in. It used
+    // to fall back to the first target row, so if the focused row had scrolled
+    // out of view or was not in the selection it silently copied a value
+    // nobody chose — across every selected product.
+    const source = targetRows.find((r) => r.id === activeRowIdRef.current);
+    if (!source) {
+      toast.error("Click the cell you want to copy from first");
+      return;
+    }
     const value = cellValue(source, layer, field);
     setDirty((prev) => {
       const next = new Map(prev);
@@ -398,7 +420,84 @@ export function CatalogGrid({
       }
       return next;
     });
-    toast.success(`Filled "${field}" to ${targetRows.length} rows`);
+    toast.success(
+      `Filled "${field}" to ${targetRows.length} rows` +
+        (layer === "BASE" ? "" : ` as ${layer} overrides`)
+    );
+  }
+
+  /** Write one field on one row into the pending-changes map. */
+  function setCellValue(row: GridRow, l: EditLayer, field: string, value: string) {
+    setDirty((prev) => {
+      const next = new Map(prev);
+      const key = dkey(row.id, l, field);
+      if (value === originalValue(row, l, field)) next.delete(key);
+      else next.set(key, value);
+      return next;
+    });
+  }
+
+  /** The same value across every row the bulk actions target. */
+  function applyToTargets(l: EditLayer, field: string, value: string) {
+    setDirty((prev) => {
+      const next = new Map(prev);
+      for (const row of targetRows) {
+        const key = dkey(row.id, l, field);
+        if (value === originalValue(row, l, field)) next.delete(key);
+        else next.set(key, value);
+      }
+      return next;
+    });
+    toast.success(
+      `Applied to ${targetRows.length} rows` +
+        (l === "BASE" ? "" : ` as ${l} overrides`)
+    );
+  }
+
+  function openPanel(row: GridRow, field: string) {
+    const col = COLUMNS.find((c) => c.key === field);
+    setPanel({
+      rowId: row.id,
+      rowLabel: `${row.styleName} · ${row.name}`,
+      field,
+      fieldLabel: col?.label ?? field,
+      layer,
+      value: cellValue(row, layer, field),
+      inherited: layer === "BASE" ? undefined : originalValue(row, "BASE", field),
+    });
+  }
+
+  /**
+   * Add one tag to every selected row without touching the tags already there.
+   *
+   * Fill-down replaces the whole comma-separated list, which is right for
+   * correcting a value and wrong for "give these twelve products the SS27 tag" —
+   * that wiped everything else off them. Additive, dirty-aware, and it says how
+   * many rows actually changed rather than claiming all of them did.
+   */
+  function addTagToSelected(raw: string) {
+    const tag = raw.trim();
+    if (!tag || !targetRows.length) return;
+    let added = 0;
+    setDirty((prev) => {
+      const next = new Map(prev);
+      for (const row of targetRows) {
+        const key = dkey(row.id, layer, "tags");
+        const current = (next.get(key) ?? originalValue(row, layer, "tags"))
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+        if (current.some((t) => t.toLowerCase() === tag.toLowerCase())) continue;
+        const value = [...current, tag].join(", ");
+        if (value === originalValue(row, layer, "tags")) next.delete(key);
+        else next.set(key, value);
+        added++;
+      }
+      return next;
+    });
+    if (added)
+      toast.success(`Added "${tag}" to ${added} row(s) — still needs Save`);
+    else toast.info(`Every selected row already has "${tag}"`);
   }
 
   // ---- bulk reference apply (over visible rows) ----
@@ -628,15 +727,26 @@ export function CatalogGrid({
         </p>
       )}
       <p className="mt-2 text-xs text-muted-foreground">
-        Tip: <b>Enter</b> / <b>Shift+Enter</b> move down/up a column · paste a
-        column from a spreadsheet into any cell · <b>↓</b> fills the focused
-        cell down.
+        Tip: click a description, details or tagline cell to write it in a full
+        panel — and apply it to a whole selection from there · <b>Enter</b> /{" "}
+        <b>Shift+Enter</b> move down/up a column · paste a tab-separated block
+        from a spreadsheet into any cell · <b>↓</b> copies the cell you are in
+        down the selection.
       </p>
       {selected.size > 0 && (
-        <p className="mt-2 text-xs text-blue-600 dark:text-blue-400">
-          {selected.size} selected — fill-down (↓) and bulk actions apply to these
-          rows. Shift-click a checkbox to select a range.
-        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="text-xs text-blue-600 dark:text-blue-400">
+            {selected.size} selected — fill-down (↓) and bulk actions apply to
+            these rows. Shift-click a checkbox to select a range.
+          </p>
+          <AddTagToSelected count={selected.size} onAdd={addTagToSelected} />
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+          >
+            Clear selection
+          </button>
+        </div>
       )}
       {!isBase && !isRefs && (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -936,6 +1046,20 @@ export function CatalogGrid({
                                 </option>
                               ))}
                             </select>
+                          ) : LONG_TEXT_FIELDS.has(c.key) ? (
+                            // Read-only here; the writing happens in the panel.
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => openPanel(row, c.key)}
+                              title={value || placeholder || "Click to write"}
+                              className={cn(
+                                "h-full w-full truncate px-2 text-left text-xs hover:bg-muted/60 disabled:opacity-40",
+                                !value && "text-muted-foreground/50"
+                              )}
+                            >
+                              {value || placeholder || "—"}
+                            </button>
                           ) : (
                             <input
                               {...(disabled ? {} : cellHandlers(vi.index, row, c.key, "text"))}
@@ -956,12 +1080,72 @@ export function CatalogGrid({
           </div>
         </div>
       </div>
+
+      {panel && (
+        <CellPanel
+          // Remount per cell so the textarea seeds from the new value without
+          // an effect syncing state to props.
+          key={`${panel.rowId}|${panel.layer}|${panel.field}`}
+          target={panel}
+          // The real selection, not targetRows — that falls back to every
+          // filtered row, so with nothing selected the bulk button would have
+          // offered to overwrite the whole season.
+          selectedCount={selected.size}
+          onClose={() => setPanel(null)}
+          onApply={(value) => {
+            const row = rows.find((r) => r.id === panel.rowId);
+            if (row) setCellValue(row, panel.layer, panel.field, value);
+          }}
+          onApplyToSelected={(value) =>
+            applyToTargets(panel.layer, panel.field, value)
+          }
+        />
+      )}
     </div>
   );
 }
 
 const SINGLE_REF_KEYS = new Set(REF_SINGLE.map((c) => c.key));
 const MULTI_REF_KEYS = new Set(REF_MULTI.map((c) => c.key as string));
+
+/** Append a tag to the selection, leaving existing tags alone. */
+function AddTagToSelected({
+  count,
+  onAdd,
+}: {
+  count: number;
+  onAdd: (tag: string) => void;
+}) {
+  const [tag, setTag] = useState("");
+  const submit = () => {
+    if (!tag.trim()) return;
+    onAdd(tag);
+    setTag("");
+  };
+  return (
+    <span className="flex items-center gap-1">
+      <input
+        value={tag}
+        onChange={(e) => setTag(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        placeholder="Add a tag…"
+        className="h-7 w-32 rounded border bg-transparent px-2 text-xs"
+      />
+      <button
+        onClick={submit}
+        disabled={!tag.trim()}
+        className="h-7 rounded border px-2 text-xs font-medium hover:bg-muted disabled:opacity-40"
+      >
+        Add to {count}
+      </button>
+    </span>
+  );
+}
 
 function FilterSelect({
   label,
