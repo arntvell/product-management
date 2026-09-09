@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,8 @@ const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
 const ROW_H = 40;
 
+/** How long the grid waits after the last edit before autosaving. */
+const AUTOSAVE_IDLE_MS = 1500;
 
 function dkey(id: string, layer: EditLayer, field: string) {
   return `${id}|${layer}|${field}`;
@@ -116,6 +118,13 @@ export function CatalogGrid({
     origin: "",
   });
   const [saving, setSaving] = useState(false);
+  const [autosave, setAutosave] = useState(true);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savingRef = useRef(false);
+  // The debounced save reads the pending map through a ref so it does not need
+  // to be rebuilt (and reschedule itself) on every keystroke.
+  const dirtyRef = useRef(dirty);
   const [panel, setPanel] = useState<CellPanelTarget | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -131,6 +140,7 @@ export function CatalogGrid({
   const isRefs = view === "REFERENCES";
   const layer: EditLayer = isRefs ? "BASE" : (view as EditLayer);
   const isBase = view === "BASE";
+  dirtyRef.current = dirty;
 
   const { carePages, fitguidePages } = usePages();
   const { collections } = useCollections();
@@ -252,7 +262,9 @@ export function CatalogGrid({
   });
 
   // Guard against losing unsaved edits on refresh / full-page navigation
-  // (season pills, style/media links are real <a> navigations).
+  // (season pills, style/media links are real <a> navigations). Autosave
+  // narrows this window to a second or two rather than closing it — a pending
+  // or failed batch is still only in the browser.
   useEffect(() => {
     if (dirty.size === 0) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -582,38 +594,85 @@ export function CatalogGrid({
   }
 
   // ---- save ----
-  async function save() {
-    if (dirty.size === 0) return;
-    setSaving(true);
-    const changes: BulkChange[] = [];
-    for (const [key, value] of dirty) {
-      const [id, l, field] = key.split("|") as [string, EditLayer, string];
-      changes.push({
-        colorwayId: id,
-        field,
-        layer: l,
-        value,
-        ...(field === "priceNok" && seasonId ? { seasonId } : {}),
-      });
-    }
-    try {
-      const res = await fetch("/api/catalog/colorways/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ changes }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Save failed (${res.status})`);
-      // Apply saved changes to local rows, then clear dirty.
-      setRows((prev) => applyChanges(prev, changes));
-      setDirty(new Map());
-      toast.success(`Saved ${data.changes} changes across ${data.colorways} colorways`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const save = useCallback(
+    async (opts: { auto?: boolean } = {}) => {
+      // One save at a time. `saving` is state and lags, so the guard is a ref.
+      if (savingRef.current) return;
+      // Snapshot what we are sending. Anything typed while the request is in
+      // flight must survive it — the old code cleared the whole map on success,
+      // which silently threw away those keystrokes. Harmless at one save per
+      // click; not harmless when a save fires every couple of seconds.
+      const batch = new Map(dirtyRef.current);
+      if (batch.size === 0) return;
+
+      savingRef.current = true;
+      setSaving(true);
+      const changes: BulkChange[] = [];
+      for (const [key, value] of batch) {
+        const [id, l, field] = key.split("|") as [string, EditLayer, string];
+        changes.push({
+          colorwayId: id,
+          field,
+          layer: l,
+          value,
+          ...(field === "priceNok" && seasonId ? { seasonId } : {}),
+        });
+      }
+      try {
+        const res = await fetch("/api/catalog/colorways/bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ changes }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `Save failed (${res.status})`);
+        setRows((prev) => applyChanges(prev, changes));
+        // Retire only the keys we actually sent, and only where the value has
+        // not moved on since.
+        setDirty((prev) => {
+          const next = new Map(prev);
+          for (const [key, sent] of batch) {
+            if (next.get(key) === sent) next.delete(key);
+          }
+          return next;
+        });
+        setSaveError(null);
+        setSavedAt(new Date());
+        // Autosave says so in the toolbar; a toast every few seconds is noise.
+        if (!opts.auto)
+          toast.success(
+            `Saved ${data.changes} changes across ${data.colorways} colorways`
+          );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Save failed";
+        setSaveError(message);
+        // Keep the edits. An autosave that fails quietly is worse than none:
+        // say so once here, and the toolbar keeps saying it until it works.
+        toast.error(opts.auto ? `Autosave failed — ${message}` : message);
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    },
+    [seasonId]
+  );
+
+  /**
+   * Autosave.
+   *
+   * Only in the catalog editor, and only ever to the master: this grid writes
+   * through /api/catalog/colorways/bulk and nothing here reaches Shopify or Loom
+   * until somebody presses a push button. So saving early costs nothing and
+   * losing an afternoon of typing costs a lot.
+   *
+   * Debounced rather than per-keystroke — the inline cells write to the pending
+   * map on every character, and a request per character would be absurd.
+   */
+  useEffect(() => {
+    if (!autosave || dirty.size === 0) return;
+    const t = setTimeout(() => void save({ auto: true }), AUTOSAVE_IDLE_MS);
+    return () => clearTimeout(t);
+  }, [dirty, autosave, save]);
 
   return (
     <div className="flex h-[calc(100vh-56px)] flex-col px-6 py-6">
@@ -702,7 +761,29 @@ export function CatalogGrid({
             {selected.size > 0 && `${selected.size} selected · `}
             {visibleRows.length} rows · {dirty.size} unsaved
           </span>
-          <Button size="sm" onClick={save} disabled={saving || dirty.size === 0}>
+          <label
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            title="Saves to the master a moment after you stop typing. Nothing here reaches Shopify or Loom until you push."
+          >
+            <input
+              type="checkbox"
+              checked={autosave}
+              onChange={(e) => setAutosave(e.target.checked)}
+            />
+            Autosave
+          </label>
+          <SaveStatus
+            saving={saving}
+            pending={dirty.size}
+            savedAt={savedAt}
+            error={saveError}
+            autosave={autosave}
+          />
+          <Button
+            size="sm"
+            onClick={() => void save()}
+            disabled={saving || dirty.size === 0}
+          >
             {saving ? "Saving…" : `Save ${dirty.size || ""}`.trim()}
           </Button>
         </div>
@@ -1165,6 +1246,45 @@ export function CatalogGrid({
 
 const SINGLE_REF_KEYS = new Set(REF_SINGLE.map((c) => c.key));
 const MULTI_REF_KEYS = new Set(REF_MULTI.map((c) => c.key as string));
+
+/**
+ * Where the pending edits stand. With autosave on, the Save button is mostly
+ * idle, so this is what tells you whether your work is safe.
+ */
+function SaveStatus({
+  saving,
+  pending,
+  savedAt,
+  error,
+  autosave,
+}: {
+  saving: boolean;
+  pending: number;
+  savedAt: Date | null;
+  error: string | null;
+  autosave: boolean;
+}) {
+  if (error)
+    return (
+      <span className="text-xs font-medium text-destructive" title={error}>
+        Not saved — {pending} pending
+      </span>
+    );
+  if (saving) return <span className="text-xs text-muted-foreground">Saving…</span>;
+  if (pending > 0)
+    return (
+      <span className="text-xs text-amber-700 dark:text-amber-500">
+        {autosave ? "Saving shortly…" : `${pending} unsaved`}
+      </span>
+    );
+  if (savedAt)
+    return (
+      <span className="text-xs text-muted-foreground">
+        Saved {savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+      </span>
+    );
+  return null;
+}
 
 /** Append a tag to the selection, leaving existing tags alone. */
 function AddTagToSelected({
