@@ -18,8 +18,10 @@ export interface CollectionBucket {
 
 export interface CollectionMember {
   id: string;
+  colorwaySku: string;
   name: string;
   styleName: string;
+  tags: string[];
   thumbnailRef: string | null;
   vendor: string | null;
   productType: string | null;
@@ -30,6 +32,12 @@ export interface CollectionMember {
   // yet in that season → can be carried over).
   targetSeason: string;
   origin: "NEW" | "CARRYOVER" | null;
+  // True when the product has an MSRP price for `targetSeason`. A carried-over
+  // product with no price for its new season passes every list unnoticed and
+  // then fails at push, so the list has to show it.
+  hasTargetPrice: boolean;
+  // Priced in some other season — i.e. carry-forward could fill the gap.
+  pricedElsewhere: boolean;
 }
 
 const BARE_SEASON = /^(SS|FW)\d{2}$/i;
@@ -41,28 +49,42 @@ function isOnSale(tags: string[]): boolean {
 
 interface Loaded {
   id: string;
+  colorwaySku: string;
   name: string;
   isCore: boolean;
   tags: string[];
   vendor: string | null;
   productType: string | null;
   style: { styleName: string };
+  prices: { seasonId: string }[];
   seasonImages: { url: string }[];
-  entries: { origin: "NEW" | "CARRYOVER"; season: { code: string; kind: string } }[];
+  entries: {
+    origin: "NEW" | "CARRYOVER";
+    seasonId: string;
+    season: { code: string; kind: string };
+  }[];
 }
 
 async function loadAll(): Promise<Loaded[]> {
   return prisma.colorway.findMany({
     select: {
       id: true,
+      colorwaySku: true,
       name: true,
       isCore: true,
       tags: true,
       vendor: true,
       productType: true,
       style: { select: { styleName: true } },
+      prices: { where: { priceType: "MSRP" }, select: { seasonId: true } },
       seasonImages: { where: { slot: "MAIN" }, take: 1, select: { url: true } },
-      entries: { select: { origin: true, season: { select: { code: true, kind: true } } } },
+      entries: {
+        select: {
+          origin: true,
+          seasonId: true,
+          season: { select: { code: true, kind: true } },
+        },
+      },
     },
   }) as unknown as Promise<Loaded[]>;
 }
@@ -129,6 +151,13 @@ export async function getCollections(
         if (v > currentVal) { currentVal = v; currentSeason = e.season.code.toUpperCase(); }
       }
 
+  // code -> id, so a product's price for the target season can be resolved even
+  // when it has no entry in that season yet (i.e. before being carried in).
+  const seasonIdByCode = new Map<string, string>();
+  for (const cw of rows)
+    for (const e of cw.entries)
+      seasonIdByCode.set(e.season.code.toUpperCase(), e.seasonId);
+
   const seasonCounts = new Map<string, number>();
   let coreCount = 0;
   let continuityCount = 0;
@@ -183,10 +212,19 @@ export async function getCollections(
     const onSale = isOnSale(cw.tags);
     if (onSale) onSaleCount++;
 
+    // Priced for the target season? Only meaningful once the product is in it,
+    // but computed either way so the confirmation can warn before carrying.
+    const targetSeasonId = targetEntry?.seasonId ?? seasonIdByCode.get(targetSeason) ?? null;
+    const hasTargetPrice = targetSeasonId
+      ? cw.prices.some((p) => p.seasonId === targetSeasonId)
+      : false;
+
     all.push({
       id: cw.id,
+      colorwaySku: cw.colorwaySku,
       name: cw.name,
       styleName: cw.style.styleName,
+      tags: cw.tags,
       thumbnailRef: cw.seasonImages[0]?.url ?? null,
       vendor: cw.vendor,
       productType: cw.productType,
@@ -194,6 +232,8 @@ export async function getCollections(
       onSale,
       targetSeason,
       origin,
+      hasTargetPrice,
+      pricedElsewhere: !hasTargetPrice && cw.prices.length > 0,
     });
     const vkey = cw.vendor?.trim() || NO_VENDOR;
     vendorCounts.set(vkey, (vendorCounts.get(vkey) ?? 0) + 1);
