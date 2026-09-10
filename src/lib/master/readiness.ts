@@ -10,6 +10,45 @@ function has(v: string | null | undefined): boolean {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+// ---------------------------------------------------------------------------
+// Channel eligibility — which channels a product may go to AT ALL.
+// ---------------------------------------------------------------------------
+//
+// Distinct from readiness: readiness asks "is this product complete enough to
+// push?", eligibility asks "should this product ever go there?". Loom is the
+// B2B wholesale channel for Livid's own production. External brands are resold
+// goods and vintage is one-of-one stock; neither is wholesaled, so neither
+// belongs on Loom -- ever, regardless of how complete it is.
+//
+// Derived from the brand rather than stored per product, because it is a fact
+// about what the product IS, not a per-product intent someone can tick wrong.
+// It deliberately does NOT key off `Source`: a Livid garment is Livid whether
+// it arrived through Threadflow or the Cin7 import (87 of the Loom
+// publications to date are Cin7-sourced), and `Source` becomes pure history
+// once Cin7 is retired.
+
+export interface EligibilityInput {
+  /** Brand.isLivid — the one brand flagged as Livid's own production. */
+  brandIsLivid: boolean | null | undefined;
+}
+
+/** Livid's own production may be wholesaled; externals and vintage may not. */
+export function isLoomEligible(i: EligibilityInput): boolean {
+  return i.brandIsLivid === true;
+}
+
+/** Everything the master holds can be sold direct-to-consumer. */
+export function isShopifyEligible(_i: EligibilityInput): boolean {
+  return true;
+}
+
+/** Human-readable reason, for skip lists and UI. Null when eligible. */
+export function loomIneligibleReason(i: EligibilityInput): string | null {
+  return isLoomEligible(i)
+    ? null
+    : "not a Livid-brand product — Loom carries Livid production only";
+}
+
 export interface ShopifyReadinessInput {
   hasVariants: boolean;
   hasPrice: boolean;

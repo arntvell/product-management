@@ -87,6 +87,10 @@ export function BrandProductBuilder({
   );
   const [brandId, setBrandId] = useState(brands[0]?.id ?? "");
   const [brandNewName, setBrandNewName] = useState("");
+  // A brand created here is external by definition; an existing one carries the
+  // flag. Drives channel eligibility (see the channel checkboxes below).
+  const brandIsLivid =
+    brandMode === "existing" && !!brands.find((b) => b.id === brandId)?.isLivid;
   const [tpl, setTpl] = useState<Template>(emptyTemplate(manufacturers[0]?.id ?? ""));
   const [saveTemplate, setSaveTemplate] = useState(true);
   const [rows, setRows] = useState<ProductRow[]>([emptyRow(), emptyRow()]);
@@ -238,17 +242,29 @@ export function BrandProductBuilder({
         title="Template — shared across all products in this batch"
         hint={loomSelected ? "Loom requires the full customs block + manufacturer." : undefined}
       >
-        <div className="mb-3 flex gap-4">
-          {CHANNELS.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={tpl.channels[c]}
-                onChange={(e) => setTpl((t) => ({ ...t, channels: { ...t.channels, [c]: e.target.checked } }))}
-              />
-              {CHANNEL_LABELS[c]}
-            </label>
-          ))}
+        <div className="mb-3 flex flex-wrap items-center gap-4">
+          {CHANNELS.map((c) => {
+            // Loom carries Livid's own production only — externals are resold
+            // goods, not wholesale lines. Offering the checkbox here was one
+            // click away from putting an external brand into the B2B feed.
+            const allowed = c !== "LOOM" || brandIsLivid;
+            if (!allowed) return null;
+            return (
+              <label key={c} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={tpl.channels[c]}
+                  onChange={(e) => setTpl((t) => ({ ...t, channels: { ...t.channels, [c]: e.target.checked } }))}
+                />
+                {CHANNEL_LABELS[c]}
+              </label>
+            );
+          })}
+          {!brandIsLivid && (
+            <span className="text-xs text-muted-foreground">
+              Shopify only — Loom carries Livid production, not external brands.
+            </span>
+          )}
         </div>
         <Grid>
           <Field label="Category *">

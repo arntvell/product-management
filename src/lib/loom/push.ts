@@ -1,5 +1,6 @@
 // Push master products to Loom's upsert endpoint.
 import { prisma } from "@/lib/db";
+import { loomIneligibleReason } from "@/lib/master/readiness";
 import type { LoomMode } from "./payload";
 import {
   loadColorwaysForLoom,
@@ -98,6 +99,15 @@ export async function pushColorwaysToLoom(
     const cw = loadedById.get(id);
     if (!cw) {
       skipped.push({ colorwayId: id, reason: `not in season ${seasonCode}` });
+      continue;
+    }
+    // Eligibility before readiness: Loom carries Livid's own production only.
+    // External brands are resold goods and vintage is one-of-one stock, so
+    // neither is wholesaled however complete its data happens to be. Nothing
+    // enforced this before — the channel was simply never ticked for them.
+    const reason = loomIneligibleReason({ brandIsLivid: cw.brand?.isLivid });
+    if (reason) {
+      skipped.push({ colorwayId: id, reason });
       continue;
     }
     // A withdrawal still has to reach Loom, so an archived colorway bypasses the

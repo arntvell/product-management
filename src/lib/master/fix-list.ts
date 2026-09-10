@@ -70,6 +70,11 @@ export async function getFixList(opts: FixListOptions): Promise<{
   const inSeason = { entries: { some: { seasonId: season.id } } };
   const where: Record<string, unknown> = {
     OR: opts.includeCore ? [inSeason, { isCore: true }] : [inSeason],
+    // This list is Loom readiness, so it must only contain products that can
+    // go to Loom at all. Without this it flagged every external brand and all
+    // ~1,700 vintage rows as "missing HS code / manufacturer" for a push that
+    // will never happen — a backlog of work that did not exist.
+    brand: { isLivid: true },
   };
   if (opts.vendors?.length) where.vendor = { in: opts.vendors };
 
