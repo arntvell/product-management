@@ -10,10 +10,16 @@ read-only queries. They are the argument for the order of work.
 
 ---
 
-## 1. The finding that sets the order
+## 1. Barcode coverage — not a defect, a lifecycle stage
 
-**Barcodes are the join key between a product master and a stock system, and the
-current buying season barely has any.**
+**Corrected 2026-09-11.** The first draft of this document led with SS27's missing
+barcodes as the blocking defect. That was wrong, and the correction matters because
+it removes the largest item from the critical path.
+
+SS27 is **pre-season**. The products do not exist yet. Production volumes are set on
+all styles first, and barcodes are created at that point. The 84% figure below is
+what a season in pre-sale is *supposed* to look like — it is not a data quality
+problem and there is nothing to fix.
 
 | Season | Variants | Missing barcode | |
 |---|---:|---:|---|
@@ -21,21 +27,17 @@ current buying season barely has any.**
 | FW26 | 1,833 | 184 | 10.0 % |
 | Continuity | 5,003 | 154 | 3.1 % |
 
-By source: Threadflow variants are 4,083/5,255 missing (78 %); Cin7-imported are
-150/4,903 (3 %). The historical catalogue — the part that came from the *old*
-master — is in far better shape than the season currently being bought.
+What still holds: **barcode is the join key**, because each platform uses its own SKU
+scheme (§3), and it is the one identifier they can all agree on. What follows from
+the correction:
 
-Nothing else in this document matters as much. You cannot reconcile stock across
-Sitoo, Shopify and Cin7 on names or SKUs alone, because each system uses its own SKU
-scheme (§3). The barcode is the one identifier they can all agree on, and SS27 does
-not have it. **Fix barcode coverage first**; every other reconciliation gets cheaper
-once it exists, and several become trivial.
-
-Where do they come from? `Variant.barcode` is documented as "set once, never
-blanked", and Threadflow is the source for current seasons. So the question to
-answer before any code: **does Threadflow hold SS27 barcodes and we are not
-ingesting them, or have they not been assigned yet?** Those need completely
-different responses — a sync fix versus an operational process with your PLM.
+- **Reconciliation is scoped to what physically exists** — FW26 (90% covered) and
+  Continuity (97%). Those are the seasons with stock to sync, which is the entire
+  point. SS27 has no stock to reconcile.
+- **FW26's 184 and Continuity's 154 gaps are the real list**, and they are small
+  enough to work through by hand.
+- **Re-run this measurement after production volumes are set.** At that point SS27
+  barcodes should appear; if they do not, *that* is a sync defect worth chasing.
 
 ---
 
@@ -44,17 +46,49 @@ different responses — a sync fix versus an operational process with your PLM.
 These are wrong *before* any external system is consulted, which makes them the
 cheapest thing to fix and a prerequisite for trusting a cross-platform diff.
 
-| # | Class | Measured | Notes |
+| # | Class | Measured | Verdict |
 |---|---|---|---|
-| 1 | Missing barcodes | 4,417 variants | §1 — the blocker |
-| 2 | `IMP-` duplicate records | **42** colorways with a non-`IMP` twin | Same garment held twice; 11 more `IMP-` rows have no twin and may be legitimate |
-| 3 | Duplicate barcodes | 2 barcodes across **24** variants | The same physical item under two product records — poison for stock sync |
-| 4 | Duplicate brands | `P.F. Candle` / `P.F. Candles` | Two brand rows, one vendor |
-| 5 | SKU scheme drift | not yet counted | ONBOARDING §4: Cin7 uses `JP` vs Shopify `JPN`, plus `IMP-` prefixes |
-| 6 | Size-label drift | not yet counted | Threadflow sends `L32`, Cin7 sends `32`; legacy rows carry `W27/LL32`. `normalize-size-labels.ts` exists for this |
+| 1 | Missing barcodes, FW26 + Continuity | 338 variants | **Real**, and small enough to fix by hand |
+| 2 | Duplicate brands | `P.F. Candle` / `P.F. Candles` | **Real** — confirmed, one is a bad record |
+| 3 | SKU scheme drift | not yet counted | **Likely** — ONBOARDING §4: Cin7 `JP` vs Shopify `JPN` |
+| 4 | Size-label drift | not yet counted | **Likely** — TF sends `L32`, Cin7 `32`, legacy `W27/LL32`; `normalize-size-labels.ts` exists |
+| ~~5~~ | ~~`IMP-` duplicates~~ | ~~42~~ | **Not a defect — see below** |
+| ~~6~~ | ~~Duplicate barcodes~~ | ~~2 / 24 variants~~ | **Not a defect — see below** |
 
-Classes 2 and 3 are the dangerous ones for stock: two records for one garment means
-stock splits across them and neither balance is right.
+### Two retracted findings
+
+**`IMP-` records are not duplicates.** The first draft counted 42 `IMP-` colorways
+with a non-`IMP` twin and proposed merging them via `colorways/merge`. **That would
+have destroyed a real business distinction.** `IMP-` means *imperfect*: production
+errors sold at a discount rather than thrown away. `IMP-LIV-BRNS-JPFD` and
+`LIV-BRNS-JPFD` are deliberately two products — different condition, different
+price, and they must stay separately tracked. 53 of them exist. The twin is the
+point, not the bug.
+
+*Lesson for the classifier (§4.2):* a shared name or a prefix relationship is not
+evidence of duplication. Only a shared **barcode** is, and even then see below.
+
+**The two "duplicate barcodes" are placeholder values on non-products.** 22 of the
+24 variants carry barcode `0` and are all `STORAGE-*` records — packaging, hangtags,
+shop lighting, cleaning supplies, tools, "Deadstock Rest". The other pair are repair
+line-items. None is a garment; `0` is a placeholder, not a barcode.
+
+### A class the first draft missed: non-product records
+
+67 `STORAGE-*` colorways exist in the master — internal consumables and operational
+line items that arrived with the Cin7 import, because Cin7 tracked them as stock.
+None is published to any channel today.
+
+They matter here precisely because the registry push is meant to send *everything*:
+
+- They **should not** go to Shopify or Loom's wholesale catalogue — they are not
+  merchandise.
+- They **may well** belong in a stock registry, since they are things the business
+  physically holds and counts.
+
+That is a decision to make deliberately before the registry push, not something to
+discover afterwards. Class breakdown of the live master: 1,610 vintage, 1,199
+mainline, 464 `EXT-`, 67 `STORAGE-`, 53 `IMP-`.
 
 Tooling that already exists and should be used rather than rebuilt:
 `colorways/merge` (with dry-run and preview), `normalize/size-labels`,
@@ -73,7 +107,7 @@ Reconciliation is only as good as the key it joins on.
 | **Shopify** | handle, product GID | variant SKU, barcode | `enrich-shopify` matches SKU → barcode → cleaned name, dropping ambiguous names |
 | **Cin7** | `ProductCode` / family SKU | SKU, barcode | `splitSku` splits base + size; different scheme for old products |
 | **Loom** | stable `style_id` / `colorway_id` | `variant_id`, `variant_sku`, `barcode` | Ids are ours; Loom stores what we send |
-| **Sitoo** | — | — | **Unknown — see §5** |
+| **Sitoo** | unknown | unknown | Auth works; product endpoints 404 — see §5.1 |
 
 The practical consequence: a three-way join must be **barcode-first, SKU-second,
 name-never**. Name matching is what `enrich-shopify` falls back to, and it is
@@ -106,7 +140,8 @@ Over a pair of snapshots, emit typed findings rather than a raw diff:
 - `BARCODE_MISMATCH` — same SKU, different barcode
 - `VARIANT_COUNT_MISMATCH` — sizes differ
 - `DUPLICATE_WITHIN_PLATFORM` — one barcode, several records (class 3 above)
-- `NO_KEY` — no barcode on either side, so unreconcilable (this will be most of SS27)
+- `NO_KEY` — no barcode on either side, so unreconcilable
+- `IMPERFECT_PAIR` — an `IMP-` record and its twin: **expected, never a duplicate**
 
 Typed findings can be counted, filtered, assigned and burned down. A raw diff cannot.
 
@@ -129,15 +164,34 @@ blocks) — see `docs/review-2026-09-10.md` §4a, and note `LoomMode` is already
 
 ## 5. Open questions
 
-1. **Sitoo — direct fetch, or trust Shopify?** `docs/product-master-architecture.md`
-   §7.1 says *"Sitoo is downstream of Shopify (no direct integration needed here)"*.
-   That was written for **pushing product data**, and it does not settle this case:
-   Sitoo is the POS holding physical store stock, and a POS accumulates its own
-   records over time. If Sitoo can hold a product Shopify does not, it needs its own
-   snapshot and there is **no Sitoo client in this repo** — that is a build, not a
-   query. If it genuinely mirrors Shopify, the reconciliation is three-way and
-   cheaper. **This decides the size of the project.**
-2. **Are SS27 barcodes missing in Threadflow, or missing in our ingest?** §1.
+1. **Sitoo API access — blocked on one thing.** Credentials are now in `.env.local`
+   (`SITOO_API_ID`, `SITOO_API_KEY`, `SITOO_BASE_URL`) and **they authenticate
+   correctly** — probes return `404 Invalid endpoint/method`, not `401`. Base URL is
+   `https://api140.mysitoo.com/v2/accounts/91622/`.
+
+   `GET /sites` works and returns one site:
+   `{511378E3-3B0B-18B0-289A-26F658CC1136}` → `lividjeans-no.mysitoo.com`, `eshopid: 1`.
+
+   **Every other endpoint tried returns 404**: `products`, `productskus`, `items`,
+   `product`, `stores`, `warehouses`, `eshops`, `productvariants`, `stockitems`,
+   `warehouseitems`, `pricelists`, `categories`, `brands`, and the site-scoped
+   variants of those.
+
+   Since `sites` succeeds and the rest 404 with *"invalid endpoint/method"* rather
+   than a permission error, the likeliest cause is the **API key's permission scope**
+   — Sitoo keys are scoped per resource — with the second possibility being different
+   endpoint naming. **Needed:** either the key granted product/stock read scopes, or a
+   link to the Sitoo API reference for this account. I stopped probing rather than
+   keep guessing endpoint names against the production API.
+
+   Note this supersedes the earlier assumption in
+   `docs/product-master-architecture.md` §7.1 that *"Sitoo is downstream of Shopify
+   (no direct integration needed here)"* — true for pushing product data, not for
+   reconciling stock, where Sitoo is the POS of record for what is physically in the
+   shops. A sandbox environment is available to push to once corrections are scoped.
+2. ~~Are SS27 barcodes missing in Threadflow or in our ingest?~~ **Answered:** neither
+   — SS27 is pre-season and the products do not exist yet (§1). Re-measure once
+   production volumes are set.
 3. **When the master is wrong, what wins?** Cin7 was the master until recently, so
    for historical products Cin7 is often more correct than Origio — the `IMP-`
    duplicates are Cin7 import artefacts, but the underlying Cin7 records are what the
@@ -149,16 +203,16 @@ blocks) — see `docs/review-2026-09-10.md` §4a, and note `LoomMode` is already
 
 ## 6. Suggested order
 
-1. Answer §5.1 (Sitoo) and §5.2 (barcodes) — both are questions, not code, and both
-   change what gets built.
-2. Fix the master's internal problems first: the 42 `IMP-` duplicates via
-   `colorways/merge`, the 2 duplicate barcodes, the duplicate brand. Small, bounded,
-   and they must not be exported to other platforms.
-3. Barcode coverage for SS27 — whatever §5.2 turns out to require.
-4. Snapshot fetchers, one platform at a time, starting with Shopify (the client
-   exists).
-5. Classifier + reconciliation surface.
-6. Loom registry push mode.
+1. **Unblock Sitoo API access** (§5.1) — a permissions or documentation question, not
+   code, and nothing four-way can be built without it.
+2. **Merge the duplicate brand** (`P.F. Candle` / `P.F. Candles`) — small, confirmed,
+   and it should not be exported anywhere.
+3. **Decide what `STORAGE-*` records are** for the registry push (§2). 67 rows, and
+   the answer changes what "push everything" means.
+4. **Snapshot fetchers**, one platform at a time, starting with Shopify — its client
+   already exists — then Cin7, then Sitoo once unblocked.
+5. **Classifier + reconciliation surface.**
+6. **Loom registry push mode**, then the Sitoo sandbox once corrections are scoped.
 
-Steps 2 and 3 are worth doing even if the rest is deferred: they are real data
-defects in the system of record today.
+Steps 2 and 3 are worth doing regardless: one is a real defect, the other a decision
+that will otherwise be made accidentally by whoever writes the registry push.
