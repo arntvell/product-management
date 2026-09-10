@@ -34,8 +34,8 @@ Of 9,860 stocked merchandise identities:
 | Cin7 only | 397 | 4.0 % |
 | other combinations | 572 | 5.9 % |
 
-**4,583 stocked products are missing from Origio entirely** — and 3,793 of those
-are in *all three* other systems. There is no ambiguity about whether they are
+**4,552 stocked products are missing from Origio entirely** (after removing the
+106 non-product rows of §2.5) — and most are in *all three* other systems. There is no ambiguity about whether they are
 real: they are sellable, they are stocked, and three systems agree.
 
 Origio cannot be the source of truth for stock while it is unaware of 46 % of the
@@ -60,15 +60,19 @@ Emitted by `reconcile.py` into `snapshots/2026-09-11/findings.json`.
 
 | Finding | Count | What it means |
 |---|---:|---|
-| `MISSING_FROM_ORIGIO` | **4,583** | Stocked, absent from the master |
-| `MISSING_FROM_SITOO` | 1,660 | In Origio with stock, not in the POS |
+| `MISSING_FROM_ORIGIO` | **4,552** | Stocked, absent from the master |
+| `MISSING_FROM_SITOO` | 1,658 | In Origio with stock, not in the POS |
 | `RETIRE_CANDIDATE` | 956 | In Origio, no stock anywhere, not pre-season |
-| `MISSING_FROM_SHOPIFY` | 943 | In Origio with stock, not on the webshop |
+| `MISSING_FROM_SHOPIFY` | 892 | In Origio with stock, not on the webshop |
 | `NO_BARCODE` | 270 | In Origio, no barcode in any system, not pre-season |
 | `BARCODE_CONFLICT` | 180 | One SKU, systems disagree on the barcode |
 | `SKU_CONFLICT` | 134 | One barcode, systems disagree on the SKU |
+| `NON_PRODUCT` | 106 | Carries stock but is not a sellable product — §2.5 |
 
-### 2.1 `MISSING_FROM_ORIGIO` — 4,583
+Each is also written as a CSV worklist under `snapshots/<date>/worklists/`,
+highest-value rows first, by `scripts/reconcile/worklists.py`.
+
+### 2.1 `MISSING_FROM_ORIGIO` — 4,552
 
 By SKU prefix: 2,429 `LIV`, 1,545 `EXT`, 390 `VN-ONLN`, 70 `CHIMI`, 149 other.
 By category: Shirt 712, Jeans 628, Knitwear 255, Jacket 239, T-Shirt 209.
@@ -118,7 +122,28 @@ that reached Shopify and nowhere else.
   `EXT-PB-BARTH-Homme-10` are one shoe held twice.
 - **Sitoo is perfectly clean on both counts.**
 
-### 2.5 Barcode coverage
+### 2.5 `NON_PRODUCT` — 106 rows that must never be imported
+
+Few in number, but they dominate any list sorted by quantity because they are
+buckets rather than garments. Anyone working the import list top-down would
+import these first:
+
+| Class | Example | Why it is not a product |
+|---|---|---|
+| Sale buckets | `LIV-SLGSV-H-SRT-OS` "Salgskjorte" — **2,040 units** | One SKU standing for every sale shirt |
+| Vintage bulk lots | `EXT-VN-NW-LVS-BL` "LEVIS BLUE (old)" — 537 units | An unsorted buy, not a garment |
+| Imperfect buckets | `LIV-IMP-TIA-OS` "Imperfect Tia, OS" — 267 units | Aggregate, unlike the real `IMP-` products |
+| **Test data** | `LIV-WBTST-JP-21OZEMB-*` "Webshipper test jeans" | 496 units across four sizes, in production |
+| Samples / consumables | `S-19` "CLOTHES HANGER" — 179 units | Not merchandise |
+
+The test jeans deserve their own look: test rows holding real stock in live
+systems.
+
+By contrast the genuine import list has the right shape — median **2 units**,
+90th percentile 7. That is what a catalogue of individual garment variants looks
+like, and it is good evidence the 4,552 are real product.
+
+### 2.6 Barcode coverage
 
 | System | Coverage |
 |---|---:|
@@ -168,7 +193,7 @@ of state in the tooling that goes stale.
 
 ## 4. Flags that need a human decision
 
-1. **Which of the 4,583 belong in Origio?** They include 390 `VN-ONLN` vintage
+1. **Which of the 4,552 belong in Origio?** They include 390 `VN-ONLN` vintage
    items and a long tail of external brands. My assumption: everything stocked and
    sellable belongs, but vintage may follow the vintage module instead of a bulk
    import, and `STORAGE-`-style rows should not come at all.
@@ -194,7 +219,7 @@ of state in the tooling that goes stale.
 ## 5. What I did not do
 
 - No writes to any system, no deploy, no migration.
-- **No import of the 4,583.** It needs decision 4.1 first, and importing product
+- **No import of the 4,552.** It needs decision 4.1 first, and importing product
   is exactly the kind of bulk write that should be previewed and approved.
 - **No conflict resolution.** Needs the rule in 4.2.
 - **No UI.** The findings are JSON; a reconciliation surface in Origio is the
@@ -206,7 +231,7 @@ of state in the tooling that goes stale.
 1. Decide 4.1 and 4.2 — both are rules, not code.
 2. Fix Shopify's 41 shared barcodes and 150 repeated SKUs at source; they corrupt
    every downstream join.
-3. Import the agreed subset of the 4,583 into Origio, previewed in bulk.
+3. Import the agreed subset of the 4,552 into Origio, previewed in bulk.
 4. Retire the 956.
 5. Fill the 270 missing barcodes, and re-run once SS27 goes into production.
 6. Build the reconciliation surface; run it on a schedule.
