@@ -46,3 +46,6 @@ _scratch/
 # generated readiness/gap reports
 *.csv
 loom-payload-*.json
+
+# Reconciliation snapshots — business data, large, regenerable
+snapshots/
