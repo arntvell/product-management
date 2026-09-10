@@ -19,13 +19,34 @@ Two things this gets right that a naive diff does not:
      - A pre-season style has no stock because it has not been made yet. Gating
        on stock without checking the season retires the entire coming season.
 """
-import collections, csv, json, os, sys
+import collections, csv, json, os, re, sys
 
 NON_MERCH = {"Button", "Sample", "SAMPLE PACK", "Service", "Non-inventory", "Fabric",
              "wrapin", "Storage", "lager", "Skredder", "Fitguide", "Shopify", "SAVED",
              "Gift Cards", "Stork"}
 # Seasons whose products are not yet produced: absence of stock proves nothing.
 PRESEASON = {"SS27"}
+
+# Rows that carry stock but are not a product anyone sells as such. They are few
+# -- ~31 of 4,583 -- but they hold enormous quantities (one sale bucket has 2,040
+# units), so they dominate any "biggest first" list and would be imported as
+# products by anyone working top-down. Flagged separately, never mixed in.
+NON_PRODUCT = [
+    (r"WBTST|WEBSHIPPER|-TEST-|^TEST",   "test data"),
+    (r"SLGSV",                            "aggregate: sale bucket"),
+    (r"^EXT-VN-NW-|^EXT-VN-[A-Z]+$",     "aggregate: vintage bulk lot"),
+    (r"^LIV-IMP-[A-Z]+-OS$",             "aggregate: imperfect bucket"),
+    (r"SMPL|^S-\d+$|SAMPLE",             "sample / consumable"),
+    (r"^STORAGE-",                        "internal storage"),
+    (r"PICKUP|PCKUP|REPS|REPARASJON",    "service: repair / pickup"),
+    (r"GFTCRD|GIFT",                      "gift card"),
+]
+
+def non_product(skus, title):
+    hay = " ".join(skus).upper() + " " + (title or "").upper()
+    for pat, label in NON_PRODUCT:
+        if re.search(pat, hay): return label
+    return None
 
 def n(x): return (x or "").strip()
 def usable(bc):
@@ -123,6 +144,11 @@ def run(d):
         rec = dict(sku=sorted(g["sku"])[:6], barcode=sorted(g["bc"])[:4], title=g["title"],
                    cat=g["cat"], qty_sitoo=g["qty_sitoo"], qty_cin7=g["qty_cin7"],
                    systems=sorted(g["sys"]), seasons=sorted(g["seasons"]))
+        np = non_product(sorted(g["sku"]), g["title"])
+        if np:
+            rec["reason"] = np
+            findings["NON_PRODUCT"].append(rec)
+            continue
         if g["stocked"] and "origio" not in g["sys"]:
             findings["MISSING_FROM_ORIGIO"].append(rec)
         if "origio" in g["sys"] and not g["stocked"] and not g["preseason"]:
