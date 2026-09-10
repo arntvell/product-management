@@ -8,9 +8,12 @@
 // list and fails at push time with "no <season> pricing".
 //
 // So: preview first, act second, and say what will be incomplete afterwards.
-// Prices are deliberately NOT carried — carry-overs are repriced per season per
-// product, so the hole is the signal, not a defect to paper over.
+// Prices are not carried by default — carry-overs are repriced per season per
+// product, so the hole is the signal rather than something to paper over. But
+// when last season's price IS the right answer, retyping it is busywork: pass
+// `carryPrices` and the same action fills the gap it just reported.
 import { prisma } from "@/lib/db";
+import { runCarryPrices } from "./carry-prices";
 
 export interface CarryOverPreview {
   seasonCode: string;
@@ -96,11 +99,16 @@ export async function previewCarryOver(
 
 export interface CarryOverResult extends CarryOverPreview {
   added: number;
+  /** Price rows created, when `carryPrices` was asked for. */
+  pricesCopied: number;
+  /** Which season each price came from, e.g. { CONTINUITY: 3 }. */
+  pricesFrom: Record<string, number>;
 }
 
 export async function applyCarryOver(
   colorwayIds: string[],
-  seasonCode: string
+  seasonCode: string,
+  opts: { carryPrices?: boolean } = {}
 ): Promise<CarryOverResult> {
   const preview = await previewCarryOver(colorwayIds, seasonCode);
   const season = await resolveSeason(seasonCode);
@@ -135,7 +143,18 @@ export async function applyCarryOver(
     added++;
   }
 
-  return { ...preview, added };
+  // Optional, and only after the entries exist: carry-prices copies from the
+  // newest season where each product is actually priced, and never overwrites
+  // a price the target season already has.
+  let pricesCopied = 0;
+  let pricesFrom: Record<string, number> = {};
+  if (opts.carryPrices) {
+    const res = await runCarryPrices({ seasonCode, colorwayIds: ids });
+    pricesCopied = res.rowsToCreate;
+    pricesFrom = res.bySourceSeason;
+  }
+
+  return { ...preview, added, pricesCopied, pricesFrom };
 }
 
 /** Take products back OUT of a season (the undo for the action above). */

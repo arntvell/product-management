@@ -170,7 +170,7 @@ export function CollectionsTable({
     }
   }
 
-  async function confirm() {
+  async function confirm(carryPrices = false) {
     setBusy(true);
     try {
       const res = await fetch("/api/catalog/carry-over", {
@@ -180,16 +180,24 @@ export function CollectionsTable({
           colorwayIds: selectedIds,
           seasonCode: season,
           ...(pendingRemove ? { remove: true } : {}),
+          ...(carryPrices ? { carryPrices: true } : {}),
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error ?? "Failed");
-      toast.success(
-        pendingRemove
-          ? `Removed ${d.removed} product(s) from ${season}`
-          : `Carried ${d.added} product(s) into ${season}` +
-              (d.wouldLackPrice ? ` — ${d.wouldLackPrice} still need a ${season} price` : "")
-      );
+      if (pendingRemove) {
+        toast.success(`Removed ${d.removed} product(s) from ${season}`);
+      } else {
+        const from = Object.keys(d.pricesFrom ?? {}).join(", ");
+        const copied = d.pricesCopied
+          ? ` · copied ${d.pricesCopied} price row(s)${from ? ` from ${from}` : ""}`
+          : "";
+        const short = Math.max(0, (d.wouldLackPrice ?? 0) - (carryPrices ? d.pricesCopied ?? 0 : 0));
+        toast.success(
+          `Carried ${d.added} product(s) into ${season}${copied}` +
+            (short ? ` — ${short} still need a ${season} price` : "")
+        );
+      }
       setPreview(null);
       setSelected(new Set());
       router.refresh();
@@ -467,8 +475,10 @@ export function CollectionsTable({
                         {preview.pricedElsewhere > 0 && (
                           <>
                             {" "}
-                            {preview.pricedElsewhere} of those are priced in another season, so
-                            carry-forward can fill them.
+                            <b className="tabular-nums">{preview.pricedElsewhere}</b> of those are
+                            priced in another season — <b>Carry over + copy prices</b> fills those
+                            from the most recent season each is priced in, without overwriting
+                            anything already set.
                           </>
                         )}
                         {preview.unpricedSample.length > 0 && (
@@ -491,7 +501,12 @@ export function CollectionsTable({
             <Button variant="outline" onClick={() => setPreview(null)} disabled={busy}>
               Cancel
             </Button>
-            <Button onClick={confirm} disabled={busy}>
+            {!pendingRemove && !!preview?.pricedElsewhere && (
+              <Button variant="secondary" onClick={() => confirm(true)} disabled={busy}>
+                Carry over + copy prices
+              </Button>
+            )}
+            <Button onClick={() => confirm(false)} disabled={busy}>
               {pendingRemove ? "Remove" : "Carry over"}
             </Button>
           </DialogFooter>

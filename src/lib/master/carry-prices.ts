@@ -14,6 +14,12 @@ export interface CarryPricesOptions {
   seasonCode: string;
   includeCore?: boolean;
   vendors?: string[];
+  /**
+   * Limit to specific colorways. Lets the carry-over dialog fill the price gap
+   * it just reported, for exactly the products the user carried, instead of
+   * sweeping the whole season.
+   */
+  colorwayIds?: string[];
 }
 
 export interface CarriedPrice {
@@ -57,6 +63,7 @@ async function collect(opts: CarryPricesOptions): Promise<{
     OR: opts.includeCore ? [inSeason, { isCore: true }] : [inSeason],
   };
   if (opts.vendors?.length) where.vendor = { in: opts.vendors };
+  if (opts.colorwayIds?.length) where.id = { in: opts.colorwayIds };
 
   const colorways = await prisma.colorway.findMany({
     where,

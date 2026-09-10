@@ -8,7 +8,7 @@ import {
 export const dynamic = "force-dynamic";
 
 // POST /api/catalog/carry-over
-//   { colorwayIds, seasonCode, dryRun?, remove? }
+//   { colorwayIds, seasonCode, dryRun?, remove?, carryPrices? }
 // Carry a selection of products into a season as CARRY-OVER, or take them back
 // out. Always preview first (dryRun) — the response says how many will be in
 // the season without a price for it, which is the state that fails at push.
@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     seasonCode?: string;
     dryRun?: boolean;
     remove?: boolean;
+    carryPrices?: boolean;
   };
   try {
     body = await req.json();
@@ -43,7 +44,9 @@ export async function POST(req: Request) {
       const preview = await previewCarryOver(ids, seasonCode);
       return NextResponse.json({ ok: true, dryRun: true, ...preview });
     }
-    const result = await applyCarryOver(ids, seasonCode);
+    const result = await applyCarryOver(ids, seasonCode, {
+      carryPrices: body.carryPrices,
+    });
     return NextResponse.json({ ok: true, dryRun: false, ...result });
   } catch (err) {
     return NextResponse.json(
