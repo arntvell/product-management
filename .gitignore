@@ -49,3 +49,4 @@ loom-payload-*.json
 
 # Reconciliation snapshots — business data, large, regenerable
 snapshots/
+__pycache__/
