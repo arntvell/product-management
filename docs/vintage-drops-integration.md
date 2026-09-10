@@ -87,10 +87,35 @@ Do not let the migration break the next drop.
 
 ## 3. The model already fits
 
-### Open question, unresolved — settle this before step 1
+### Resolved 2026-09-10 — the back catalogue is already in Origio
 
-**Vintage is not new to Livid, only new to Origio.** Years of vintage products
-already live in Shopify, and this repo already routes around them in three places:
+**This section previously called the back catalogue an open question. It is not.**
+Querying the master settles it: **1,744 vintage colorways are already here** —
+brand `Vintage`, vendor `Vintage`, `source = CIN7_IMPORT`, all `DRAFT`, all in the
+CONTINUITY season, carrying the same `VN-ONLN-<nummer>` SKUs this document
+specifies (`VN-ONLN-9342` "70's Wool Varsity jacket (XL)", `VN-ONLN-11326`
+"Tommy Hilfilger Shirt (XL)"). They arrived with the Cin7 import, because Cin7
+was the product master before Threadflow and Loom existed.
+
+**Two consequences, both correcting proposals made earlier in this document:**
+
+1. **Do not add `VINTAGE` to the `Source` enum.** §3 originally proposed it. That
+   would split vintage across two markers with 1,744 products on the old one.
+   Vintage is already discriminated by **brand/vendor `Vintage`**, which is also
+   what the channel-eligibility rule keys off (`readiness.ts`,
+   `isLoomEligible`). `Source` records how a row arrived and becomes pure history
+   once Cin7 is retired — it is the wrong place for a fact about what a product
+   *is*. Every §6 guard that assumed a `VINTAGE` source needs rereading against
+   brand instead.
+2. **Vintage is two things, not one.** The back catalogue (1,744 archived items)
+   *and* a weekly drop: **40–60 styles every Friday**, which is what the
+   `VN-ONLN-` SKUs and the sFTP/image work in §4 are for. The module has to serve
+   a recurring weekly cadence, not an occasional import — that raises the bar on
+   the photo-discovery and validation work, which is on the critical path rather
+   than beside it.
+
+The rest of this section stands: the master already routes around vintage in three
+places, which is why nobody noticed the back catalogue was here.
 
 - `src/lib/master/import-shopify.ts:192` — the Shopify importer is vendor-scoped
   *precisely* to keep vintage out: *"the Shopify catalogue mixes in vintage,
@@ -100,10 +125,7 @@ already live in Shopify, and this repo already routes around them in three place
 - `src/lib/grouping.ts:7` — the legacy editor excludes `/vintage|used|preloved/i`
   from auto-grouping by product type, title, or tag.
 
-**Nobody has decided whether Origio owns the vintage back-catalogue or only new
-drops from cut-over forward.** This doc silently assumes the latter. That may well be
-right — but it is an assumption, not a finding, and it should be made explicitly
-because it has a concrete failure mode:
+The remaining live risk is the Shopify importer, which is unchanged:
 
 > If anyone ever ticks vendor **`Vintage`** in the Shopify importer, those products
 > land as `source = SHOPIFY_IMPORT` in the CONTINUITY season, carrying the same
