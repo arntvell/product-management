@@ -42,6 +42,23 @@ NON_PRODUCT = [
     (r"GFTCRD|GIFT",                      "gift card"),
 ]
 
+# Channel policy, measured rather than assumed. Vintage is a webshop line: 0 of
+# it is in the POS against 3,762 in Shopify. Imperfects are a shop line: 1,197 in
+# the POS against 18 in Shopify. Absence from the "wrong" channel is intent, not
+# a gap, and reporting it as a gap buries the ~800 rows that do need a look under
+# ~1,750 that do not.
+CHANNEL_POLICY = {
+    "sitoo":   [(r"^VN-ONLN|^VN-", "vintage is webshop-only")],
+    "shopify": [(r"^IMP-",         "imperfects are shop-only")],
+}
+
+def policy_exempt(channel, skus):
+    hay = " ".join(skus).upper()
+    for pat, why in CHANNEL_POLICY.get(channel, []):
+        if re.search(pat, hay): return why
+    return None
+
+
 def non_product(skus, title):
     hay = " ".join(skus).upper() + " " + (title or "").upper()
     for pat, label in NON_PRODUCT:
@@ -155,7 +172,12 @@ def run(d):
             findings["RETIRE_CANDIDATE"].append(rec)
         if g["stocked"] and "origio" in g["sys"]:
             for s in ("sitoo", "shopify", "cin7"):
-                if s not in g["sys"]: findings[f"MISSING_FROM_{s.upper()}"].append(rec)
+                if s in g["sys"]: continue
+                why = policy_exempt(s, sorted(g["sku"]))
+                if why:
+                    findings["CHANNEL_POLICY"].append({**rec, "channel": s, "reason": why})
+                else:
+                    findings[f"MISSING_FROM_{s.upper()}"].append(rec)
         if "origio" in g["sys"] and not g["bc"] and not g["preseason"]:
             findings["NO_BARCODE"].append(rec)
 

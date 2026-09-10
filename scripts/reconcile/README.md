@@ -45,9 +45,18 @@ they were:
 | `NO_BARCODE` | In the master, no barcode on any system, not pre-season |
 | `SKU_CONFLICT` | One barcode, systems disagree on the SKU |
 | `BARCODE_CONFLICT` | One SKU, systems disagree on the barcode |
+| `NON_PRODUCT` | Carries stock but is not a sellable product (sale buckets, bulk lots, test data) |
+| `CHANNEL_POLICY` | Absent from a channel by design, not a gap |
 
 Stock is **never summed across Sitoo and Cin7** — they describe the same physical
 goods. Both are reported, separately.
+
+## Channel policy
+
+Vintage is a webshop line (0 in the POS, 3,762 in Shopify); imperfects are a shop
+line (1,197 in the POS, 18 in Shopify). Absence from the "wrong" channel is intent.
+`CHANNEL_POLICY` encodes this — without it, ~1,750 deliberate absences drown the
+~800 that need attention.
 
 ## Platform notes
 

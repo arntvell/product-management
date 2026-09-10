@@ -61,13 +61,14 @@ Emitted by `reconcile.py` into `snapshots/2026-09-11/findings.json`.
 | Finding | Count | What it means |
 |---|---:|---|
 | `MISSING_FROM_ORIGIO` | **4,552** | Stocked, absent from the master |
-| `MISSING_FROM_SITOO` | 1,658 | In Origio with stock, not in the POS |
+| `CHANNEL_POLICY` | 1,751 | Absent from a channel **by design** — §2.7, not a defect |
 | `RETIRE_CANDIDATE` | 956 | In Origio, no stock anywhere, not pre-season |
-| `MISSING_FROM_SHOPIFY` | 892 | In Origio with stock, not on the webshop |
+| `MISSING_FROM_SHOPIFY` | 730 | In Origio with stock, not on the webshop |
 | `NO_BARCODE` | 270 | In Origio, no barcode in any system, not pre-season |
 | `BARCODE_CONFLICT` | 180 | One SKU, systems disagree on the barcode |
 | `SKU_CONFLICT` | 134 | One barcode, systems disagree on the SKU |
 | `NON_PRODUCT` | 106 | Carries stock but is not a sellable product — §2.5 |
+| `MISSING_FROM_SITOO` | 69 | In Origio with stock, not in the POS |
 
 Each is also written as a CSV worklist under `snapshots/<date>/worklists/`,
 highest-value rows first, by `scripts/reconcile/worklists.py`.
@@ -158,6 +159,28 @@ share, **the master is currently the weakest link in its own reconciliation.**
 For identity, Sitoo is presently the better record. That inverts the natural
 assumption that the master arbitrates, and it should be settled explicitly before
 anyone writes a rule that says "Origio wins".
+
+### 2.7 `CHANNEL_POLICY` — 1,751 absences that are intent, not gaps
+
+The first run reported 1,658 products missing from Sitoo and 892 missing from
+Shopify. Most of both are deliberate, and the data says so plainly:
+
+| | In Sitoo (POS) | In Shopify |
+|---|---:|---:|
+| Vintage (`VN-ONLN`) | **0** | 3,762 |
+| Imperfects (`IMP-`) | 1,197 | **18** |
+
+**Vintage is a webshop line and imperfects are a shop line.** Neither absence is a
+defect, and reporting them as gaps buried the rows that do need attention under
+roughly twice as many that do not.
+
+With the policy applied, the real numbers are **69** missing from Sitoo and **730**
+missing from Shopify — small enough to work through.
+
+This policy is now encoded in `CHANNEL_POLICY` in `reconcile.py`, and it belongs
+alongside the Loom eligibility rule (`isLoomEligible`, Livid-brand only) added
+earlier. Both express the same idea: which channel a product may appear on is a
+property of what the product *is*.
 
 ---
 
