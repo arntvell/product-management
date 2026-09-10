@@ -97,6 +97,72 @@ errors/warnings/skipped split for reporting.
 
 ---
 
+## 2a. First real reconciliation: Sitoo vs the master (2026-09-11)
+
+Sitoo API access is working (§5.1 resolved — the path is
+`/v2/accounts/{account}/sites/{siteid}/products`, site id **1**, not the GUID from
+`/sites`). A full read-only snapshot of all 14,714 rows was pulled and diffed
+against the master's 10,265 variants.
+
+### Coverage
+
+| | Rows | With a usable barcode |
+|---|---:|---:|
+| Sitoo (all) | 14,714 | 14,667 — effectively 100 % |
+| Sitoo, active | 9,083 | |
+| Sitoo, active variant rows | 8,630 | |
+| Master variants | 10,265 | 5,903 — 57 % |
+
+**Sitoo's barcode hygiene is far better than the master's.** For reconciliation
+purposes Sitoo is the more reliable side of the join, which inverts the assumption
+that the master arbitrates.
+
+### The headline number
+
+**5,384 active Sitoo rows carry a barcode the master has never seen.** Broken down
+by cause:
+
+| Count | Cause | Action |
+|---:|---|---|
+| **5,271** | Not in the master by SKU either — **the product is genuinely absent** | Import, or decide it is out of scope |
+| 63 | In the master, but the master has no barcode | Fill the barcode in — trivial |
+| 50 | In the master **with a different barcode** | Real conflict; needs arbitration |
+
+Of 2,084 `LIV`-prefixed rows in the gap, **1,980 do not exist in the master at all**.
+This is Livid's own product, active and sellable in the POS, absent from the system
+of record.
+
+### Why the master is missing 5,271 active products
+
+This is structural, not accidental, and it follows from how the master was built:
+
+- **Threadflow** only holds current seasons — it is new software with no history.
+- **The Cin7 import** was scoped to `OnHand > 0` at six locations, so anything out of
+  stock on import day never came across.
+
+Sitoo, by contrast, holds everything still active in the POS. So the master has a
+systematic hole exactly where those two sources do not overlap: products that predate
+Threadflow *and* happened to be out of stock when Cin7 was imported.
+
+**This changes the project's shape.** Pushing "the true source of truth" to Loom for
+stock sync cannot happen while the source of truth is missing 5,271 active sellable
+items. Closing that gap is now the first substantive piece of work, ahead of the
+classifier and the reconciliation UI.
+
+### Cross-platform defects found
+
+- `SKU_MISMATCH` — only **3**, but two are genuine data errors, not naming drift:
+  - `8585052170441` — Sitoo `EXT-NOV-GAT-WHT-41` vs master `EXT-NOV-GAT-BLK-41`
+    (**white vs black on one barcode**)
+  - `4582746159205` — Sitoo `…SCKS-RYL-BL-M` vs master `…-S` (**size M vs S**)
+  - `7000000023361` — the repair line item, known
+- `DUPLICATE_WITHIN_SITOO` — **zero**. No barcode maps to two Sitoo product ids.
+- The 50 same-SKU-different-barcode conflicts are concentrated in
+  `LIV-BRNS-JPN-DWN-*`, which suggests one re-barcoded run rather than scattered
+  entry errors.
+
+---
+
 ## 3. Identity keys, per system
 
 Reconciliation is only as good as the key it joins on.
@@ -107,7 +173,7 @@ Reconciliation is only as good as the key it joins on.
 | **Shopify** | handle, product GID | variant SKU, barcode | `enrich-shopify` matches SKU → barcode → cleaned name, dropping ambiguous names |
 | **Cin7** | `ProductCode` / family SKU | SKU, barcode | `splitSku` splits base + size; different scheme for old products |
 | **Loom** | stable `style_id` / `colorway_id` | `variant_id`, `variant_sku`, `barcode` | Ids are ours; Loom stores what we send |
-| **Sitoo** | unknown | unknown | Auth works; product endpoints 404 — see §5.1 |
+| **Sitoo** | `productid`, `variantparentid` | `sku`, `barcode` (100 % coverage) | `/sites/1/products`; flat rows, variants point at a parent |
 
 The practical consequence: a three-way join must be **barcode-first, SKU-second,
 name-never**. Name matching is what `enrich-shopify` falls back to, and it is
@@ -164,31 +230,12 @@ blocks) — see `docs/review-2026-09-10.md` §4a, and note `LoomMode` is already
 
 ## 5. Open questions
 
-1. **Sitoo API access — blocked on one thing.** Credentials are now in `.env.local`
-   (`SITOO_API_ID`, `SITOO_API_KEY`, `SITOO_BASE_URL`) and **they authenticate
-   correctly** — probes return `404 Invalid endpoint/method`, not `401`. Base URL is
-   `https://api140.mysitoo.com/v2/accounts/91622/`.
-
-   `GET /sites` works and returns one site:
-   `{511378E3-3B0B-18B0-289A-26F658CC1136}` → `lividjeans-no.mysitoo.com`, `eshopid: 1`.
-
-   **Every other endpoint tried returns 404**: `products`, `productskus`, `items`,
-   `product`, `stores`, `warehouses`, `eshops`, `productvariants`, `stockitems`,
-   `warehouseitems`, `pricelists`, `categories`, `brands`, and the site-scoped
-   variants of those.
-
-   Since `sites` succeeds and the rest 404 with *"invalid endpoint/method"* rather
-   than a permission error, the likeliest cause is the **API key's permission scope**
-   — Sitoo keys are scoped per resource — with the second possibility being different
-   endpoint naming. **Needed:** either the key granted product/stock read scopes, or a
-   link to the Sitoo API reference for this account. I stopped probing rather than
-   keep guessing endpoint names against the production API.
-
-   Note this supersedes the earlier assumption in
-   `docs/product-master-architecture.md` §7.1 that *"Sitoo is downstream of Shopify
-   (no direct integration needed here)"* — true for pushing product data, not for
-   reconciling stock, where Sitoo is the POS of record for what is physically in the
-   shops. A sandbox environment is available to push to once corrections are scoped.
+1. ~~Sitoo API access~~ **Resolved 2026-09-11.** Path is
+   `/v2/accounts/{account}/sites/{siteid}/products` with **site id `1`** — the numeric
+   id, not the GUID returned by `/sites`. Page size up to 1,000. Full snapshot pulled;
+   see §2a. This supersedes `docs/product-master-architecture.md` §7.1 ("Sitoo is
+   downstream of Shopify, no direct integration needed") — true for pushing product
+   data, false for reconciling stock.
 2. ~~Are SS27 barcodes missing in Threadflow or in our ingest?~~ **Answered:** neither
    — SS27 is pre-season and the products do not exist yet (§1). Re-measure once
    production volumes are set.
@@ -203,16 +250,17 @@ blocks) — see `docs/review-2026-09-10.md` §4a, and note `LoomMode` is already
 
 ## 6. Suggested order
 
-1. **Unblock Sitoo API access** (§5.1) — a permissions or documentation question, not
-   code, and nothing four-way can be built without it.
+1. ~~Unblock Sitoo API access~~ — **done** (§2a).
 2. **Merge the duplicate brand** (`P.F. Candle` / `P.F. Candles`) — small, confirmed,
    and it should not be exported anywhere.
 3. **Decide what `STORAGE-*` records are** for the registry push (§2). 67 rows, and
    the answer changes what "push everything" means.
-4. **Snapshot fetchers**, one platform at a time, starting with Shopify — its client
-   already exists — then Cin7, then Sitoo once unblocked.
-5. **Classifier + reconciliation surface.**
-6. **Loom registry push mode**, then the Sitoo sandbox once corrections are scoped.
+4. **Close the 5,271-product gap** (§2a) — decide which of those active Sitoo
+   products belong in the master, and import them. This is now the biggest piece.
+5. **Snapshot fetchers** as real code, one platform at a time: Sitoo (proven by the
+   throwaway script used for §2a), Shopify (client exists), Cin7.
+6. **Classifier + reconciliation surface.**
+7. **Loom registry push mode**, then the Sitoo sandbox once corrections are scoped.
 
 Steps 2 and 3 are worth doing regardless: one is a real defect, the other a decision
 that will otherwise be made accidentally by whoever writes the registry push.
