@@ -97,7 +97,15 @@ errors/warnings/skipped split for reporting.
 
 ---
 
-## 2a. First real reconciliation: Sitoo vs the master (2026-09-11)
+> **Superseded 2026-09-11 by `docs/reconciliation-findings-2026-09-11.md`.**
+> §2a below was a two-way Sitoo↔master diff keyed barcode-first. That join splits
+> a product whose master row has no barcode — and the master is only 58% covered —
+> so it counted present products as missing. Its headline of **5,271** is wrong;
+> the four-way union-find figure is **4,583**. The section is kept because its
+> *reasoning* about why the hole exists still holds, and because the error is worth
+> remembering: identity resolution has to come before counting.
+
+## 2a. First real reconciliation: Sitoo vs the master (2026-09-11) — superseded
 
 Sitoo API access is working (§5.1 resolved — the path is
 `/v2/accounts/{account}/sites/{siteid}/products`, site id **1**, not the GUID from
