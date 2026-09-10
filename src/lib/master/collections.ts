@@ -13,7 +13,7 @@ export interface CollectionBucket {
   key: string; // "CORE" | "SS27" | "FW26" | ...
   label: string;
   count: number;
-  kind: "core" | "season" | "continuity";
+  kind: "core" | "season" | "continuity" | "unassigned";
 }
 
 export interface CollectionMember {
@@ -67,6 +67,12 @@ interface Loaded {
 
 async function loadAll(): Promise<Loaded[]> {
   return prisma.colorway.findMany({
+    // Archived colorways are retired products and merge tombstones (the losing
+    // row of a merge is renamed "…--merged-into-<id>" and archived, never
+    // deleted). They are history, not catalogue, and listing them here put
+    // rows in front of people that they cannot act on. The drop board already
+    // excludes them; this makes Collections agree.
+    where: { archived: false },
     select: {
       id: true,
       colorwaySku: true,
@@ -99,6 +105,15 @@ function seasonKeysOf(cw: Loaded): Set<string> {
 
 function inContinuity(cw: Loaded): boolean {
   return cw.entries.some((e) => e.season.kind === "CONTINUITY");
+}
+
+// A live product in no season at all. Such a product belongs to no bucket, so
+// without one of its own it is unreachable from the page whose whole job is
+// answering "where does this product live?". Today the count is zero — every
+// season-less row is an archived merge tombstone, now excluded above — so the
+// bucket stays hidden until one appears. It is a safety net, not a category.
+function isUnassigned(cw: Loaded): boolean {
+  return cw.entries.length === 0 && seasonKeysOf(cw).size === 0;
 }
 
 // Highest real season value -> used to drop future-dated typo tags (FW51 etc.).
@@ -161,9 +176,11 @@ export async function getCollections(
   const seasonCounts = new Map<string, number>();
   let coreCount = 0;
   let continuityCount = 0;
+  let unassignedCount = 0;
   for (const cw of rows) {
     if (cw.isCore) coreCount++;
     if (inContinuity(cw)) continuityCount++;
+    if (isUnassigned(cw)) unassignedCount++;
     for (const k of seasonKeysOf(cw)) {
       const v = seasonSortValue(k);
       if (v == null || v > ceiling) continue; // skip junk/future-typo tags
@@ -179,6 +196,16 @@ export async function getCollections(
     { key: "CORE", label: "Core", count: coreCount, kind: "core" },
     ...seasonBuckets,
     { key: "CONTINUITY", label: "Continuity (legacy)", count: continuityCount, kind: "continuity" },
+    ...(unassignedCount
+      ? [
+          {
+            key: "UNASSIGNED",
+            label: "No season",
+            count: unassignedCount,
+            kind: "unassigned" as const,
+          },
+        ]
+      : []),
   ];
 
   const sel = selected && buckets.some((b) => b.key === selected) ? selected : buckets[0].key;
@@ -201,6 +228,7 @@ export async function getCollections(
     let match = false;
     if (sel === "CORE") match = cw.isCore;
     else if (sel === "CONTINUITY") match = inContinuity(cw);
+    else if (sel === "UNASSIGNED") match = isUnassigned(cw);
     else match = seasonKeysOf(cw).has(sel);
     if (!match) continue;
 
@@ -253,10 +281,15 @@ export async function getCollections(
     (a, b) => a.styleName.localeCompare(b.styleName) || a.name.localeCompare(b.name)
   );
 
-  const MAX = 500;
+  // Every match is returned, not a page of them. A cap here silently hid
+  // products from a list whose whole job is "where does this product live?" —
+  // and once the list gained a search box, the cap made the search lie: a
+  // product ranked past the cut simply looked absent from the master. The
+  // client virtualizes, so the row count is a payload question, not a
+  // rendering one.
   return {
     buckets,
-    members: filtered.slice(0, MAX),
+    members: filtered,
     selected: sel,
     vendors,
     vendor: activeVendor,

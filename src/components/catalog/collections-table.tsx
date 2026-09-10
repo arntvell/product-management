@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -100,6 +101,21 @@ export function CollectionsTable({
   function isCore(m: CollectionMember): boolean {
     return core[m.id] ?? m.isCore;
   }
+
+  // The full result set is rendered, however large — a cap here once hid
+  // products from the one list that answers "where does this product live?".
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 63,
+    overscan: 12,
+  });
+  const virtualRows = virtualizer.getVirtualItems();
+  const paddingTop = virtualRows.length ? virtualRows[0].start : 0;
+  const paddingBottom = virtualRows.length
+    ? virtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end
+    : 0;
 
   const allShown = rows.length > 0 && rows.every((r) => selected.has(r.id));
   const selectedIds = [...selected];
@@ -283,7 +299,7 @@ export function CollectionsTable({
       )}
 
       {/* Table */}
-      <div className="mt-3 min-h-0 flex-1 overflow-auto rounded-lg border">
+      <div ref={scrollRef} className="mt-3 min-h-0 flex-1 overflow-auto rounded-lg border">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
             <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -305,13 +321,21 @@ export function CollectionsTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((m) => {
+            {paddingTop > 0 && (
+              <tr>
+                <td colSpan={7} style={{ height: paddingTop }} />
+              </tr>
+            )}
+            {virtualRows.map((vr) => {
+              const m = rows[vr.index];
               const src = catalogImageSrc(m.thumbnailRef);
               const inSeason = m.origin !== null;
               const needsPrice = inSeason && !m.hasTargetPrice;
               return (
                 <tr
                   key={m.id}
+                  data-index={vr.index}
+                  ref={virtualizer.measureElement}
                   className={cn(
                     "border-b last:border-0 hover:bg-muted/30",
                     selected.has(m.id) && "bg-primary/5"
@@ -391,6 +415,11 @@ export function CollectionsTable({
                 </tr>
               );
             })}
+            {paddingBottom > 0 && (
+              <tr>
+                <td colSpan={7} style={{ height: paddingBottom }} />
+              </tr>
+            )}
             {rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-sm text-muted-foreground">
