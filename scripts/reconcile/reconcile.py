@@ -35,7 +35,7 @@ NON_PRODUCT = [
     (r"WBTST|WEBSHIPPER|-TEST-|^TEST",   "test data"),
     (r"SLGSV",                            "aggregate: sale bucket"),
     (r"^EXT-VN-NW-|^EXT-VN-[A-Z]+$",     "aggregate: vintage bulk lot"),
-    (r"^LIV-IMP-[A-Z]+-OS$",             "aggregate: imperfect bucket"),
+    (r"^(LIV|EXT)-IMP-[A-Z]+(-OS)?$",    "aggregate: imperfect bucket"),
     (r"SMPL|^S-\d+$|SAMPLE",             "sample / consumable"),
     (r"^STORAGE-",                        "internal storage"),
     (r"PICKUP|PCKUP|REPS|REPARASJON",    "service: repair / pickup"),
@@ -60,9 +60,16 @@ def policy_exempt(channel, skus):
 
 
 def non_product(skus, title):
-    hay = " ".join(skus).upper() + " " + (title or "").upper()
+    """Anchored patterns are tested per-SKU, not against a concatenation.
+
+    Joining the SKUs and the title into one string silently disables every rule
+    that ends in `$` -- `^LIV-IMP-[A-Z]+-OS$` cannot match
+    "LIV-IMP-TIA-OS Imperfect Tia, OS". That defect was live here until
+    2026-09-11, so the imperfect-bucket rule had never once fired.
+    """
+    fields = [s.upper() for s in skus if s] + ([title.upper()] if title else [])
     for pat, label in NON_PRODUCT:
-        if re.search(pat, hay): return label
+        if any(re.search(pat, f) for f in fields): return label
     return None
 
 def n(x): return (x or "").strip()

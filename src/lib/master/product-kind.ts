@@ -37,7 +37,11 @@ export const KIND_RULES: KindRule[] = [
   { kind: "TEST", pattern: /WBTST|WEBSHIPPER|-TEST-|^TEST/, label: "test data" },
   { kind: "AGGREGATE", pattern: /SLGSV/, label: "sale bucket" },
   { kind: "AGGREGATE", pattern: /^EXT-VN-NW-|^EXT-VN-[A-Z]+$/, label: "vintage bulk lot" },
-  { kind: "AGGREGATE", pattern: /^LIV-IMP-[A-Z]+-OS$/, label: "imperfect bucket" },
+  // Anchored deliberately: this matches the *bucket* forms LIV-IMP-TIA-OS and
+  // EXT-IMP-MISC — one SKU standing for many garments — and must never match the
+  // IMP- prefix forms like IMP-LIV-BRNS-JPN-DWN, which are individual imperfect
+  // garments sold at a discount and are real merchandise. 76 of those exist.
+  { kind: "AGGREGATE", pattern: /^(LIV|EXT)-IMP-[A-Z]+(-OS)?$/, label: "imperfect bucket" },
   { kind: "SAMPLE", pattern: /SMPL|^S-\d+$|SAMPLE/, label: "sample" },
   { kind: "CONSUMABLE", pattern: /^STORAGE-/, label: "internal storage" },
   { kind: "SERVICE", pattern: /PICKUP|PCKUP|REPS|REPARASJON/, label: "repair or pickup" },
@@ -75,9 +79,18 @@ export interface Classification {
 }
 
 export function classifyKind(input: ClassifyInput): Classification {
-  const hay = `${input.sku} ${input.name ?? ""}`.toUpperCase();
+  // Tested against the SKU and the name SEPARATELY, never concatenated.
+  //
+  // Concatenating breaks every anchored rule: `^LIV-IMP-[A-Z]+-OS$` cannot match
+  // "LIV-IMP-TIA-OS IMPERFECT TIA, OS" because `$` is no longer at the end. The
+  // original rules in reconcile.py had exactly this defect, so the
+  // imperfect-bucket rule never fired there either.
+  const sku = input.sku.toUpperCase();
+  const name = (input.name ?? "").toUpperCase();
   for (const rule of KIND_RULES) {
-    if (rule.pattern.test(hay)) return { kind: rule.kind, reason: rule.label };
+    if (rule.pattern.test(sku) || rule.pattern.test(name)) {
+      return { kind: rule.kind, reason: rule.label };
+    }
   }
   const byCategory = input.productType ? NON_MERCH_CATEGORIES[input.productType] : undefined;
   if (byCategory) {
@@ -93,6 +106,8 @@ export function classifyKind(input: ClassifyInput): Classification {
 
 export interface KindBackfillResult {
   scanned: number;
+  /** Rows a rule actively decided — attribution written for each. */
+  attributed: number;
   changed: number;
   byKind: Array<{ kind: ProductKind; count: number; reason: string | null }>;
   examples: Array<{ colorwaySku: string; name: string; from: ProductKind; to: ProductKind; reason: string }>;
@@ -129,16 +144,23 @@ export async function backfillProductKind(
     bucket.count++;
     counts.set(key, bucket);
 
+    // Attribution is recorded for every row a rule actually decided, not only
+    // for rows whose value changes. Otherwise a re-run cannot repair missing
+    // attributions, and the default MERCHANDISE case would bury 3,198 rows of
+    // "no rule matched" noise in a table meant to answer real questions.
+    if (reason) {
+      decisions.push({
+        entityType: "colorway",
+        entityId: cw.id,
+        field: "kind",
+        owner: "MANUAL",
+        authority: "origio:classify-kind",
+        evidence: reason,
+      });
+    }
+
     if (kind === cw.kind) continue;
     (updates.get(kind) ?? updates.set(kind, []).get(kind)!).push(cw.id);
-    decisions.push({
-      entityType: "colorway",
-      entityId: cw.id,
-      field: "kind",
-      owner: "MANUAL",
-      authority: "origio:classify-kind",
-      evidence: reason ?? "no rule matched — merchandise by default",
-    });
     if (examples.length < 25) {
       examples.push({
         colorwaySku: cw.colorwaySku,
@@ -152,7 +174,7 @@ export async function backfillProductKind(
 
   const changed = [...updates.values()].reduce((a, b) => a + b.length, 0);
 
-  if (!opts.dryRun && changed) {
+  if (!opts.dryRun) {
     for (const [kind, ids] of updates) {
       // Chunked: a single updateMany over thousands of ids builds a query large
       // enough to matter, and the loop keeps each statement bounded.
@@ -168,6 +190,7 @@ export async function backfillProductKind(
 
   return {
     scanned: colorways.length,
+    attributed: decisions.length,
     changed,
     byKind: [...counts.values()].sort((a, b) => b.count - a.count),
     examples,

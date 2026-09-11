@@ -11,8 +11,9 @@
 // `decidedAt` triple, and "variant" as an entityType — barcode lives on Variant,
 // so it could not previously be attributed even in principle.
 
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
-import type { Source } from "@/generated/prisma/client";
+import { Prisma, type Source } from "@/generated/prisma/client";
 
 export type EntityType = "style" | "colorway" | "variant";
 
@@ -54,44 +55,33 @@ export async function recordDecisions(decisions: Decision[]): Promise<number> {
   if (!decisions.length) return 0;
   const now = new Date();
 
-  // createMany + skipDuplicates would silently drop a re-decision, so existing
-  // rows are updated. Chunked because a season's worth of corrections overruns
-  // the 5 s transaction budget as individual round trips.
+  // One multi-row INSERT ... ON CONFLICT DO UPDATE per chunk, not one upsert per
+  // row. The per-row form was 200 round trips inside a single $transaction and
+  // overran the 5 s transaction budget at 206 decisions — it wrote the values
+  // and then lost every attribution, which is the one failure this module exists
+  // to prevent.
   let written = 0;
-  const CHUNK = 200;
+  const CHUNK = 500;
   for (let i = 0; i < decisions.length; i += CHUNK) {
     const chunk = decisions.slice(i, i + CHUNK);
-    await prisma.$transaction(
-      chunk.map((d) =>
-        prisma.fieldOwner.upsert({
-          where: {
-            entityType_entityId_field: {
-              entityType: d.entityType,
-              entityId: d.entityId,
-              field: d.field,
-            },
-          },
-          create: {
-            entityType: d.entityType,
-            entityId: d.entityId,
-            field: d.field,
-            owner: d.owner,
-            authority: d.authority,
-            evidence: d.evidence ?? null,
-            decidedAt: now,
-            lockedAt: d.lock ? now : null,
-          },
-          update: {
-            owner: d.owner,
-            authority: d.authority,
-            evidence: d.evidence ?? null,
-            decidedAt: now,
-            ...(d.lock ? { lockedAt: now } : {}),
-          },
-        })
-      )
+    const values = chunk.map(
+      (d) => Prisma.sql`(
+        ${randomUUID()}, ${d.entityType}, ${d.entityId}, ${d.field},
+        ${d.owner}::"Source", ${d.authority}, ${d.evidence ?? null},
+        ${now}, ${d.lock ? now : null}
+      )`
     );
-    written += chunk.length;
+    written += await prisma.$executeRaw`
+      INSERT INTO "FieldOwner"
+        ("id", "entityType", "entityId", "field", "owner", "authority", "evidence", "decidedAt", "lockedAt")
+      VALUES ${Prisma.join(values)}
+      ON CONFLICT ("entityType", "entityId", "field") DO UPDATE SET
+        "owner"     = EXCLUDED."owner",
+        "authority" = EXCLUDED."authority",
+        "evidence"  = EXCLUDED."evidence",
+        "decidedAt" = EXCLUDED."decidedAt",
+        "lockedAt"  = COALESCE(EXCLUDED."lockedAt", "FieldOwner"."lockedAt")
+    `;
   }
   return written;
 }
