@@ -1,0 +1,15 @@
+{
+  "_comment": "Barcode authority decisions. Applied by resolve.py; anything not covered here falls through to the rules below, in order.",
+  "rules": [
+    {"scope": "livid",    "authority": "cfo_list", "note": "9,822 SKUs, all check digits valid, no duplicates"},
+    {"scope": "external", "authority": "sitoo",    "note": "the only system where a wrong barcode fails physically, at the till"}
+  ],
+  "per_sku": {
+    "EXT-PF-4-INCN":   {"winner": "cin7",  "barcode": "855111006676",  "note": "moot - shopify held the same code in EAN-13 form (0855111006676)"},
+    "EXT-URS-STBRC":   {"winner": "sitoo", "barcode": "851081003004",  "note": "moot - shopify held the same code in EAN-13 form (0851081003004)"},
+    "EXT-ANY-JQCR-BR": {"winner": "sitoo", "barcode": "4550263048012", "note": "genuine conflict; shopify had 4550263049538"}
+  },
+  "caveats": {
+    "sitoo_internal_labels": "57 Sitoo barcodes sit in internal/restricted GS1 ranges (99*, 2*) and 16 exist nowhere else - store-printed labels, not the brand's EAN. Correct for scanning, not for supplier matching. See docs/barcode-authority-2026-09-11.md 3a."
+  }
+}

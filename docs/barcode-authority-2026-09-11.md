@@ -161,6 +161,28 @@ hole as `MISSING_FROM_ORIGIO`, seen from the CFO's side.
 
 ---
 
+## 4a. 21 of the 180 "conflicts" were never conflicts
+
+A 12-digit UPC-A and its 13-digit EAN-13 form are the same barcode — the EAN-13
+is the UPC-A with a leading zero. Systems store it both ways, and comparing raw
+strings made 21 pairs look like disagreements:
+
+```
+EXT-PF-4-INCN    cin7 855111006676   shopify 0855111006676   <- identical
+EXT-URS-STBRC    sitoo 851081003004  shopify 0851081003004   <- identical
+```
+
+Mostly Stutterheim (`EXT-STM-*`) and P.F. Candle (`EXT-PF-*`). `usable()` in
+`reconcile.py` now normalises to the 12-digit core and strips invisible
+formatting characters, so **the real conflict count is 159, not 180.**
+
+Two of the three no-majority cases dissolved this way. Only `EXT-ANY-JQCR-BR` was
+a genuine disagreement (`4550263049538` vs `4550263048012`), resolved to Sitoo.
+
+Recorded in `scripts/reconcile/decisions.json`.
+
+---
+
 ## 5. Malformed barcode values
 
 Not conflicts, but they break exact-match joins wherever they appear:

@@ -19,7 +19,7 @@ Two things this gets right that a naive diff does not:
      - A pre-season style has no stock because it has not been made yet. Gating
        on stock without checking the season retires the entire coming season.
 """
-import collections, csv, json, os, re, sys
+import collections, csv, json, os, re, sys, unicodedata
 
 NON_MERCH = {"Button", "Sample", "SAMPLE PACK", "Service", "Non-inventory", "Fabric",
              "wrapin", "Storage", "lager", "Skredder", "Fitguide", "Shopify", "SAVED",
@@ -66,9 +66,20 @@ def non_product(skus, title):
     return None
 
 def n(x): return (x or "").strip()
+
 def usable(bc):
-    b = n(bc)
-    return b if b and b != "0" and b.lower() not in ("none", "null") else ""
+    """Normalised barcode, or "" if there isn't a usable one.
+
+    A 12-digit UPC-A and its 13-digit EAN-13 form are THE SAME BARCODE -- the
+    EAN-13 is the UPC-A with a leading zero. Systems store them both ways, and
+    comparing the raw strings reported 21 of 180 "conflicts" that were nothing
+    of the kind (most of Stutterheim and P.F. Candle). Compare on the 12-digit
+    core. Invisible formatting characters are stripped for the same reason.
+    """
+    b = "".join(ch for ch in (bc or "") if unicodedata.category(ch) != "Cf").strip()
+    if not b or b == "0" or b.lower() in ("none", "null"): return ""
+    if len(b) == 13 and b.startswith("0"): b = b[1:]
+    return b
 
 class Union:
     def __init__(self): self.p = {}
