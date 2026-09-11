@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { fetchAllProducts, fetchAllAvailability } from "./client";
 import type { Cin7Product } from "./types";
+import { canonical } from "@/lib/master/barcode";
 
 // The physical locations whose in-stock items we import (exact Cin7 names).
 export const TARGET_LOCATIONS = [
@@ -152,7 +153,30 @@ interface ColorwayGroup {
 
 // Build the set of SKUs in stock (>0) at any target location, then group the
 // matching products into colorways. Shared by preview and run.
-async function buildGroups(): Promise<{
+/**
+ * Which SKUs this run is allowed to bring in.
+ *
+ * The original gate — in stock, right now, at six locations — is why the master
+ * holds about half of what the business sells: anything that happened to be out
+ * of stock on import day never crossed. Reconciliation measured the hole at
+ * 4,552 stocked identities present in all three other systems.
+ *
+ * An allowlist (emitted by scripts/reconcile/reconcile.py) replaces that gate
+ * for the backfill. It is a *widening*: it carries product the live stock check
+ * would miss, and it excludes what the live check would wrongly admit —
+ * production materials, aggregate buckets, test rows, and the EEXT-/EXT- twins
+ * that would otherwise import as two records of one shoe.
+ */
+export interface ImportGate {
+  /** Import exactly these SKUs, regardless of current stock. */
+  allowSkus?: string[];
+  /** Never import these, even when in stock. */
+  denySkus?: string[];
+  /** Keep the original live in-stock behaviour as well as the allowlist. */
+  includeInStock?: boolean;
+}
+
+async function buildGroups(gate?: ImportGate): Promise<{
   groups: ColorwayGroup[];
   inStockSkuCount: number;
   productMissing: number;
@@ -163,10 +187,16 @@ async function buildGroups(): Promise<{
     fetchAllProducts(),
   ]);
 
+  // Default behaviour is unchanged when no gate is supplied.
+  const useLiveStock = !gate?.allowSkus?.length || gate.includeInStock === true;
   const inStock = new Set<string>();
-  for (const row of availability) {
-    if (row.OnHand > 0 && targetSet.has(row.Location) && row.SKU) inStock.add(row.SKU);
+  if (useLiveStock) {
+    for (const row of availability) {
+      if (row.OnHand > 0 && targetSet.has(row.Location) && row.SKU) inStock.add(row.SKU);
+    }
   }
+  for (const sku of gate?.allowSkus ?? []) inStock.add(sku);
+  for (const sku of gate?.denySkus ?? []) inStock.delete(sku);
 
   const productBySku = new Map<string, Cin7Product>();
   for (const p of products) if (p.SKU) productBySku.set(p.SKU, p);
@@ -222,9 +252,12 @@ export interface Cin7ImportPreview {
   byBrand: { brand: string; colorways: number }[];
 }
 
-export async function previewCin7Import(brands?: string[]): Promise<Cin7ImportPreview> {
+export async function previewCin7Import(
+  brands?: string[],
+  gate?: ImportGate
+): Promise<Cin7ImportPreview> {
   const [{ groups, inStockSkuCount, productMissing }, existing] = await Promise.all([
-    buildGroups(),
+    buildGroups(gate),
     loadExisting(),
   ]);
 
@@ -300,14 +333,17 @@ export interface Cin7ImportResult {
   syncRunId: string;
 }
 
-export async function runCin7Import(brands?: string[]): Promise<Cin7ImportResult> {
+export async function runCin7Import(
+  brands?: string[],
+  gate?: ImportGate
+): Promise<Cin7ImportResult> {
   const run = await prisma.syncRun.create({
     data: { source: "cin7-import", mode: "full", status: "running" },
   });
   const brandSet = brands && brands.length ? new Set(brands) : null;
 
   try {
-    const [{ groups }, existing] = await Promise.all([buildGroups(), loadExisting()]);
+    const [{ groups }, existing] = await Promise.all([buildGroups(gate), loadExisting()]);
 
     // CONTINUITY season.
     const season = await prisma.season.upsert({
@@ -442,7 +478,7 @@ export async function runCin7Import(brands?: string[]): Promise<Cin7ImportResult
           id: variantId,
           colorwayId,
           variantSku: v.SKU,
-          barcode: v.Barcode || null,
+          barcode: canonical(v.Barcode),
           sizeLabel,
           dim1,
           dim2,

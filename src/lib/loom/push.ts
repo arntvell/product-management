@@ -1,6 +1,6 @@
 // Push master products to Loom's upsert endpoint.
 import { prisma } from "@/lib/db";
-import { loomIneligibleReason } from "@/lib/master/readiness";
+import { loomIneligibleReason, purposeForMode } from "@/lib/master/readiness";
 import type { LoomMode } from "./payload";
 import {
   loadColorwaysForLoom,
@@ -88,6 +88,11 @@ export async function pushColorwaysToLoom(
   seasonCode: string,
   opts: LoomPushOptions = {}
 ): Promise<LoomPushResult> {
+  // Which job Loom is doing here decides both eligibility and the readiness
+  // gate. "data" is the stock registry, which needs identity for everything
+  // that moves; "full" is the wholesale catalogue, which does not.
+  const purpose = purposeForMode(opts.mode);
+
   const loaded = await loadColorwaysForLoom(colorwayIds, seasonCode);
   const loadedById = new Map(loaded.map((c) => [c.id, c]));
 
@@ -101,18 +106,20 @@ export async function pushColorwaysToLoom(
       skipped.push({ colorwayId: id, reason: `not in season ${seasonCode}` });
       continue;
     }
-    // Eligibility before readiness: Loom carries Livid's own production only.
-    // External brands are resold goods and vintage is one-of-one stock, so
-    // neither is wholesaled however complete its data happens to be. Nothing
-    // enforced this before — the channel was simply never ticked for them.
-    const reason = loomIneligibleReason({ brandIsLivid: cw.brand?.isLivid });
+    // Eligibility before readiness. In catalogue mode this keeps externals and
+    // vintage out of the wholesale feed; in registry mode nothing is excluded,
+    // because stock that does not reach the registry does not reconcile.
+    const reason = loomIneligibleReason({ brandIsLivid: cw.brand?.isLivid }, purpose);
     if (reason) {
       skipped.push({ colorwayId: id, reason });
       continue;
     }
     // A withdrawal still has to reach Loom, so an archived colorway bypasses the
-    // readiness gate — we are telling Loom to hide it, not to publish it.
-    const missing = cw.archived ? [] : loomMissingForColorway(cw);
+    // readiness gate — we are telling Loom to hide it, not to publish it. The
+    // registry bypasses it too: it carries identity, not a sellable listing, so
+    // a missing description or price is irrelevant to whether stock reconciles.
+    const missing =
+      cw.archived || purpose === "registry" ? [] : loomMissingForColorway(cw);
     if (missing.length) {
       skipped.push({ colorwayId: id, reason: `missing ${missing.join(", ")}` });
       continue;

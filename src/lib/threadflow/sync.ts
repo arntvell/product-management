@@ -20,6 +20,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { DUPLICATE_SKUS } from "@/lib/master/regroup-styles";
 import { getManufacturers, getSeasonProducts } from "./client";
 import type { TFColorway, TFStyle, TFVariant } from "./types";
+import { canonical as canonicalBarcode } from "@/lib/master/barcode";
 
 export type SyncMode = "full" | "no-images";
 
@@ -1534,7 +1535,7 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
               sizeLabel,
               dim1,
               dim2,
-              ...(hasValue(v.barcode) ? { barcode: v.barcode } : {}),
+              ...(canonicalBarcode(v.barcode) ? { barcode: canonicalBarcode(v.barcode) } : {}),
             },
           })
         )

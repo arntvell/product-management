@@ -235,5 +235,53 @@ def run(d):
     json.dump({k: v for k, v in findings.items()}, open(out, "w"), indent=1)
     print(f"\nwritten: {out}")
 
+    emit_import_allowlist(d, findings, merch_g)
+
+
+def emit_import_allowlist(d, findings, merch_g):
+    """The backfill gate for src/lib/cin7/import.ts (ImportGate).
+
+    The original import took whatever had OnHand > 0 at six locations on the day
+    it ran, which is why the master holds about half the catalogue. This replaces
+    that with an explicit list, and it is a widening in one direction and a
+    narrowing in the other:
+
+      allow  every stocked merchandise identity absent from Origio, whether or
+             not it happens to be in stock on the day the import runs
+      deny   NON_PRODUCT rows — sale buckets, bulk lots, samples, hangers, the
+             Webshipper test jeans — plus the EEXT-/EXT- twins, which would
+             otherwise import as two records of one shoe
+
+    Deny wins over allow in ImportGate, so an overlap is safe.
+    """
+    allow = set()
+    for rec in findings["MISSING_FROM_ORIGIO"]:
+        for sku in rec["sku"]:
+            if sku:
+                allow.add(sku)
+
+    deny = set()
+    for rec in findings["NON_PRODUCT"]:
+        for sku in rec["sku"]:
+            if sku:
+                deny.add(sku)
+
+    # EEXT-/EXT- twins: one shoe held twice in Cin7. Keep the EXT- spelling,
+    # which is the convention everywhere else, and deny the doubled prefix.
+    twins = sorted(s for s in allow | deny if s.startswith("EEXT-"))
+    deny.update(twins)
+
+    allow -= deny
+    path = os.path.join(d, "import-allowlist.json")
+    json.dump({
+        "generated_from": os.path.basename(d),
+        "note": "feed to ImportGate in src/lib/cin7/import.ts; deny wins over allow",
+        "allowSkus": sorted(allow),
+        "denySkus": sorted(deny),
+        "eext_twins_denied": twins,
+    }, open(path, "w"), indent=1)
+    print(f"allowlist: {len(allow):,} allow, {len(deny):,} deny "
+          f"({len(twins)} EEXT- twins)  -> {path}")
+
 if __name__ == "__main__":
     run(sys.argv[1] if len(sys.argv) > 1 else ".")

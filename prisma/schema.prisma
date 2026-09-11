@@ -132,6 +132,10 @@ model Colorway {
   tags   String[]
   vendor String?
 
+  // What this record is. Anything other than MERCHANDISE is excluded from stock
+  // gates, channel pushes and import allowlists.
+  kind ProductKind @default(MERCHANDISE)
+
   // A CORE product is a permanent production line, carried every season by
   // design (as opposed to a seasonal product). Set from the CORE/Allseasons
   // tags or manually; durable across seasons.
@@ -145,11 +149,11 @@ model Colorway {
 
   // ---- Enrichment: the full custom.* metafield set, authored in the master ----
   // Free text:
-  shortDescription String?
-  fullDescription  String?
-  details          String?
-  styleTagline     String?
-  styleName        String?
+  shortDescription        String?
+  fullDescription         String?
+  details                 String?
+  styleTagline            String?
+  styleName               String?
   // Reference metafields (store target GIDs / ids; edited via the pickers):
   sameProduct             String[] // list.product_reference — group auto-link
   styleWith               String[] // list.product_reference
@@ -182,18 +186,19 @@ model Colorway {
 }
 
 model Variant {
-  id             String          @id @default(cuid()) // stable id — TF has none, we mint it
+  id             String              @id @default(cuid()) // stable id — TF has none, we mint it
   colorwayId     String
-  colorway       Colorway        @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
-  variantSku     String          @unique
-  barcode        String? // set once, never blanked (plan §5.2)
+  colorway       Colorway            @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  variantSku     String              @unique
+  barcode        String?             @unique // set once, never blanked (plan §5.2); canonical EAN-13
   sizeLabel      String // "M" or "W32/L32"
   dim1           String // "M" or waist "32"
   dim2           String? // length "32" for 2-D
-  averageCostNok Decimal?        @db.Decimal(14, 2) // written back from Loom (plan §9)
+  averageCostNok Decimal?            @db.Decimal(14, 2) // written back from Loom (plan §9)
   seasonLinks    SeasonVariant[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  channelRefs    VariantChannelRef[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@index([colorwayId])
 }
@@ -252,13 +257,13 @@ model Price {
 }
 
 model SeasonImage {
-  id         String    @id @default(cuid())
-  seasonId   String
-  colorwayId String
-  season     Season    @relation(fields: [seasonId], references: [id])
-  colorway   Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
-  slot       ImageSlot // MAIN | ALT
-  url        String
+  id            String    @id @default(cuid())
+  seasonId      String
+  colorwayId    String
+  season        Season    @relation(fields: [seasonId], references: [id])
+  colorway      Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  slot          ImageSlot // MAIN | ALT
+  url           String
   shopifyFileId String? // GID once uploaded to Shopify (reused on re-push)
 
   @@unique([seasonId, colorwayId, slot])
@@ -315,11 +320,19 @@ model ChannelContent {
 
 model FieldOwner {
   id         String    @id @default(cuid())
-  entityType String // "style" | "colorway"
+  entityType String // "style" | "colorway" | "variant"
   entityId   String
   field      String
-  owner      Source // THREADFLOW | MANUAL | SHOPIFY_IMPORT
+  owner      Source // how the value arrived (provenance)
   lockedAt   DateTime?
+
+  // Who decided the value, when Source is too coarse to say. Source records the
+  // pipeline that carried it; these record the authority that settled it —
+  // "cfo-list-2026-09-11", "sitoo", "manual:scan". Needed to answer "why does
+  // this say X?" after a reconciliation.
+  authority String?
+  evidence  String?
+  decidedAt DateTime?
 
   @@unique([entityType, entityId, field])
   @@index([entityType, entityId])
@@ -346,6 +359,46 @@ model SyncRun {
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Identity allocation and channel linkage
+// ---------------------------------------------------------------------------
+
+// The ledger of issued barcodes. Every Livid barcode is
+// `range + zero-padded sequence + EAN-13 check digit` (verified against all
+// 9,822 rows of the CFO list). Two series run in parallel: 7072536 for
+// production, 7000000 for samples, sale buckets and other non-production rows.
+// Origio holds the ledger so allocation is `max(sequence) + 1` and so the
+// unique index on Variant.barcode has something to check against.
+model BarcodeAllocation {
+  id        String   @id @default(cuid())
+  range     String // GS1 prefix, e.g. "7072536"
+  sequence  Int // the CFO list's "Product Code"
+  barcode   String   @unique // full canonical EAN-13
+  sku       String? // what it was issued for, when known
+  authority String // "cfo-list-2026-09-11" | "origio" | ...
+  issuedAt  DateTime @default(now())
+
+  @@unique([range, sequence])
+  @@index([sku])
+}
+
+// Per-variant channel identity. ChannelPublication is colorway-level with a
+// single externalId, which is right for a Shopify product but not for Sitoo
+// (one record per SKU) or for the Loom stock registry (movements are per
+// variant). Seeded by matching, never by creating.
+model VariantChannelRef {
+  id             String    @id @default(cuid())
+  variantId      String
+  variant        Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  channel        Channel
+  externalId     String // Sitoo productid, Loom variant key
+  lastPushedAt   DateTime?
+  lastPushStatus String?
+
+  @@unique([variantId, channel])
+  @@index([channel, externalId])
+}
 
 enum Source {
   THREADFLOW
@@ -377,6 +430,21 @@ enum ImageSlot {
 enum Channel {
   SHOPIFY
   LOOM
+  SITOO
+}
+
+// What a record *is*, as opposed to where it came from (Source). Lives in the
+// model rather than in reconciliation scripts, because every consumer of the
+// master needs the same distinction — stock figures, channel eligibility and
+// import gates are all wrong without it.
+enum ProductKind {
+  MERCHANDISE // a sellable individual garment — the default
+  AGGREGATE // one SKU standing for many items: sale buckets, vintage bulk lots
+  MATERIAL // production input: fabric, buttons, trims
+  CONSUMABLE // hangers, packaging — not merchandise
+  SAMPLE // showroom / press samples
+  SERVICE // repairs, alterations, shipping line items
+  TEST // test data that reached a live system
 }
 
 enum ProductStatus {

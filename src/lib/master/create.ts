@@ -7,8 +7,27 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import type { ChannelKey } from "./fields";
+import { normalizeSku, validateSku, type SkuMatch } from "./sku";
+import { allocate, canonical, RANGE_INTERNAL, RANGE_PRODUCTION } from "./barcode";
 
 export class ValidationError extends Error {}
+
+/**
+ * A proposed SKU collided with one the master already holds.
+ *
+ * Kept separate from ValidationError so the builder can show the user *which*
+ * existing product it clashes with, rather than a sentence. Creation is the only
+ * place a duplicate can be prevented: once two spellings of one garment exist,
+ * every downstream system inherits both.
+ */
+export class SkuCollisionError extends ValidationError {
+  constructor(
+    message: string,
+    readonly collisions: Array<{ proposed: string; matches: SkuMatch[] }>
+  ) {
+    super(message);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Brand-template builder: create many products for a brand from shared defaults
@@ -75,6 +94,7 @@ export async function buildProductsForBrand(
   input: BuildProductsInput
 ): Promise<{ created: number; brandId: string }> {
   validateBuild(input);
+  await assertSkusAreNew(input);
 
   // Brand
   const brandName = req(input.brand.newName);
@@ -129,6 +149,23 @@ export async function buildProductsForBrand(
 
   const rows = input.products.filter((p) => req(p.name) && req(p.colorwaySku));
 
+  // Barcodes for product born here. Threadflow carries them for production, and
+  // external brands arrive with their own GS1 code, so this covers what neither
+  // does: Livid product created directly in the master. Drawn from the ledger,
+  // which is why two creates cannot be issued the same number.
+  const sizeCounts = rows.map(
+    (p) => ((p.sizes && p.sizes.length ? p.sizes : t.sizes).map((x) => x.trim()).filter(Boolean)).length
+  );
+  const totalVariants = sizeCounts.reduce((a, b) => a + b, 0);
+  const barcodePool = brand.isLivid
+    ? await allocate(prisma, {
+        range: RANGE_PRODUCTION,
+        count: totalVariants,
+        authority: "origio:create",
+      })
+    : [];
+  let barcodeAt = 0;
+
   // Build bulk payloads with pre-assigned ids.
   const styleCreates: Array<Record<string, unknown>> = [];
   const colorwayCreates: Array<Record<string, unknown>> = [];
@@ -142,7 +179,7 @@ export async function buildProductsForBrand(
     const styleId = randomUUID();
     const colorwayId = randomUUID();
     const entryId = randomUUID();
-    const sku = req(p.colorwaySku)!;
+    const sku = normalizeSku(req(p.colorwaySku)!);
 
     styleCreates.push({
       id: styleId,
@@ -187,7 +224,8 @@ export async function buildProductsForBrand(
       variantCreates.push({
         id: variantId,
         colorwayId,
-        variantSku: `${sku}-${size.toUpperCase()}`,
+        variantSku: normalizeSku(`${sku}-${size}`),
+        barcode: barcodePool[barcodeAt++] ?? null,
         sizeLabel: size,
         dim1: size,
       });
@@ -244,3 +282,65 @@ function req(v: string | null | undefined): string | null {
 
 const CONTINUITY_CODE = "CONTINUITY";
 
+
+
+/**
+ * Reject a create whose SKU is a respelling of something the master already has.
+ *
+ * Only exact-class matches block: identical after normalisation, the same tokens
+ * reordered, or the same tokens grouped differently (which is what a prefix typo
+ * like EEXT- looks like). Those three produce no false positives across the
+ * 9,822-SKU CFO ledger — see the measurement note in sku.ts — so they are safe
+ * to enforce rather than merely warn about.
+ *
+ * Deliberately *not* blocked: IMP- imperfects, which are a separate product from
+ * the garment they came from, and different sizes of one colourway.
+ */
+async function assertSkusAreNew(input: BuildProductsInput): Promise<void> {
+  const proposed = input.products
+    .map((p) => req(p.colorwaySku))
+    .filter((x): x is string => Boolean(x));
+  if (!proposed.length) return;
+
+  // Within the request itself.
+  const seen = new Map<string, string>();
+  const collisions: Array<{ proposed: string; matches: SkuMatch[] }> = [];
+  for (const raw of proposed) {
+    const norm = normalizeSku(raw);
+    const prior = seen.get(norm);
+    if (prior) {
+      collisions.push({
+        proposed: raw,
+        matches: [{ sku: prior, confidence: "certain", reason: "listed twice in this batch" }],
+      });
+    }
+    seen.set(norm, raw);
+  }
+
+  // Against the master. Comparison needs the same prefix and size, so the
+  // candidate set is small — no need to load the whole catalogue.
+  const existing = await prisma.colorway.findMany({ select: { colorwaySku: true } });
+  const corpus = existing.map((c) => c.colorwaySku);
+  for (const raw of proposed) {
+    const v = validateSku(raw, corpus);
+    const certain = v.matches.filter((m) => m.confidence === "certain");
+    if (certain.length) collisions.push({ proposed: raw, matches: certain });
+  }
+
+  if (collisions.length) {
+    const detail = collisions
+      .map((c) => `${c.proposed} → ${c.matches.map((m) => `${m.sku} (${m.reason})`).join(", ")}`)
+      .join("; ");
+    throw new SkuCollisionError(
+      `${collisions.length} SKU${collisions.length === 1 ? "" : "s"} already exist in the master: ${detail}`,
+      collisions
+    );
+  }
+}
+
+/** Exported for the non-Livid path: record a brand's own barcode as-is. */
+export function normalizeIncomingBarcode(raw: string | null | undefined): string | null {
+  return canonical(raw);
+}
+
+export { RANGE_INTERNAL };

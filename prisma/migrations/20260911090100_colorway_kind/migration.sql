@@ -1,0 +1,5 @@
+-- CreateEnum
+CREATE TYPE "ProductKind" AS ENUM ('MERCHANDISE', 'AGGREGATE', 'MATERIAL', 'CONSUMABLE', 'SAMPLE', 'SERVICE', 'TEST');
+
+-- AlterTable
+ALTER TABLE "Colorway" ADD COLUMN     "kind" "ProductKind" NOT NULL DEFAULT 'MERCHANDISE';

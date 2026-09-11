@@ -32,8 +32,27 @@ export interface EligibilityInput {
   brandIsLivid: boolean | null | undefined;
 }
 
-/** Livid's own production may be wholesaled; externals and vintage may not. */
-export function isLoomEligible(i: EligibilityInput): boolean {
+/**
+ * Loom does two jobs, and they have opposite eligibility rules.
+ *
+ *   "catalogue"  the B2B wholesale catalogue. Livid's own production only —
+ *                external brands are resold goods and vintage is one-of-one
+ *                stock, so neither is wholesaled however complete its data is.
+ *
+ *   "registry"   the stock registry, carrying movements between Sitoo and
+ *                Shopify while their direct integration is postponed. This has
+ *                to see EVERYTHING that moves: externals are bought-in goods
+ *                and vintage sells weekly, so excluding them would mean their
+ *                stock silently does not reconcile.
+ *
+ * Applying the catalogue rule to the registry is a real hazard rather than a
+ * hypothetical one — it would drop 1,545 EXT, 390 VN-ONLN and 70 CHIMI
+ * identities from the missing-4,552 alone, plus every external already held.
+ */
+export type LoomPurpose = "catalogue" | "registry";
+
+export function isLoomEligible(i: EligibilityInput, purpose: LoomPurpose = "catalogue"): boolean {
+  if (purpose === "registry") return true;
   return i.brandIsLivid === true;
 }
 
@@ -43,10 +62,18 @@ export function isShopifyEligible(_i: EligibilityInput): boolean {
 }
 
 /** Human-readable reason, for skip lists and UI. Null when eligible. */
-export function loomIneligibleReason(i: EligibilityInput): string | null {
-  return isLoomEligible(i)
+export function loomIneligibleReason(
+  i: EligibilityInput,
+  purpose: LoomPurpose = "catalogue"
+): string | null {
+  return isLoomEligible(i, purpose)
     ? null
-    : "not a Livid-brand product — Loom carries Livid production only";
+    : "not a Livid-brand product — the Loom wholesale catalogue carries Livid production only";
+}
+
+/** The Loom job a push mode serves. "data" is the stock registry. */
+export function purposeForMode(mode: "full" | "data" | undefined): LoomPurpose {
+  return mode === "data" ? "registry" : "catalogue";
 }
 
 export interface ShopifyReadinessInput {
