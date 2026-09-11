@@ -70,8 +70,8 @@ out is:
 | Sitoo | 26 |
 | Cin7 | 13 |
 
-**So "Sitoo wins" would be wrong 26 times.** Shopify is wrong most often, but
-nobody is reliably right.
+On this count "Sitoo wins" looked wrong 26 times — but see §3a: the count was
+inflated by treating Origio and Cin7 as independent when they are identical.
 
 ```
 EXT-CMP-KRA-BRWN-37
@@ -84,6 +84,53 @@ Majority resolves 85 of the 88; 3 have no majority at all. But majority is a
 same wrong value, particularly since Origio and Cin7 share an origin. **The real
 fix for external brands is the same as the one you just did for Livid: get the
 barcodes from the brand.** Until then, majority is a defensible interim.
+
+---
+
+## 3a. Adopted rule: CFO list for Livid, Sitoo for the rest
+
+Settled after testing the alternative. Three things support it:
+
+**Sitoo and Cin7 do agree on externals — 99.05 %** (4,167 of 4,207 where both hold
+a barcode). Every pair agrees around 99 %, so disagreement is rare everywhere.
+
+**My earlier majority count was inflated, and the correction favours Sitoo.**
+Origio and Cin7 are **100 % identical** (5,903 of 5,903 shared barcodes) because
+Origio was populated by the Cin7 import. They are one source of evidence, not two,
+and counting both manufactures a 3-against-1 majority out of what is really
+2-against-1. Recounted with Cin7+Origio as a single vote, the outlier is Shopify 45
+times and Sitoo 24 — so Sitoo is the minority far less often than the first pass
+suggested.
+
+**The decisive argument is yours, and it is epistemic rather than statistical.**
+Sitoo is the only system where a wrong barcode fails physically: the product does
+not scan at the till and someone fixes it that day. Cin7 and Shopify have no such
+feedback loop — a wrong barcode can sit in them indefinitely. Of the 24 cases where
+Sitoo is the minority, 13 are products with stock in a physical shop, so they have
+been exposed to exactly that loop.
+
+### The caveat: Sitoo's barcode is not always the manufacturer's
+
+Inspecting the 24 shows a real pattern — Sitoo sometimes holds a **store-printed
+label** rather than the brand's EAN:
+
+```
+EXT-NRD-001-SKYM-9
+   cin7 / origio / shopify   872236017271   <- Norda's own GS1 prefix (872236)
+   sitoo                     990497800682   <- 99* = GS1 coupon/internal range
+```
+
+57 Sitoo barcodes sit in internal or restricted GS1 ranges, and 16 of those exist
+nowhere else — a label printed in the shop exists only where it was printed.
+
+**Both values are correct, for different questions.** "What scans at the till" and
+"what the manufacturer put on the box" are not the same field, and the model has
+one slot for them.
+
+For the purpose at hand — reconciling stock movements — **what scans is the one
+that matters**, so the rule is right. But the 24 deserve an eyeball before applying,
+and if external supplier feeds are ever matched on barcode, the manufacturer's EAN
+will be needed as well as the scanning one.
 
 ---
 
