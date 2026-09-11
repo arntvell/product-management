@@ -12,6 +12,7 @@
 // refuse that itself.
 
 import { prisma } from "@/lib/db";
+import { lockedFields } from "@/lib/master/provenance";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { PRODUCT_VARIANTS_BULK_UPDATE_MUTATION } from "@/lib/shopify/mutations";
 import { canonical } from "@/lib/master/barcode";
@@ -36,6 +37,8 @@ export interface ShopifyBarcodePlan {
   unlinked: number;
   /** Targets held by a Shopify variant this batch is not rewriting. */
   blocked: Array<{ variantSku: string; barcode: string; heldBy: string }>;
+  /** Refused because the barcode field is locked — a value still in dispute. */
+  locked: string[];
   missingProductLink: string[];
 }
 
@@ -57,6 +60,7 @@ export async function planShopifyBarcodePush(
       barcode: { not: null },
     },
     select: {
+      id: true,
       variantSku: true,
       barcode: true,
       colorway: {
@@ -76,8 +80,16 @@ export async function planShopifyBarcodePush(
     unchanged: 0,
     unlinked: 0,
     blocked: [],
+    locked: [],
     missingProductLink: [],
   };
+
+  // A locked barcode is one the master has not settled — the disputed
+  // 7072536087* block, for instance. It must not reach any channel.
+  const lockedByVariant = await lockedFields(
+    "variant",
+    variants.map((v) => v.id)
+  );
 
   const candidates: Array<{
     variantGid: string;
@@ -91,6 +103,10 @@ export async function planShopifyBarcodePush(
     const ref = v.channelRefs[0];
     if (!ref) {
       plan.unlinked++;
+      continue;
+    }
+    if (lockedByVariant.get(v.id)?.has("barcode")) {
+      plan.locked.push(v.variantSku);
       continue;
     }
     const target = canonical(v.barcode);

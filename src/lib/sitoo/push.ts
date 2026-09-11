@@ -19,7 +19,8 @@
 // be unwound before it is rewritten.
 
 import { prisma } from "@/lib/db";
-import { canonical } from "@/lib/master/barcode";
+import { lockedFields } from "@/lib/master/provenance";
+import { canonical, isInternalRange } from "@/lib/master/barcode";
 import { listProducts, updateBarcode, type SitooProduct } from "./client";
 
 export interface SitooPushOptions {
@@ -44,6 +45,13 @@ export interface SitooPushPlan {
   writes: Array<{ productId: number; variantSku: string; from: string | null; to: string }>;
   /** Linked variants whose barcode already agrees. */
   unchanged: number;
+  /**
+   * Writes refused because Sitoo's current code is a store-printed label and
+   * the master's is not. See isInternalRange.
+   */
+  storeLabel: Array<{ productId: number; variantSku: string; keeping: string; wouldWrite: string }>;
+  /** Writes refused because the barcode field is locked — a disputed value. */
+  locked: Array<{ variantSku: string; authority: string | null }>;
   /** Variants with no Sitoo link — nothing to write against. */
   unlinked: number;
 }
@@ -67,6 +75,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
       barcode: { not: null },
     },
     select: {
+      id: true,
       variantSku: true,
       barcode: true,
       channelRefs: {
@@ -77,10 +86,16 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
   });
 
   const writes: SitooPushPlan["writes"] = [];
+  const storeLabel: SitooPushPlan["storeLabel"] = [];
+  const locked: SitooPushPlan["locked"] = [];
   let unchanged = 0;
   let unlinked = 0;
 
   const live = opts.products ?? (await listProducts());
+  const lockedByVariant = await lockedFields(
+    "variant",
+    variants.map((v) => v.id)
+  );
   const currentById = new Map<number, string | null>(
     live.map((p) => [p.productid, canonical(p.barcode)])
   );
@@ -99,6 +114,20 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
       unchanged++;
       continue;
     }
+    if (lockedByVariant.get(v.id)?.has("barcode")) {
+      locked.push({ variantSku: v.variantSku, authority: null });
+      continue;
+    }
+    // Never replace a code that scans with one that merely identifies.
+    if (have && isInternalRange(have) && !isInternalRange(target)) {
+      storeLabel.push({
+        productId,
+        variantSku: v.variantSku,
+        keeping: have,
+        wouldWrite: target,
+      });
+      continue;
+    }
     writes.push({ productId, variantSku: v.variantSku, from: have, to: target });
   }
 
@@ -111,7 +140,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
       unwind.push({ productId: w.productId, variantSku: w.variantSku, current: w.from });
     }
   }
-  return { unwind, writes, unchanged, unlinked };
+  return { unwind, writes, unchanged, unlinked, storeLabel, locked };
 }
 
 export async function pushBarcodesToSitoo(

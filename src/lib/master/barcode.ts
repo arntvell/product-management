@@ -119,6 +119,25 @@ export function parseAllocation(
   return null;
 }
 
+/**
+ * Is this a restricted-circulation code rather than a real GS1 article number?
+ *
+ * GS1 reserves prefix 2 for in-store / variable-measure use and 99 for coupons.
+ * Codes in those ranges are printed by the retailer, not the manufacturer, and
+ * they exist only where they were printed — 57 of Sitoo's barcodes are in these
+ * ranges and 16 appear nowhere else.
+ *
+ * This matters because such a code is the one that actually SCANS at the till.
+ * Overwriting it with the manufacturer's EAN is not a correction; it breaks the
+ * shop. Both values are right, for different questions, and the master has one
+ * slot for them.
+ */
+export function isInternalRange(barcode: string): boolean {
+  // A converted UPC-A carries a leading zero that is not part of the prefix.
+  const core = barcode.length === 13 && barcode.startsWith("0") ? barcode.slice(1) : barcode;
+  return core.startsWith("2") || core.startsWith("99");
+}
+
 export interface AllocateOptions {
   range?: string;
   sku?: string;

@@ -192,7 +192,8 @@ catalogue.
 
 | | |
 |---|---|
-| Physical scan | Barnes vs Hayes on the `7072536087*` block. No rule settles it — someone scans a garment. |
+| Physical scan | Barnes vs Hayes on the `7072536087*` block. No rule settles it — someone scans a garment. **The 11 affected variants are now locked** (`authority: disputed:awaiting-physical-scan`) so neither channel writer can assert them. Unlock by clearing `lockedAt` on their `barcode` FieldOwner rows once the scan settles it. |
+| Norda store labels | 5 variants where Sitoo holds a shop-printed `99*` code and the master holds Norda's own EAN. Both are right, for different questions; the push keeps what scans. A second field (manufacturer EAN vs scanning code) is the real fix. |
 | Cin7's 75 twins | 5 are denied by the allowlist. The rest need resolving before backfill or both halves import. |
 | Reconcile UI | Findings are JSON and curl. A surface in Origio is the natural next build. |
 | 259 mixed-case SKUs | `LIV-Aino-M`, plus 44 slashed like `LIV-HYS-TP-28/34`. Matching normalises both sides, but the master holds two conventions. Rewriting them changes identity other systems know, so it needs a decision, not a script. |
