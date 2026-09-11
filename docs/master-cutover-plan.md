@@ -18,30 +18,46 @@ makes the large import safe.
 
 ---
 
-## Phase 0 — One decision needed first
+## Phase 0 — Barcode allocation (smaller than first stated)
 
-**Who allocates Livid barcodes?**
+**Threadflow allocating barcodes for Livid production is not a problem.** Barcodes
+are issued when production volumes are set, which is a Threadflow event. A master
+of product does not have to mint every identifier — it has to guarantee the
+identifier is unique and hold the record of what was issued.
 
-Threadflow already carries them (`threadflow/types.ts:29`). Origio needs to mint
-for product born in Origio — imperfects, repairs, sale buckets. If both allocate on
-the `7072536` prefix with no coordination, they will eventually issue the same
-code, which is precisely the duplicate class this whole exercise exists to remove.
+Inspecting the CFO ledger settles how allocation actually works:
 
-Two workable answers:
+- The `Product Code` column **is a sequence number**. Every barcode is
+  `prefix + zero-padded counter + EAN-13 check digit` — verified on **9,822 of
+  9,822 rows, zero mismatches**.
+- **Two ranges, two counters.** `7072536` for production, at high-water mark
+  **12,257** (9,748 issued, 2,510 numbers unused inside the span). `7000000` for
+  non-production — samples, sale buckets, `EXT-IMP-MISC` — at 2,444.
+- So Origio-born product is **already served** by the existing process. The
+  `7000000*` range is not improvised; it is a deliberate second series.
+- 9,276 of the rows carry `Added = 2026-03-30`, a bulk export of the back
+  catalogue. Only ~546 are genuine allocations since.
 
-| Option | Shape | Trade-off |
-|---|---|---|
-| **A. Reserved block** | Threadflow keeps allocating for production; Origio owns a reserved range and never leaves it | Smallest change; needs the block agreed and written down |
-| **B. Origio allocates** | Origio becomes the sole minter; Threadflow requests or receives | Correct end state, matches "Origio is the master"; needs Threadflow work |
+### What the actual risk is
 
-**Recommend A now, B later.** A unblocks Phase 3 immediately and does not require
-touching Threadflow during a cutover.
+Not "two systems allocate". It is **two counters on one range**. If Origio starts
+issuing numbers without reading the same high-water mark that Threadflow and the
+CFO process read, it will eventually reissue a number that is already on a
+physical garment.
 
-The CFO's list is the existing allocation record. Whichever option is chosen, it
-should be loaded into Origio as the initial allocation state so the allocator knows
-what is already issued.
+### What Origio therefore needs — and it is small
 
----
+**Hold the ledger, not necessarily the pen.** Load the CFO list as the issued-number
+record, and record every barcode Origio learns about. Two things follow:
+
+1. The Phase 1.1 uniqueness constraint gains something real to enforce against —
+   it can reject a collision instead of discovering it during reconciliation.
+2. Allocation becomes `max(issued) + 1` on the relevant range, which is a few
+   lines, so Origio *can* issue when it needs to without a spreadsheet round-trip.
+
+Whether Threadflow keeps issuing for production, or eventually draws its numbers
+from Origio, is then a later convenience rather than a blocker. The one rule that
+matters is **one counter per range, and Origio knows its value.**
 
 ## Phase 1 — Close the door (small, additive)
 
@@ -134,5 +150,6 @@ more than technical, and the only step that stops this recurring.
 ## Where I would start
 
 **Phase 1.1, today.** It is verified, it is 24 rows, it closes a defect class
-permanently, and everything after it is safer for having it. Phase 0 is the only
-thing that needs you, and it does not block 1.1.
+permanently, and everything after it is safer for having it. Phase 0 turned out to
+need no decision from you — only the CFO list loaded as the issued-number ledger,
+which Phase 1.1 wants anyway.
