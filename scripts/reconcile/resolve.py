@@ -39,8 +39,12 @@ def load(d):
         "origio":  {n(r[0]): norm(r[1]) for r in master if n(r[0]) and r[6] != "t"},
         "sitoo":   {n(p.get("sku")): norm(p.get("barcode"))
                     for p in j("sitoo-products.json") if n(p.get("sku"))},
+        # ARCHIVED Shopify products are retired predecessors -- not sellable,
+        # not scannable. They must neither receive corrections nor block a
+        # correction to the live product that replaced them.
         "shopify": {n(v["node"].get("sku")): norm(v["node"].get("barcode"))
                     for p in j("shopify-products.json")
+                    if p.get("status") != "ARCHIVED"
                     for v in p["variants"]["edges"] if n(v["node"].get("sku"))},
         "cin7":    {n(p.get("SKU")): norm(p.get("Barcode"))
                     for p in j("cin7-products.json") if n(p.get("SKU"))},

@@ -127,10 +127,18 @@ def run(d):
         rows.append(dict(sys="sitoo", bc=usable(p.get("barcode")), sku=n(p.get("sku")),
                          title=n(p.get("title")), merch=True, cat="",
                          active=bool(p.get("active")), seasons=""))
+    # ARCHIVED Shopify products are history, not catalogue. Counting them made
+    # 39 of 41 "duplicate barcodes" look live when they are retired predecessors:
+    # Shopify re-creates a product (handle gains a -1 suffix), the new one takes
+    # a new SKU scheme, and the old is archived rather than deleted. 7,523 SKUs
+    # exist only on archived products. They are recorded as `shopify_archived`
+    # so the history is visible without polluting presence or duplicate checks.
     for prod in shop:
+        archived = prod.get("status") == "ARCHIVED"
         for e in prod["variants"]["edges"]:
             v = e["node"]
-            rows.append(dict(sys="shopify", bc=usable(v.get("barcode")), sku=n(v.get("sku")),
+            rows.append(dict(sys="shopify_archived" if archived else "shopify",
+                             bc=usable(v.get("barcode")), sku=n(v.get("sku")),
                              title=n(prod.get("title")), merch=True, cat="",
                              active=(prod.get("status") == "ACTIVE"), seasons=""))
     for p in c7:
@@ -183,6 +191,10 @@ def run(d):
             findings["RETIRE_CANDIDATE"].append(rec)
         if g["stocked"] and "origio" in g["sys"]:
             for s in ("sitoo", "shopify", "cin7"):
+                # present-but-archived is not present for selling purposes, but
+                # it is not the same as never having existed either
+                if s == "shopify" and "shopify_archived" in g["sys"] and s not in g["sys"]:
+                    findings["SHOPIFY_ARCHIVED_ONLY"].append(rec); continue
                 if s in g["sys"]: continue
                 why = policy_exempt(s, sorted(g["sku"]))
                 if why:
@@ -192,8 +204,11 @@ def run(d):
         if "origio" in g["sys"] and not g["bc"] and not g["preseason"]:
             findings["NO_BARCODE"].append(rec)
 
+    # Conflicts compare live systems only. An archived Shopify predecessor
+    # holding an older SKU or barcode is history, not a disagreement.
+    live = [r for r in rows if r["sys"] != "shopify_archived"]
     per = collections.defaultdict(lambda: collections.defaultdict(set))
-    for r in rows:
+    for r in live:
         if r["bc"] and r["sku"]: per[("bc", r["bc"])][r["sys"]].add(r["sku"])
     for key, m in per.items():
         if len(m) > 1:
@@ -202,7 +217,7 @@ def run(d):
                 findings["SKU_CONFLICT"].append({"barcode": key[1],
                                                  "per_system": {s: sorted(v) for s, v in m.items()}})
     per2 = collections.defaultdict(lambda: collections.defaultdict(set))
-    for r in rows:
+    for r in live:
         if r["bc"] and r["sku"]: per2[("sku", r["sku"])][r["sys"]].add(r["bc"])
     for key, m in per2.items():
         if len(m) > 1:
