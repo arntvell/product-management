@@ -70,6 +70,12 @@ export default async function CatalogPage() {
             Publishing
           </Link>
           <Link
+            href="/catalog/duplicates"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            Duplicates
+          </Link>
+          <Link
             href="/catalog/cutover"
             className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
           >
