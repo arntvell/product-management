@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import type { ChannelKey } from "./fields";
 import { normalizeSku, validateSku, type SkuMatch } from "./sku";
-import { allocate, canonical, RANGE_INTERNAL, RANGE_PRODUCTION } from "./barcode";
+import { allocate, canonical, RANGE_INTERNAL } from "./barcode";
 
 export class ValidationError extends Error {}
 
@@ -157,9 +157,15 @@ export async function buildProductsForBrand(
     (p) => ((p.sizes && p.sizes.length ? p.sizes : t.sizes).map((x) => x.trim()).filter(Boolean)).length
   );
   const totalVariants = sizeCounts.reduce((a, b) => a + b, 0);
+  // RANGE_INTERNAL, not RANGE_PRODUCTION. Threadflow owns the 7072536 counter
+  // and allocates when production volumes are set; a second counter on that
+  // range would eventually reissue a number already printed on a garment. What
+  // is born here is non-production Livid product — imperfects, repairs, samples,
+  // sale buckets — and the CFO's own ledger already puts exactly those on the
+  // 7000000 series. External brands arrive with their own GS1 code and get none.
   const barcodePool = brand.isLivid
     ? await allocate(prisma, {
-        range: RANGE_PRODUCTION,
+        range: RANGE_INTERNAL,
         count: totalVariants,
         authority: "origio:create",
       })
@@ -342,5 +348,3 @@ async function assertSkusAreNew(input: BuildProductsInput): Promise<void> {
 export function normalizeIncomingBarcode(raw: string | null | undefined): string | null {
   return canonical(raw);
 }
-
-export { RANGE_INTERNAL };

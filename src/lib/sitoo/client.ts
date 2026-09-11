@@ -63,10 +63,25 @@ export async function getProduct(productId: number): Promise<SitooProduct> {
 }
 
 /**
- * Write a barcode. Sitoo holds no duplicate barcodes anywhere in its 14,714
- * products, which strongly suggests the field is unique-constrained — so a
- * write that would collide fails here rather than corrupting anything, and the
- * rotation handling in push.ts exists precisely because of that.
+ * Write a barcode.
+ *
+ * Sitoo holds no duplicate barcodes anywhere in its 14,714 products, which
+ * strongly suggests the field is unique-constrained — so a colliding write fails
+ * here rather than corrupting anything, and the rotation handling in push.ts
+ * exists precisely because of that.
+ *
+ * VERIFY BEFORE THE FIRST SANDBOX RUN — two things this code assumes and which
+ * have not been confirmed against developer.sitoo.com:
+ *
+ *  1. That PUT /products/{id} *patches*. If it replaces the resource instead,
+ *     sending { barcode } alone would blank every other field on the product.
+ *     If the reference says replace, switch to PATCH, or GET-merge-PUT.
+ *  2. That `barcode: null` is accepted for the unwind phase. Some APIs want an
+ *     empty string, and a rejected null would strand the unwound products
+ *     without a barcode until the run is repeated.
+ *
+ * Both are cheap to check against one sandbox product and expensive to get
+ * wrong against 14,714 live ones.
  */
 export async function updateBarcode(productId: number, barcode: string | null): Promise<void> {
   await call(`/products/${productId}`, {
