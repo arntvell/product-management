@@ -70,6 +70,12 @@ export default async function CatalogPage() {
             Publishing
           </Link>
           <Link
+            href="/catalog/cutover"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            Cutover
+          </Link>
+          <Link
             href="/catalog/products/new"
             className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
           >
