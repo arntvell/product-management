@@ -90,6 +90,8 @@ export interface ShopifyLinkResult {
   unmatchedVariants: number;
   ambiguous: Array<{ variantSku: string; variantGids: string[] }>;
   skippedArchived: number;
+  /** Colorway -> Shopify product gid mappings recorded on ChannelPublication. */
+  productsLinked: number;
 }
 
 export interface ShopifyLinkOptions {
@@ -121,6 +123,7 @@ export async function linkShopifyVariants(
   const variants = await prisma.variant.findMany({
     select: {
       id: true,
+      colorwayId: true,
       variantSku: true,
       barcode: true,
       channelRefs: { where: { channel: "SHOPIFY" }, select: { id: true } },
@@ -135,8 +138,13 @@ export async function linkShopifyVariants(
     unmatchedVariants: 0,
     ambiguous: [],
     skippedArchived: all.length - live.length,
+    productsLinked: 0,
   };
   const writes: Array<{ variantId: string; externalId: string }> = [];
+  // productVariantsBulkUpdate is grouped by product, so the writer needs the
+  // product gid as well as the variant gid. It belongs on ChannelPublication,
+  // which already has a colorway-level externalId slot for exactly this.
+  const productByColorway = new Map<string, string>();
 
   for (const v of variants) {
     if (v.channelRefs.length) {
@@ -167,16 +175,41 @@ export async function linkShopifyVariants(
       continue;
     }
     writes.push({ variantId: v.id, externalId: hits[0].variantGid });
+    productByColorway.set(v.colorwayId, hits[0].productGid);
     if (how === "sku") result.bySku++;
     else result.byBarcode++;
   }
 
   result.linked = writes.length;
+  result.productsLinked = productByColorway.size;
+
   if (!opts.dryRun && writes.length) {
     await prisma.variantChannelRef.createMany({
       data: writes.map((w) => ({ ...w, channel: "SHOPIFY" as const })),
       skipDuplicates: true,
     });
+
+    // Record the product mapping WITHOUT claiming a push. `published` means the
+    // master put it there; these products were already in Shopify, so a new row
+    // is created as unpublished and an existing row's flag is left alone.
+    const entries = [...productByColorway.entries()];
+    for (let i = 0; i < entries.length; i += 200) {
+      await prisma.$transaction(
+        entries.slice(i, i + 200).map(([colorwayId, externalId]) =>
+          prisma.channelPublication.upsert({
+            where: { colorwayId_channel: { colorwayId, channel: "SHOPIFY" } },
+            create: {
+              colorwayId,
+              channel: "SHOPIFY",
+              published: false,
+              externalId,
+              lastPushStatus: "linked",
+            },
+            update: { externalId },
+          })
+        )
+      );
+    }
   }
   return result;
 }

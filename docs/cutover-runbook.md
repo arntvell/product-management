@@ -132,6 +132,19 @@ product before any live run** (both noted in `src/lib/sitoo/client.ts`):
 
 ---
 
+## 6b. Push to Shopify
+
+```bash
+curl -sX POST localhost:3000/api/catalog/push/shopify/barcodes -d '{"dryRun":true}' | jq
+```
+
+Shopify does **not** enforce barcode uniqueness — it holds 41 barcodes on more
+than one live variant today — so the plan refuses any write that would put one
+code on two variants rather than relying on the API to reject it. Read `blocked`
+before applying.
+
+---
+
 ## 7. Backfill the 4,552
 
 The last read from the downstream systems before they become write-only.
@@ -165,7 +178,6 @@ catalogue.
 | | |
 |---|---|
 | Physical scan | Barnes vs Hayes on the `7072536087*` block. No rule settles it — someone scans a garment. |
-| Shopify's 232 corrections | No Shopify barcode writer exists; `push-shopify.ts` is untouched. |
 | Cin7's 75 twins | 5 are denied by the allowlist. The rest need resolving before backfill or both halves import. |
 | Reconcile UI | Findings are JSON and curl. A surface in Origio is the natural next build. |
 | 259 mixed-case SKUs | `LIV-Aino-M`, plus 44 slashed like `LIV-HYS-TP-28/34`. Matching normalises both sides, but the master holds two conventions. Rewriting them changes identity other systems know, so it needs a decision, not a script. |
