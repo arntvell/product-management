@@ -9,6 +9,70 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { CHANNELS, CHANNEL_LABELS, type ChannelKey } from "@/lib/master/fields";
 
+interface SkuCheck {
+  ok: boolean;
+  normalized: string;
+  errors: string[];
+  warnings: string[];
+}
+interface Suggestion {
+  proposed: string;
+  derivedFrom: string;
+}
+
+/**
+ * Shows the SKU the convention would give this product, and what is wrong with
+ * the one that has been typed.
+ *
+ * Suggesting rather than forcing is deliberate. The catalogue has no single
+ * convention to enforce — two schemes coexist, and measured over 115 style
+ * names one matches 61% and the other 27% — so the honest move is to propose
+ * the spelling the style already uses and let a person disagree.
+ */
+function SkuHint({
+  row,
+  check,
+  suggestion,
+  onUse,
+}: {
+  row: ProductRow;
+  check: SkuCheck | null | undefined;
+  suggestion: Suggestion | null | undefined;
+  onUse: (sku: string) => void;
+}) {
+  const showSuggestion =
+    suggestion && suggestion.proposed.toUpperCase() !== row.colorwaySku.trim().toUpperCase();
+  if (!check?.errors.length && !check?.warnings.length && !showSuggestion) return null;
+
+  return (
+    <div className="col-span-2 -mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs sm:col-span-7">
+      {check?.errors.map((e) => (
+        <span key={e} className="text-destructive">
+          {e}
+        </span>
+      ))}
+      {check?.warnings.map((w) => (
+        <span key={w} className="text-amber-600 dark:text-amber-400">
+          {w}
+        </span>
+      ))}
+      {showSuggestion ? (
+        <button
+          type="button"
+          onClick={() => onUse(suggestion.proposed)}
+          className="underline underline-offset-4 hover:no-underline"
+          title={`From ${suggestion.derivedFrom}`}
+        >
+          use <code className="font-medium">{suggestion.proposed}</code>
+        </button>
+      ) : null}
+      {showSuggestion ? (
+        <span className="text-muted-foreground">from {suggestion.derivedFrom}</span>
+      ) : null}
+    </div>
+  );
+}
+
 interface Brand {
   id: string;
   name: string;
@@ -92,10 +156,67 @@ export function BrandProductBuilder({
   const brandIsLivid =
     brandMode === "existing" && !!brands.find((b) => b.id === brandId)?.isLivid;
   const [tpl, setTpl] = useState<Template>(emptyTemplate(manufacturers[0]?.id ?? ""));
+  const [skuChecks, setSkuChecks] = useState<Record<number, SkuCheck | null>>({});
+  const [skuSuggest, setSkuSuggest] = useState<Record<number, Suggestion | null>>({});
   const [saveTemplate, setSaveTemplate] = useState(true);
   const [rows, setRows] = useState<ProductRow[]>([emptyRow(), emptyRow()]);
 
   const loomSelected = tpl.channels.LOOM;
+
+  /** Validate a typed SKU against the master. */
+  async function checkSku(i: number) {
+    const sku = rows[i]?.colorwaySku.trim();
+    if (!sku) {
+      setSkuChecks((p) => ({ ...p, [i]: null }));
+      return;
+    }
+    try {
+      const res = await fetch("/api/catalog/skus/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku }),
+      });
+      const data = await res.json();
+      setSkuChecks((p) => ({ ...p, [i]: data.validation ?? null }));
+    } catch {
+      // A failed check must not block typing.
+    }
+  }
+
+  /** Ask what the convention would call this product. */
+  async function suggestSku(i: number) {
+    const r = rows[i];
+    if (!r?.name.trim()) return;
+    try {
+      const res = await fetch("/api/catalog/skus/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          suggest: {
+            prefix: brandIsLivid ? "LIV" : "EXT",
+            brand: brandIsLivid ? undefined : brandName(),
+            style: r.name,
+            color: r.color,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.proposed) {
+        setSkuSuggest((p) => ({
+          ...p,
+          [i]: { proposed: data.proposed, derivedFrom: data.derivedFrom ?? "" },
+        }));
+      }
+    } catch {
+      // Suggestions are a convenience, never a blocker.
+    }
+  }
+
+  function brandName(): string {
+    return brandMode === "existing"
+      ? (brands.find((b) => b.id === brandId)?.name ?? "")
+      : brandNewName;
+  }
 
   async function onBrandChange(id: string) {
     setBrandId(id);
@@ -352,9 +473,18 @@ export function BrandProductBuilder({
           </div>
           {rows.map((r, i) => (
             <div key={i} className="grid grid-cols-2 gap-2 sm:grid-cols-[1.4fr_1.2fr_0.8fr_0.7fr_0.7fr_1fr_auto]">
-              <Input placeholder="Name" value={r.name} onChange={(e) => setRow(i, { name: e.target.value })} />
-              <Input placeholder="SKU" value={r.colorwaySku} onChange={(e) => setRow(i, { colorwaySku: e.target.value })} />
-              <Input placeholder="Colour" value={r.color} onChange={(e) => setRow(i, { color: e.target.value })} />
+              <Input placeholder="Name" value={r.name} onChange={(e) => setRow(i, { name: e.target.value })} onBlur={() => suggestSku(i)} />
+              <div className="relative">
+                <Input
+                  placeholder="SKU"
+                  value={r.colorwaySku}
+                  onChange={(e) => setRow(i, { colorwaySku: e.target.value })}
+                  onBlur={() => checkSku(i)}
+                  aria-invalid={skuChecks[i]?.errors?.length ? true : undefined}
+                  className={skuChecks[i]?.errors?.length ? "border-destructive" : undefined}
+                />
+              </div>
+              <Input placeholder="Colour" value={r.color} onChange={(e) => setRow(i, { color: e.target.value })} onBlur={() => suggestSku(i)} />
               <Input placeholder="#hex" value={r.swatchHex} onChange={(e) => setRow(i, { swatchHex: e.target.value })} />
               <Input placeholder="NOK" value={r.priceNok} onChange={(e) => setRow(i, { priceNok: e.target.value })} />
               <Input placeholder="(template)" value={r.sizes} onChange={(e) => setRow(i, { sizes: e.target.value })} />
@@ -365,6 +495,13 @@ export function BrandProductBuilder({
               >
                 ✕
               </button>
+              <SkuHint
+                key={`hint-${i}`}
+                row={r}
+                check={skuChecks[i]}
+                suggestion={skuSuggest[i]}
+                onUse={(sku) => { setRow(i, { colorwaySku: sku }); setSkuChecks((p) => ({ ...p, [i]: null })); }}
+              />
             </div>
           ))}
         </div>
@@ -374,6 +511,24 @@ export function BrandProductBuilder({
         >
           + Add product
         </button>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {brandIsLivid ? (
+            <>
+              Barcodes are allocated from the master&rsquo;s ledger on the{" "}
+              <code className="rounded bg-muted px-1">7000000</code> internal
+              series — the one the CFO&rsquo;s list already uses for product that
+              is not a production run. Threadflow owns the{" "}
+              <code className="rounded bg-muted px-1">7072536</code> counter, so
+              nothing created here draws from it.
+            </>
+          ) : (
+            <>
+              External product keeps the brand&rsquo;s own EAN, so no barcode is
+              allocated here. Add it in the editor once you have it from the
+              supplier.
+            </>
+          )}
+        </p>
       </Section>
 
       <div className="mt-6">

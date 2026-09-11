@@ -183,6 +183,12 @@ export function compareSku(candidate: string, existing: string): SkuMatch | null
 export interface SkuInput {
   /** Owner prefix — LIV for Livid production, EXT for external brands. */
   prefix: string;
+  /**
+   * Brand token, for external product. The corpus writes the brand between the
+   * prefix and the style — EXT-PB-BARTH-… for Paraboot, EXT-NRD-… for Norda —
+   * so a Livid SKU omits it and an external one carries it.
+   */
+  brand?: string;
   /** Modifiers that make this a distinct product: IMP for an imperfect. */
   modifiers?: string[];
   /** Style name, e.g. "Keri Japan". */
@@ -217,6 +223,7 @@ export function buildSku(input: SkuInput): string {
   const parts = [
     ...(input.modifiers ?? []).map((m) => m.toUpperCase()),
     input.prefix.toUpperCase(),
+    ...(input.brand ? [abbreviate(input.brand, 4)] : []),
     ...input.style.split(/[\s/-]+/).filter(Boolean).map((w) => abbreviate(w)),
     ...(input.color ?? "").split(/[\s/-]+/).filter(Boolean).map((w) => abbreviate(w)),
     ...(input.size ? [input.size] : []),
