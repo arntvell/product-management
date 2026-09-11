@@ -42,9 +42,12 @@ export async function getCutoverStatus(): Promise<CutoverStatus> {
     ] = await Promise.all([
       prisma.variant.count(),
       prisma.variant.count({ where: { NOT: { barcode: null } } }),
-      prisma.variant
-        .findMany({ where: { NOT: { barcode: null } }, select: { barcode: true }, distinct: ["barcode"] })
-        .then((r) => r.length),
+      // COUNT(DISTINCT ...) in SQL. Prisma's `distinct` is applied client-side,
+      // so the findMany form loads every barcode into memory on every render of
+      // this force-dynamic page.
+      prisma
+        .$queryRaw<[{ c: bigint }]>`SELECT COUNT(DISTINCT "barcode") AS c FROM "Variant" WHERE "barcode" IS NOT NULL`
+        .then((r) => Number(r[0]?.c ?? 0)),
       prisma.barcodeAllocation.findFirst({
         where: { range: RANGE_PRODUCTION },
         orderBy: { sequence: "desc" },

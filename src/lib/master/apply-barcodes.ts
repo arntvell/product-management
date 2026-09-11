@@ -40,6 +40,16 @@ export interface ApplyBarcodesOptions {
 export interface BarcodeApplyPlan {
   fill: Array<{ variantSku: string; to: string }>;
   change: Array<{ variantSku: string; from: string; to: string }>;
+  /**
+   * Variants whose current barcode is another variant's target within this same
+   * batch. Their code is released before the targets are written.
+   *
+   * Without this a rotation cannot be applied at all: every row's target is held
+   * by the row next to it, so each is refused as a collision and the set stays
+   * wrong forever. Both known cases are rotations — the shifted Sitoo size runs,
+   * and the Barnes/Hayes 7072536087* block.
+   */
+  unwind: Array<{ variantSku: string; releasing: string }>;
   unchanged: number;
   rejected: Array<{ variantSku: string; barcode: string; reason: string }>;
   collisions: Array<{ variantSku: string; barcode: string; heldBy: string }>;
@@ -59,6 +69,7 @@ export async function planBarcodeCorrections(
   const plan: BarcodeApplyPlan = {
     fill: [],
     change: [],
+    unwind: [],
     unchanged: 0,
     rejected: [],
     collisions: [],
@@ -83,6 +94,10 @@ export async function planBarcodeCorrections(
 
   // Targets claimed within this batch itself.
   const claimed = new Map<string, string>();
+  // SKUs this batch touches, so a contested target can be told apart from a
+  // rotation that resolves once the holder gives its code up.
+  const batchSkus = new Set(corrections.map((c) => c.variantSku));
+  const rotations = new Map<string, string | null>();
 
   for (const c of corrections) {
     const target = canonical(c.barcode);
@@ -107,8 +122,15 @@ export async function planBarcodeCorrections(
 
     const heldBy = holder.get(target) ?? claimed.get(target);
     if (heldBy && heldBy !== c.variantSku) {
-      plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy });
-      continue;
+      // A target held by a variant this batch is *also* rewriting is a rotation,
+      // not a clash: the holder is about to give the code up. Anything else is a
+      // genuine collision and is refused.
+      if (batchSkus.has(heldBy)) {
+        rotations.set(heldBy, holder.get(target) === heldBy ? target : null);
+      } else {
+        plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy });
+        continue;
+      }
     }
     claimed.set(target, c.variantSku);
 
@@ -125,6 +147,10 @@ export async function planBarcodeCorrections(
     } else {
       plan.fill.push({ variantSku: c.variantSku, to: target });
     }
+  }
+
+  for (const [sku, releasing] of rotations) {
+    if (releasing) plan.unwind.push({ variantSku: sku, releasing });
   }
   return plan;
 }
@@ -152,6 +178,17 @@ export async function applyBarcodeCorrections(
     select: { id: true, variantSku: true },
   });
   for (const r of rows) ids.set(r.variantSku, r.id);
+
+  // Phase 1 — release contested codes, so phase 2 cannot collide. Only matters
+  // once the unique index is in place, but it is also the difference between a
+  // rotation being applicable and being permanently refused.
+  if (plan.unwind.length) {
+    await prisma.$transaction(
+      plan.unwind.map((u) =>
+        prisma.variant.update({ where: { variantSku: u.variantSku }, data: { barcode: null } })
+      )
+    );
+  }
 
   let applied = 0;
   const CHUNK = 200;

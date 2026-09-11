@@ -22,8 +22,11 @@ is held back deliberately**, and `migrate deploy` has no "up to" flag, so:
 mv prisma/migrations/20260911090400_variant_barcode_unique /tmp/
 npm run db:deploy
 mv /tmp/20260911090400_variant_barcode_unique prisma/migrations/
-npx prisma generate && # restart npm run dev — Turbopack bundles the client
 ```
+
+**Then restart `npm run dev`.** Turbopack bundles the Prisma client, so a running
+dev server keeps the old one and will still fail. The client is already
+generated — no need to re-run `prisma generate`.
 
 I attempted this and the Claude Code auto-mode classifier blocked it, same as the
 carry-forward apply and the `git push` earlier in this work.
@@ -72,9 +75,21 @@ curl -sX POST localhost:3000/api/catalog/sitoo/link   -d '{"dryRun":true}' | jq
 curl -sX POST localhost:3000/api/catalog/shopify/link -d '{"dryRun":true}' | jq
 ```
 
-Read `ambiguous` before applying. Shopify holds 41 barcodes on more than one
-variant and 150 repeated SKUs; those are reported, never guessed. Then re-run
-each without `dryRun`.
+Both were projected against the 2026-09-11 snapshot before being written, so the
+numbers to expect are known:
+
+| | Sitoo | Shopify |
+|---|---:|---:|
+| matched by SKU | 4,086 | 4,085 |
+| matched by barcode | — | 26 |
+| **ambiguous** | **0** | **0** |
+
+Shopify holds 41 barcodes on more than one variant and 150 repeated SKUs, but
+none of them make an *Origio* variant ambiguous. The unmatched remainder is
+expected: SS27 is pre-season and not in Shopify, and 7,704 archived Shopify
+variants are deliberately excluded.
+
+Then re-run each without `dryRun`.
 
 ---
 
