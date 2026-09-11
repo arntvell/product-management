@@ -11,7 +11,9 @@
 // mixed-case SKUs (LIV-Aino-M) and 44 with a slashed size (LIV-HYS-TP-28/34), so
 // raw string equality silently misses them.
 
+import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { canonical } from "@/lib/master/barcode";
 import { normalizeSku } from "@/lib/master/sku";
@@ -109,6 +111,7 @@ export async function linkShopifyVariants(
   // record that cannot receive stock.
   const live = all.filter((r) => !r.archived);
 
+  const byGid = new Map(live.map((r) => [r.variantGid, r]));
   const bySku = new Map<string, ShopifyVariantRow[]>();
   const byBarcode = new Map<string, ShopifyVariantRow[]>();
   for (const r of live) {
@@ -126,7 +129,7 @@ export async function linkShopifyVariants(
       colorwayId: true,
       variantSku: true,
       barcode: true,
-      channelRefs: { where: { channel: "SHOPIFY" }, select: { id: true } },
+      channelRefs: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
     },
   });
 
@@ -149,6 +152,11 @@ export async function linkShopifyVariants(
   for (const v of variants) {
     if (v.channelRefs.length) {
       result.alreadyLinked++;
+      // Still record the product mapping. It is written after the variant refs,
+      // so a failure between the two leaves variants linked and products not —
+      // and without this, a re-run would skip every variant and never repair it.
+      const known = byGid.get(v.channelRefs[0].externalId);
+      if (known) productByColorway.set(v.colorwayId, known.productGid);
       continue;
     }
     let hits = bySku.get(normalizeSku(v.variantSku)) ?? [];
@@ -188,27 +196,30 @@ export async function linkShopifyVariants(
       data: writes.map((w) => ({ ...w, channel: "SHOPIFY" as const })),
       skipDuplicates: true,
     });
+  }
 
+  if (!opts.dryRun && productByColorway.size) {
     // Record the product mapping WITHOUT claiming a push. `published` means the
     // master put it there; these products were already in Shopify, so a new row
     // is created as unpublished and an existing row's flag is left alone.
+    // One statement per chunk. The per-row upsert form is a round trip each and
+    // overran the 5 s transaction budget at 200 rows, which left the variants
+    // linked and the products not.
     const entries = [...productByColorway.entries()];
-    for (let i = 0; i < entries.length; i += 200) {
-      await prisma.$transaction(
-        entries.slice(i, i + 200).map(([colorwayId, externalId]) =>
-          prisma.channelPublication.upsert({
-            where: { colorwayId_channel: { colorwayId, channel: "SHOPIFY" } },
-            create: {
-              colorwayId,
-              channel: "SHOPIFY",
-              published: false,
-              externalId,
-              lastPushStatus: "linked",
-            },
-            update: { externalId },
-          })
-        )
-      );
+    for (let i = 0; i < entries.length; i += 500) {
+      const values = entries
+        .slice(i, i + 500)
+        .map(
+          ([colorwayId, externalId]) =>
+            Prisma.sql`(${randomUUID()}, ${colorwayId}, 'SHOPIFY'::"Channel", false, ${externalId}, 'linked')`
+        );
+      await prisma.$executeRaw`
+        INSERT INTO "ChannelPublication"
+          ("id", "colorwayId", "channel", "published", "externalId", "lastPushStatus")
+        VALUES ${Prisma.join(values)}
+        ON CONFLICT ("colorwayId", "channel") DO UPDATE SET
+          "externalId" = EXCLUDED."externalId"
+      `;
     }
   }
   return result;
