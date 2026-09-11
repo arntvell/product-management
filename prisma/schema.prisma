@@ -393,6 +393,17 @@ model VariantChannelRef {
   variant        Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
   channel        Channel
   externalId     String // Sitoo productid, Loom variant key
+  /**
+   * What the channel calls this garment, when that differs from the master.
+   * Null means the spellings agree. A value is an ALIAS, not a second identity:
+   * Shopify holds LIV-KRI-DWN-2432 for what the master calls
+   * LIV-KR-JPN-DWN-2432 — one garment, renamed in one place and not the other.
+   * Recorded rather than merged. A merge is for two records of one garment
+   * inside the master; across systems there is one record and two names, and
+   * the name the channel uses has to stay known until the master asserts its
+   * own and the alias becomes history.
+   */
+  externalSku    String?
   lastPushedAt   DateTime?
   lastPushStatus String?
 

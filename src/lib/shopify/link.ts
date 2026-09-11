@@ -17,6 +17,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { canonical } from "@/lib/master/barcode";
 import { normalizeSku } from "@/lib/master/sku";
+import { applyAliasUpdates } from "@/lib/sitoo/link";
 
 const VARIANTS_QUERY = `
   query LinkVariants($first: Int!, $after: String, $query: String) {
@@ -91,6 +92,8 @@ export interface ShopifyLinkResult {
   byBarcode: number;
   unmatchedVariants: number;
   ambiguous: Array<{ variantSku: string; variantGids: string[] }>;
+  /** Links where the channel calls the garment something else. */
+  aliases: Array<{ variantSku: string; externalSku: string }>;
   skippedArchived: number;
   /** Colorway -> Shopify product gid mappings recorded on ChannelPublication. */
   productsLinked: number;
@@ -129,7 +132,10 @@ export async function linkShopifyVariants(
       colorwayId: true,
       variantSku: true,
       barcode: true,
-      channelRefs: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
+      channelRefs: {
+        where: { channel: "SHOPIFY" },
+        select: { id: true, externalId: true, externalSku: true },
+      },
     },
   });
 
@@ -140,10 +146,12 @@ export async function linkShopifyVariants(
     byBarcode: 0,
     unmatchedVariants: 0,
     ambiguous: [],
+    aliases: [],
     skippedArchived: all.length - live.length,
     productsLinked: 0,
   };
-  const writes: Array<{ variantId: string; externalId: string }> = [];
+  const writes: Array<{ variantId: string; externalId: string; externalSku: string | null }> = [];
+  const aliasUpdates: Array<{ refId: string; externalSku: string | null }> = [];
   // productVariantsBulkUpdate is grouped by product, so the writer needs the
   // product gid as well as the variant gid. It belongs on ChannelPublication,
   // which already has a colorway-level externalId slot for exactly this.
@@ -155,8 +163,13 @@ export async function linkShopifyVariants(
       // Still record the product mapping. It is written after the variant refs,
       // so a failure between the two leaves variants linked and products not —
       // and without this, a re-run would skip every variant and never repair it.
-      const known = byGid.get(v.channelRefs[0].externalId);
+      const ref = v.channelRefs[0];
+      const known = byGid.get(ref.externalId);
       if (known) productByColorway.set(v.colorwayId, known.productGid);
+      const want =
+        known?.sku && normalizeSku(known.sku) !== normalizeSku(v.variantSku) ? known.sku : null;
+      if (want !== ref.externalSku) aliasUpdates.push({ refId: ref.id, externalSku: want });
+      if (want) result.aliases.push({ variantSku: v.variantSku, externalSku: want });
       continue;
     }
     let hits = bySku.get(normalizeSku(v.variantSku)) ?? [];
@@ -182,7 +195,11 @@ export async function linkShopifyVariants(
       });
       continue;
     }
-    writes.push({ variantId: v.id, externalId: hits[0].variantGid });
+    const theirSku = hits[0].sku ?? null;
+    const alias =
+      theirSku && normalizeSku(theirSku) !== normalizeSku(v.variantSku) ? theirSku : null;
+    if (alias) result.aliases.push({ variantSku: v.variantSku, externalSku: alias });
+    writes.push({ variantId: v.id, externalId: hits[0].variantGid, externalSku: alias });
     productByColorway.set(v.colorwayId, hits[0].productGid);
     if (how === "sku") result.bySku++;
     else result.byBarcode++;
@@ -196,6 +213,10 @@ export async function linkShopifyVariants(
       data: writes.map((w) => ({ ...w, channel: "SHOPIFY" as const })),
       skipDuplicates: true,
     });
+  }
+
+  if (!opts.dryRun && aliasUpdates.length) {
+    await applyAliasUpdates(aliasUpdates);
   }
 
   if (!opts.dryRun && productByColorway.size) {
