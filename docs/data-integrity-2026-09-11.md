@@ -107,28 +107,70 @@ right, but that you can show why.
 
 ---
 
-## 4. The one-way door
+## 4. Settled: Origio is the master (2026-09-11)
 
-**Reconciliation is a migration phase, not a steady state.** If Origio stays a
-peer that gets *compared* with Sitoo, Shopify and Cin7, this exercise recurs every
-quarter, because each system can still originate product data.
+**Decided, not proposed.** Product is created in Origio or imported from
+Threadflow. Sitoo, Shopify and Loom are **populated from Origio**. Cin7 is not a
+destination — it is read once for backfill, then retired.
 
-The end state is that Origio **assigns** identity — SKU and barcode — and the other
-systems receive it. That is also the structural fix for "duplicate products with
-different SKUs": `LIV-KRI-DWN` and `LIV-KR-JPN-DWN` exist because two systems could
-both name the same garment. When only one can, there is no second spelling to
-enter.
+This ends the peer-comparison model. It also changes what the outstanding
+reconciliation work is worth.
 
-Sequence:
+### 4.1 What the decision cancels
 
-1. **Reconcile once** — close the 4,552 gap, settle conflicts, fix the two physical
-   problems.
-2. **Push** — Origio becomes the writer of SKU and barcode to each channel.
-3. **Cut off origination** — the other systems stop creating product records.
-   Until step 3, steps 1 and 2 have to be repeated.
+| Pending item | New status |
+|---|---|
+| Cin7's 320 barcode corrections | **Dead work.** Cin7 is a backfill source, then gone. Read it correctly once; never fix it. |
+| Cin7's 75 `EEXT-`/`EXT-` duplicate merges | **Dead work**, same reason — but the pairs must be resolved *before* backfill, or both halves import. |
+| Sitoo (55) + Shopify (232) barcode corrections | **Not a script run.** They ride the first push from Origio. Applying them peer-to-peer is the model just rejected. |
+| The 4,552 backfill | No longer a decision. It is **the last read** from downstream systems before they become write-only. |
 
-Step 3 is organisational as much as technical, and it is the one that makes the
-rest stick.
+### 4.2 What the decision requires that does not exist yet
+
+Verified against the code today:
+
+**1. There is no Sitoo writer.** `src/lib/` has `shopify/` and `loom/`; Sitoo
+appears only in the read-only `scripts/reconcile/` tooling. "Populated from Origio"
+is currently true for two of three channels.
+
+It also needs a `ChannelPublication`-equivalent mapping Sitoo product ids to Origio
+variants. The reconciliation output is the seed for that linkage — **the first push
+is a match-and-update, not a create**, or it duplicates 14,714 products.
+
+Design constraint already observed: Sitoo has **zero** within-system duplicate
+barcodes, which suggests it enforces uniqueness. The shifted size run (§3.1 of
+`duplicate-products-2026-09-11.md`) will therefore collide at the API exactly as it
+did in the resolver. The writer needs whole-product or two-phase writes, not
+row-at-a-time.
+
+**2. Origio cannot mint a barcode.** `create.ts` never sets `barcode`, and there is
+no check-digit or GS1 allocator anywhere in `src/`. The gap is narrower than it
+first appears, because Threadflow *does* carry barcodes (`threadflow/types.ts:29`,
+set-once at `sync.ts:1537`):
+
+| Product origin | Barcode source | Gap? |
+|---|---|---|
+| Threadflow (Livid production) | arrives with the sync | no |
+| External brands | the brand's own GS1 prefix | no |
+| **Origio-born Livid** — imperfects, repairs, sale buckets | nothing | **yes** |
+
+That last row is why those products sit on the improvised `7000000*` range. Origio
+needs a small allocator on Livid's `7072536` prefix with check-digit generation,
+used at create.
+
+**3. SKU is typed, not assigned.** `create.ts:145` is `req(p.colorwaySku)` — a
+user-entered string. Until the master generates or validates it against a
+convention, `LIV-KRI-DWN` vs `LIV-KR-JPN-DWN` can still be created, which is the
+exact duplicate class this cleanup exists to remove. Being the sole creation point
+does not prevent duplicates; **owning the identifier does.**
+
+### 4.3 Why this is operational, not tidiness
+
+Loom is becoming the stock registry. Its sync joins Sitoo scans to Shopify orders
+on product identity. **A barcode that scans in a shop but does not match Loom's
+record is a stock movement that silently disappears.** That is the cost of
+non-atomic identity, and it is why identity must be assigned in one place before
+the registry goes live — not reconciled after.
 
 ---
 
@@ -166,6 +208,7 @@ form was applied — some by 20×.
 | 4 | Use `approvedForProduction` as the pre-season signal | Removes the `PRESEASON` constant that goes stale |
 | 5 | Second barcode field for scanning vs manufacturer code | Unblocks the 37 withheld store-label rows |
 | 6 | Close the 4,552 gap | The master cannot be the truth while half the catalogue is missing |
-| 7 | Turn on one-way push, then cut off origination | The only thing that stops this recurring |
+| 7 | Sitoo writer + id linkage; barcode allocator; SKU assignment | The three things "Origio is the master" needs and does not have (§4.2) |
+| 8 | Cut off origination in Sitoo, Shopify, Cin7 | The only thing that stops this recurring |
 
-1–5 are small and mostly additive. 6 is the large one. 7 is the one that matters.
+1–5 are small and mostly additive. 6 and 7 are the large ones. 8 is the one that makes the rest stick.
