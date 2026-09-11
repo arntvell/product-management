@@ -41,6 +41,35 @@ export function loomMissingForColorway(cw: LoomColorway): string[] {
   });
 }
 
+/**
+ * Registry payload — identity only.
+ *
+ * The stock registry needs to know *which garment* a movement refers to, and
+ * nothing else. Sending the catalogue shape here would be wrong in two ways:
+ * externals and vintage have no wholesale price and no customs block, so the
+ * payload would be mostly nulls; and a registry that carries merchandising data
+ * invites Loom to render products it must not sell — the wholesale catalogue
+ * rule this mode deliberately bypasses.
+ */
+function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
+  return {
+    colorway_id: cw.id,
+    colorway_sku: cw.colorwaySku,
+    name: cw.name,
+    brand: cw.brand?.name ?? null,
+    // Registry rows are stock-bearing records, not catalogue listings. loom:false
+    // still means withdraw, so the archive signal has to survive.
+    channels: { loom: !archive?.has(cw.id), shopify: false },
+    registry_only: true,
+    variants: cw.variants.map((v) => ({
+      variant_id: v.id,
+      variant_sku: v.variantSku,
+      barcode: v.barcode ?? null,
+      dimensions: v.dim2 ? { waist: v.dim1, length: v.dim2 } : { size: v.dim1 },
+    })),
+  };
+}
+
 function buildColorway(cw: LoomColorway, archive?: Set<string>) {
   const entry = cw.entries[0];
   // Customs: colorway override falls back to the style.
@@ -140,7 +169,11 @@ export interface LoomPayload {
     gender: string | null;
     unisex: boolean;
     category: string;
-    colorways: ReturnType<typeof buildColorway>[];
+    // A delivery carries one shape or the other, never a mix: "full" sends the
+    // catalogue colorway, "data" sends the identity-only registry row.
+    colorways: Array<
+      ReturnType<typeof buildColorway> | ReturnType<typeof buildRegistryColorway>
+    >;
   }>;
 }
 
@@ -181,6 +214,8 @@ export function buildLoomPayloadFromColorways(
   mode: LoomMode = "full"
 ): LoomPayload {
   // Group colorways under their style.
+  const build = mode === "data" ? buildRegistryColorway : buildColorway;
+
   const byStyle = new Map<string, LoomColorway[]>();
   for (const cw of colorways) {
     const list = byStyle.get(cw.styleId) ?? [];
@@ -197,7 +232,7 @@ export function buildLoomPayloadFromColorways(
       gender: s.gender,
       unisex: s.unisex,
       category: toLoomCategory(s.category),
-      colorways: cws.map((cw) => buildColorway(cw, archive)),
+      colorways: cws.map((cw) => build(cw, archive)),
     };
   });
 

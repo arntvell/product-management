@@ -151,8 +151,13 @@ export async function pushColorwaysToLoom(
   if (opts.dryRun) {
     // Nothing leaves the process and no ChannelPublication is touched.
     const all = payload.styles.flatMap((s) => s.colorways);
+    // The registry payload carries identity only, so the merchandising figures
+    // below simply do not apply to it. Narrow once rather than guarding each.
+    const cat = all.filter(
+      (c): c is Extract<typeof c, { prices: unknown }> => "prices" in c
+    );
     const currencies = new Set<string>();
-    for (const c of all) for (const k of Object.keys(c.prices)) currencies.add(k);
+    for (const c of cat) for (const k of Object.keys(c.prices)) currencies.add(k);
     return {
       ok: true,
       status: 0,
@@ -175,11 +180,11 @@ export async function pushColorwaysToLoom(
         ).length,
         channelsLoomTrue: all.filter((c) => c.channels.loom).length,
         channelsLoomFalse: all.filter((c) => !c.channels.loom).length,
-        core: all.filter((c) => c.is_core).length,
-        dropped: all.filter((c) => c.dropped).length,
-        approvedForProduction: all.filter((c) => c.approved_for_production).length,
+        core: cat.filter((c) => c.is_core).length,
+        dropped: cat.filter((c) => c.dropped).length,
+        approvedForProduction: cat.filter((c) => c.approved_for_production).length,
         currencies: [...currencies].sort(),
-        missingImage: all.filter((c) => !c.image).length,
+        missingImage: cat.filter((c) => !c.image).length,
         products: all.map((c) => ({
           sku: c.colorway_sku,
           name: c.name,
