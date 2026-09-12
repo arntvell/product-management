@@ -313,7 +313,12 @@ export async function previewCin7Import(
       g.variants.some((v) => existing.variantSkus.has(v.SKU));
     if (exists) {
       skippedExisting++;
-      // The colorway is present; its missing sizes are not.
+      // The colorway is present; its missing sizes are not. The brand scope
+      // applies here too — a run limited to one brand must not quietly reach
+      // into every other brand's size runs, which is what makes a small trial
+      // run meaningful.
+      const { brandName: existingBrand } = deriveBrandVendor(g.rep.Brand);
+      if (brandSet && !brandSet.has(existingBrand)) continue;
       const missing = g.variants.filter((v) => !existing.variantSkus.has(v.SKU));
       if (missing.length && existing.colorwayIdBySku.has(g.base)) {
         topUpColorways++;
@@ -456,6 +461,9 @@ export async function runCin7Import(
         g.variants.some((v) => usedSkus.has(v.SKU));
       if (exists) {
         skipped++;
+        // Brand scope applies to top-ups as well — see the preview.
+        const { brandName: existingBrand } = deriveBrandVendor(g.rep.Brand);
+        if (brandSet && !brandSet.has(existingBrand)) continue;
         // Top up: the colorway is present, some of its sizes are not. Attach
         // them to the existing record rather than leaving the run short — a
         // half-populated size run is worse than an absent one, because nothing
