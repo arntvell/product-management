@@ -571,11 +571,27 @@ export async function runCin7Import(
         const { size } = splitSku(v.SKU);
         const { sizeLabel, dim1, dim2 } = deriveSize(size);
         const variantId = randomUUID();
+        // Variant.barcode is uniquely indexed, so ONE duplicate fails the whole
+        // createMany and leaves the colorways written and the variants not.
+        //
+        // The duplicates are Cin7's own: 11 barcodes in the current import set
+        // are shared by two SKUs each — EXT-BKST-BST-HR-42 and
+        // EXT-BKST-BST-MNKSD-42 on 4044477046518, EXT-KEEN-JAS-BB-40 and -40.5
+        // on 0195208040573. Checking the incoming barcodes against Origio found
+        // no collisions and missed these entirely, because the batch collides
+        // with ITSELF.
+        //
+        // First SKU keeps the code; the rest are created without one and
+        // reported, so no product is lost to a data defect upstream.
+        const incoming = canonical(v.Barcode);
+        const clash = incoming ? existing.barcodes.has(incoming) : false;
+        if (incoming && clash) barcodeConflicts.push({ variantSku: v.SKU, barcode: incoming });
+        if (incoming && !clash) existing.barcodes.add(incoming);
         variantCreates.push({
           id: variantId,
           colorwayId,
           variantSku: v.SKU,
-          barcode: canonical(v.Barcode),
+          barcode: clash ? null : incoming,
           sizeLabel,
           dim1,
           dim2,
@@ -628,7 +644,9 @@ export async function runCin7Import(
           data: missingEntry.map((colorwayId) => ({
             colorwayId,
             seasonId: season.id,
-            approvedForProduction: true,
+            // Matches what the importer sets on its own entries. These are
+            // records of stock that exists, not a production decision.
+            approvedForProduction: false,
           })),
           skipDuplicates: true,
         });
