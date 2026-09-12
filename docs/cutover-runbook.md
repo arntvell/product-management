@@ -200,7 +200,7 @@ catalogue.
 
 | | |
 |---|---|
-| Physical scan | Barnes vs Hayes on the `7072536087*` block. No rule settles it — someone scans a garment. **The 11 affected variants are now locked** (`authority: disputed:awaiting-physical-scan`) so neither channel writer can assert them. Unlock by clearing `lockedAt` on their `barcode` FieldOwner rows once the scan settles it. |
+| ~~Physical scan~~ | **Settled 2026-09-12.** Two stores confirmed by phone that the physical labels carry `7072536051*`. Sitoo held `7072536087*`, which is why those eight Barnes Japan Dawn sizes would not scan at the till. The eight variants are unlocked with authority `store-scan-2026-09-12` and are in the Sitoo plan. The three Hayes Taupe variants stay locked — Hayes uses `7072536094*` in Cin7 and Sitoo, never `087*`, and the style retires end of September. |
 | Norda store labels | 5 variants where Sitoo holds a shop-printed `99*` code and the master holds Norda's own EAN. The push keeps what scans. **Sitoo's `barcodealiases` is the real fix** — verified working — so both codes resolve at the till instead of one being discarded. Needs a decision on which is primary. |
 | Cin7's 75 twins | 5 are denied by the allowlist. The rest need resolving before backfill or both halves import. |
 | Reconcile UI | Findings are JSON and curl. A surface in Origio is the natural next build. |

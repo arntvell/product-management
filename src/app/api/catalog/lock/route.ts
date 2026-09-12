@@ -5,17 +5,22 @@ import { recordDecisions } from "@/lib/master/provenance";
 export const dynamic = "force-dynamic";
 
 // POST /api/catalog/lock
-//   { variantSkus: [...], field: "barcode", authority, evidence? }
+//   { variantSkus: [...], field: "barcode", authority, evidence?, unlock? }
 //
 // Freeze a field the master must not assert until a human settles it. A locked
 // barcode is skipped by both channel writers, so a disputed value cannot leave
 // the building because somebody forgot which rows were in question.
+//
+// `unlock: true` releases it and records who settled it and how. The attribution
+// is the point: a lock lifted without a stated reason is just a lock someone got
+// tired of.
 export async function POST(req: Request) {
   let body: {
     variantSkus?: string[];
     field?: string;
     authority?: string;
     evidence?: string;
+    unlock?: boolean;
   };
   try {
     body = await req.json();
@@ -43,12 +48,22 @@ export async function POST(req: Request) {
         owner: "MANUAL" as const,
         authority: body.authority!.trim(),
         evidence: body.evidence ?? null,
-        lock: true,
+        lock: !body.unlock,
       }))
     );
+    if (body.unlock) {
+      await prisma.fieldOwner.updateMany({
+        where: {
+          entityType: "variant",
+          field,
+          entityId: { in: variants.map((v) => v.id) },
+        },
+        data: { lockedAt: null },
+      });
+    }
     return NextResponse.json({
       ok: true,
-      locked: written,
+      [body.unlock ? "unlocked" : "locked"]: written,
       field,
       notFound: skus.filter((s) => !variants.some((v) => v.variantSku === s)),
     });
