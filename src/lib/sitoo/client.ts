@@ -7,15 +7,45 @@
 //    an empty result rather than an error.
 //  - Page size goes up to 1000, and paging is start/num rather than a cursor.
 
-const BASE = () => (process.env.SITOO_BASE_URL ?? "").replace(/\/+$/, "");
-const SITE = process.env.SITOO_SITE_ID ?? "1";
+/**
+ * Which Sitoo to talk to.
+ *
+ * The sandbox is a SEPARATE ACCOUNT (91624) from production (91622), so its
+ * product ids are unrelated. That makes it right for verifying API behaviour and
+ * wrong for rehearsing a real write set — a production product id sent to the
+ * sandbox addresses some other garment entirely. pushBarcodesToSitoo guards
+ * against that by checking the SKU before it writes.
+ */
+export type SitooTarget = "production" | "sandbox";
 
-function authHeader(): string {
-  const id = process.env.SITOO_API_ID;
-  const key = process.env.SITOO_API_KEY;
-  if (!id || !key) throw new Error("SITOO_API_ID and SITOO_API_KEY must be set");
-  return "Basic " + Buffer.from(`${id}:${key}`).toString("base64");
+export function resolveTarget(target?: SitooTarget): SitooTarget {
+  return target ?? (process.env.SITOO_TARGET === "sandbox" ? "sandbox" : "production");
 }
+
+function env(target: SitooTarget) {
+  const cfg =
+    target === "sandbox"
+      ? {
+          base: process.env.SITOO_SBBASE_URL,
+          id: process.env.SITOO_SBAPI_ID,
+          key: process.env.SITOO_SBAPI_KEY,
+        }
+      : {
+          base: process.env.SITOO_BASE_URL,
+          id: process.env.SITOO_API_ID,
+          key: process.env.SITOO_API_KEY,
+        };
+  if (!cfg.base || !cfg.id || !cfg.key) {
+    throw new Error(`Sitoo ${target} credentials are not configured`);
+  }
+  return {
+    base: cfg.base.replace(/\/+$/, ""),
+    auth: "Basic " + Buffer.from(`${cfg.id}:${cfg.key}`).toString("base64"),
+  };
+}
+
+/** Numeric site id. NOT the GUID that GET /sites returns — that yields nothing. */
+const SITE = process.env.SITOO_SITE_ID ?? "1";
 
 export interface SitooProduct {
   productid: number;
@@ -27,12 +57,17 @@ export interface SitooProduct {
   variantparentid?: number | null;
 }
 
-async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${BASE()}/sites/${SITE}${path}`;
+async function call<T>(
+  path: string,
+  init?: RequestInit,
+  target?: SitooTarget
+): Promise<T> {
+  const { base, auth } = env(resolveTarget(target));
+  const url = `${base}/sites/${SITE}${path}`;
   const res = await fetch(url, {
     ...init,
     headers: {
-      Authorization: authHeader(),
+      Authorization: auth,
       "Content-Type": "application/json",
       ...(init?.headers ?? {}),
     },
@@ -45,11 +80,13 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** Every product on the site. 14,714 rows at last count, so ~15 requests. */
-export async function listProducts(): Promise<SitooProduct[]> {
+export async function listProducts(target?: SitooTarget): Promise<SitooProduct[]> {
   const out: SitooProduct[] = [];
   for (let start = 0; ; start += 1000) {
     const page = await call<{ items: SitooProduct[]; totalcount?: number }>(
-      `/products?start=${start}&num=1000`
+      `/products?start=${start}&num=1000`,
+      undefined,
+      target
     );
     const items = page.items ?? [];
     out.push(...items);
@@ -58,34 +95,65 @@ export async function listProducts(): Promise<SitooProduct[]> {
   return out;
 }
 
-export async function getProduct(productId: number): Promise<SitooProduct> {
-  return call<SitooProduct>(`/products/${productId}`);
+export async function getProduct(
+  productId: number,
+  target?: SitooTarget
+): Promise<SitooProduct> {
+  return call<SitooProduct>(`/products/${productId}`, undefined, target);
 }
 
 /**
  * Write a barcode.
  *
- * Sitoo holds no duplicate barcodes anywhere in its 14,714 products, which
- * strongly suggests the field is unique-constrained — so a colliding write fails
- * here rather than corrupting anything, and the rotation handling in push.ts
- * exists precisely because of that.
+ * Both of these were verified against the sandbox on 2026-09-12, because getting
+ * either wrong is expensive against 14,714 live products:
  *
- * VERIFY BEFORE THE FIRST SANDBOX RUN — two things this code assumes and which
- * have not been confirmed against developer.sitoo.com:
+ *   PUT /products/{id} PATCHES.  Sending { barcode } alone left all 25 populated
+ *   fields intact — title, price, sku, VAT, SEO — on a real value change, not
+ *   just a no-op. So a targeted barcode write is safe.
  *
- *  1. That PUT /products/{id} *patches*. If it replaces the resource instead,
- *     sending { barcode } alone would blank every other field on the product.
- *     If the reference says replace, switch to PATCH, or GET-merge-PUT.
- *  2. That `barcode: null` is accepted for the unwind phase. Some APIs want an
- *     empty string, and a rejected null would strand the unwound products
- *     without a barcode until the run is repeated.
+ *   `barcode: null` is REJECTED with HTTP 400 ("Invalid value"). The empty
+ *   string clears it and reads back as null. This matters: the unwind phase
+ *   clears a code before rewriting it, and null would have failed mid-run and
+ *   stranded those products.
  *
- * Both are cheap to check against one sandbox product and expensive to get
- * wrong against 14,714 live ones.
+ * Sitoo also holds `barcodealiases`, a list of additional codes that scan — see
+ * addBarcodeAlias.
  */
-export async function updateBarcode(productId: number, barcode: string | null): Promise<void> {
-  await call(`/products/${productId}`, {
-    method: "PUT",
-    body: JSON.stringify({ barcode }),
-  });
+export async function updateBarcode(
+  productId: number,
+  barcode: string | null,
+  target?: SitooTarget
+): Promise<void> {
+  await call(
+    `/products/${productId}`,
+    { method: "PUT", body: JSON.stringify({ barcode: barcode ?? "" }) },
+    target
+  );
+}
+
+/**
+ * Additional codes that also scan to this product.
+ *
+ * This is the answer to the store-label problem. Sitoo holds shop-printed codes
+ * on GS1's restricted 99* range for products whose manufacturer EAN is known —
+ * Norda is 0990497800682 in the POS and 0872236017271 everywhere else. Both are
+ * correct, for different questions, and the master has one slot for them.
+ *
+ * With aliases neither has to be discarded: whichever scans stays primary and
+ * the other becomes an alias, so both resolve at the till.
+ *
+ * Verified against the sandbox: the field takes a list of plain strings. A list
+ * of objects is rejected with "Invalid value in barcodealiases (Not string)".
+ */
+export async function setBarcodeAliases(
+  productId: number,
+  aliases: string[],
+  target?: SitooTarget
+): Promise<void> {
+  await call(
+    `/products/${productId}`,
+    { method: "PUT", body: JSON.stringify({ barcodealiases: aliases }) },
+    target
+  );
 }

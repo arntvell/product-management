@@ -21,12 +21,15 @@
 import { prisma } from "@/lib/db";
 import { lockedFields } from "@/lib/master/provenance";
 import { canonical, isInternalRange } from "@/lib/master/barcode";
+import { normalizeSku } from "@/lib/master/sku";
 import { listProducts, updateBarcode, type SitooProduct } from "./client";
 
 export interface SitooPushOptions {
   dryRun?: boolean;
   /** Restrict to these variant ids; omit for every linked variant that differs. */
   variantIds?: string[];
+  /** Which Sitoo. Defaults to SITOO_TARGET, else production. */
+  target?: import("./client").SitooTarget;
   /**
    * Sitoo's current state. Supply it to avoid a re-fetch, or leave it out and
    * the plan reads it live.
@@ -52,6 +55,14 @@ export interface SitooPushPlan {
   storeLabel: Array<{ productId: number; variantSku: string; keeping: string; wouldWrite: string }>;
   /** Writes refused because the barcode field is locked — a disputed value. */
   locked: Array<{ variantSku: string; authority: string | null }>;
+  /**
+   * Writes refused because the product at that id is not the garment we think.
+   *
+   * The link was made against production, and the sandbox is a different account
+   * whose ids are unrelated — so a production id sent there addresses some other
+   * product. The same check also catches a link that has gone stale.
+   */
+  wrongProduct: Array<{ variantSku: string; productId: number; theirSku: string | null }>;
   /** Variants with no Sitoo link — nothing to write against. */
   unlinked: number;
 }
@@ -80,7 +91,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
       barcode: true,
       channelRefs: {
         where: { channel: "SITOO" },
-        select: { externalId: true },
+        select: { externalId: true, externalSku: true },
       },
     },
   });
@@ -88,10 +99,12 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
   const writes: SitooPushPlan["writes"] = [];
   const storeLabel: SitooPushPlan["storeLabel"] = [];
   const locked: SitooPushPlan["locked"] = [];
+  const wrongProduct: SitooPushPlan["wrongProduct"] = [];
   let unchanged = 0;
   let unlinked = 0;
 
-  const live = opts.products ?? (await listProducts());
+  const live = opts.products ?? (await listProducts(opts.target));
+  const skuById = new Map<number, string | null>(live.map((p) => [p.productid, p.sku ?? null]));
   const lockedByVariant = await lockedFields(
     "variant",
     variants.map((v) => v.id)
@@ -109,6 +122,18 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
     const target = canonical(v.barcode);
     if (!target) continue;
     const productId = Number(ref.externalId);
+
+    // Confirm the id still addresses this garment before touching it. A barcode
+    // written to the wrong product is a scan that rings up the wrong thing.
+    const theirSku = skuById.get(productId) ?? null;
+    if (!theirSku || normalizeSku(theirSku) !== normalizeSku(v.variantSku)) {
+      const aliasOk = ref.externalSku && normalizeSku(ref.externalSku) === normalizeSku(theirSku ?? "");
+      if (!aliasOk) {
+        wrongProduct.push({ variantSku: v.variantSku, productId, theirSku });
+        continue;
+      }
+    }
+
     const have = currentById.get(productId) ?? null;
     if (have === target) {
       unchanged++;
@@ -140,7 +165,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
       unwind.push({ productId: w.productId, variantSku: w.variantSku, current: w.from });
     }
   }
-  return { unwind, writes, unchanged, unlinked, storeLabel, locked };
+  return { unwind, writes, unchanged, unlinked, storeLabel, locked, wrongProduct };
 }
 
 export async function pushBarcodesToSitoo(
@@ -159,7 +184,7 @@ export async function pushBarcodesToSitoo(
   // barcodes, which is recoverable: re-running rewrites them.
   for (const u of plan.unwind) {
     try {
-      await updateBarcode(u.productId, null);
+      await updateBarcode(u.productId, null, opts.target);
     } catch (e) {
       failures.push({
         productId: u.productId,
@@ -175,7 +200,7 @@ export async function pushBarcodesToSitoo(
   // Phase 2 — write the targets. Every contested value is now free.
   for (const w of plan.writes) {
     try {
-      await updateBarcode(w.productId, w.to);
+      await updateBarcode(w.productId, w.to, opts.target);
       await prisma.variantChannelRef.updateMany({
         where: { channel: "SITOO", externalId: String(w.productId) },
         data: { lastPushedAt: new Date(), lastPushStatus: `barcode:${w.to}` },
