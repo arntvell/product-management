@@ -70,6 +70,12 @@ export default async function CatalogPage() {
             Publishing
           </Link>
           <Link
+            href="/catalog/lookup"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            Look up
+          </Link>
+          <Link
             href="/catalog/import-gaps"
             className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
           >
