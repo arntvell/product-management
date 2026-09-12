@@ -3,16 +3,26 @@ import { lookupProducts } from "@/lib/master/lookup";
 
 export const dynamic = "force-dynamic";
 
-function Cell({ value, origio }: { value: string | null; origio: string | null }) {
-  if (value === null) return <td className="px-3 py-1.5 text-muted-foreground">—</td>;
-  const differs = value !== origio;
+import type { ChannelValue } from "@/lib/master/lookup";
+
+function Cell({ value, origio }: { value: ChannelValue; origio: string | null }) {
+  if (value.raw === null) return <td className="px-3 py-1.5 text-muted-foreground">—</td>;
+  if (value.invalid) {
+    return (
+      <td className="px-3 py-1.5 font-mono font-medium text-destructive">
+        {value.raw}
+        <span className="ml-1.5 text-[10px] uppercase">won&rsquo;t scan</span>
+      </td>
+    );
+  }
+  const differs = value.canonical !== origio;
   return (
     <td
       className={`px-3 py-1.5 font-mono ${
         differs ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"
       }`}
     >
-      {value}
+      {value.raw}
     </td>
   );
 }

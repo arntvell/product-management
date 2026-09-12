@@ -11,13 +11,30 @@ import { prisma } from "@/lib/db";
 import { canonical } from "./barcode";
 import { normalizeSku } from "./sku";
 
+/**
+ * One system's value for one size.
+ *
+ * `raw` is what the system actually stores; `canonical` is null when that value
+ * is not a usable barcode. The distinction matters: showing only the canonical
+ * form renders a bad value as "—", which reads as "no barcode" when the truth is
+ * "a barcode that will not scan". Sitoo holds 7000009888889 on LIV-CN-BCHK-L and
+ * 7000009888888 on LIV-HNR-BGST-XL — both fail their check digit, and both are
+ * the size squeezed off the end of a shifted run.
+ */
+export interface ChannelValue {
+  raw: string | null;
+  canonical: string | null;
+  /** Present but not a usable barcode. */
+  invalid: boolean;
+}
+
 export interface LookupSize {
   variantSku: string;
   sizeLabel: string;
   origio: string | null;
-  sitoo: string | null;
-  shopify: string | null;
-  cin7: string | null;
+  sitoo: ChannelValue;
+  shopify: ChannelValue;
+  cin7: ChannelValue;
   /** True when a system holds a different barcode from the master. */
   mismatch: boolean;
 }
@@ -58,9 +75,11 @@ async function channelIndex(dir: string): Promise<{
   const sitooRaw = await read<Array<{ sku?: string; barcode?: string | null }>>("sitoo-products.json");
   if (!sitooRaw) return empty;
 
+  // Store the RAW value. Canonicalising here would discard the difference
+  // between "absent" and "present but unusable".
   const sitoo: Index = new Map();
   for (const p of sitooRaw) {
-    if (p.sku) sitoo.set(normalizeSku(p.sku), canonical(p.barcode) ?? "");
+    if (p.sku) sitoo.set(normalizeSku(p.sku), (p.barcode ?? "").trim());
   }
   const shopify: Index = new Map();
   const shopRaw = await read<
@@ -69,13 +88,13 @@ async function channelIndex(dir: string): Promise<{
   for (const p of shopRaw ?? []) {
     if (p.status === "ARCHIVED") continue;
     for (const e of p.variants?.edges ?? []) {
-      if (e.node.sku) shopify.set(normalizeSku(e.node.sku), canonical(e.node.barcode) ?? "");
+      if (e.node.sku) shopify.set(normalizeSku(e.node.sku), (e.node.barcode ?? "").trim());
     }
   }
   const cin7: Index = new Map();
   const cinRaw = await read<Array<{ SKU?: string; Barcode?: string | null }>>("cin7-products.json");
   for (const p of cinRaw ?? []) {
-    if (p.SKU) cin7.set(normalizeSku(p.SKU), canonical(p.Barcode) ?? "");
+    if (p.SKU) cin7.set(normalizeSku(p.SKU), (p.Barcode ?? "").trim());
   }
   return { sitoo, shopify, cin7, label: dir };
 }
@@ -135,9 +154,11 @@ export async function lookupProducts(
       .map((v) => {
         const key = normalizeSku(v.variantSku);
         const origio = canonical(v.barcode);
-        const pick = (m: Index) => {
+        const pick = (m: Index): ChannelValue => {
           const got = m.get(key);
-          return got === undefined || got === "" ? null : got;
+          const raw = got === undefined || got === "" ? null : got;
+          const c = canonical(raw);
+          return { raw, canonical: c, invalid: raw !== null && c === null };
         };
         const sitoo = pick(ch.sitoo);
         const shopify = pick(ch.shopify);
@@ -149,7 +170,10 @@ export async function lookupProducts(
           sitoo,
           shopify,
           cin7,
-          mismatch: [sitoo, shopify, cin7].some((b) => b !== null && b !== origio),
+          // An unusable value is a mismatch too — it will not scan to anything.
+          mismatch: [sitoo, shopify, cin7].some(
+            (b) => b.raw !== null && (b.invalid || b.canonical !== origio)
+          ),
         };
       })
       .sort((a, b) => {
