@@ -183,9 +183,20 @@ python3 scripts/reconcile/fetch.py            # re-snapshot: the stock gate goes
 python3 scripts/reconcile/reconcile.py snapshots/<today>
 ```
 
-That writes `import-allowlist.json` — 4,599 allow, 111 deny. Feed it to
-`ImportGate` in `src/lib/cin7/import.ts` via `previewCin7Import(brands, gate)`,
-review, then `runCin7Import(brands, gate)`.
+That writes `import-allowlist.json` — 4,583 allow, 175 deny. Then:
+
+```bash
+curl -sX POST localhost:3000/api/catalog/import/cin7 -d '{
+  "dryRun": true, "allowlist": "snapshots/<date>/import-allowlist.json" }' | jq
+```
+
+**Check `wouldDrop` is 0 before applying.** The lifecycle step reads the gate as
+a complete statement of what is in stock and cancels anything already imported
+that is not in it. That is right for the live stock check and catastrophic for
+an allowlist, which only lists things to ADD: the first preview on 2026-09-12
+showed it would have cancelled **2,351 existing colorways**, nearly every
+Cin7-imported product in the master. It is now off by default for allowlist
+runs (`reconcileLifecycle`), and the preview reports `lifecycleReconciled`.
 
 ---
 

@@ -174,6 +174,21 @@ export interface ImportGate {
   denySkus?: string[];
   /** Keep the original live in-stock behaviour as well as the allowlist. */
   includeInStock?: boolean;
+  /**
+   * Whether this run may mark existing products as dropped.
+   *
+   * The lifecycle step reads the gate as a COMPLETE statement of what is in
+   * stock: anything already imported and not in the gate is cancelled. That is
+   * right for the live stock check and catastrophic for an allowlist, which is
+   * additive by nature and says nothing about the rest of the catalogue.
+   *
+   * Measured on the 2026-09-12 preview: an allowlist run would have cancelled
+   * 2,351 existing colorways — nearly every Cin7-imported product in the master
+   * — purely because they were not on a list of things to ADD.
+   *
+   * Defaults to off whenever an allowlist is supplied.
+   */
+  reconcileLifecycle?: boolean;
 }
 
 async function buildGroups(gate?: ImportGate): Promise<{
@@ -240,6 +255,8 @@ async function loadExisting(): Promise<{
 }
 
 export interface Cin7ImportPreview {
+  /** False when this run is additive and will not cancel anything. */
+  lifecycleReconciled: boolean;
   inStockSkus: number;
   productMissing: number;
   colorways: number;
@@ -288,7 +305,10 @@ export async function previewCin7Import(
   }
 
   // Lifecycle preview: how many already-imported colorways would flip
-  // dropped/restocked based on current stock.
+  // dropped/restocked based on current stock. Skipped for an additive run.
+  const lifecycle = gate?.allowSkus?.length
+    ? gate.reconcileLifecycle === true
+    : true;
   const inStockBases = new Set(groups.map((g) => g.base));
   const existingCin7 = await prisma.colorway.findMany({
     where: { source: "CIN7_IMPORT" },
@@ -299,15 +319,18 @@ export async function previewCin7Import(
   });
   let wouldDrop = 0;
   let wouldRestock = 0;
-  for (const cw of existingCin7) {
-    const entry = cw.entries[0];
-    if (!entry) continue;
-    const outOfStock = !inStockBases.has(cw.colorwaySku);
-    if (outOfStock && !entry.cancelled) wouldDrop++;
-    else if (!outOfStock && entry.cancelled) wouldRestock++;
+  if (lifecycle) {
+    for (const cw of existingCin7) {
+      const entry = cw.entries[0];
+      if (!entry) continue;
+      const outOfStock = !inStockBases.has(cw.colorwaySku);
+      if (outOfStock && !entry.cancelled) wouldDrop++;
+      else if (!outOfStock && entry.cancelled) wouldRestock++;
+    }
   }
 
   return {
+    lifecycleReconciled: lifecycle,
     inStockSkus: inStockSkuCount,
     productMissing,
     colorways: groups.length,
@@ -513,6 +536,9 @@ export async function runCin7Import(
     // Lifecycle reconciliation: a previously-imported Cin7 colorway that's no
     // longer in stock at the target locations is marked dropped (cancelled) in
     // its CONTINUITY entry; one back in stock is un-dropped. Never deleted.
+    //
+    // Only when this run actually knows what is in stock. An allowlist does not.
+    const lifecycle = gate?.allowSkus?.length ? gate.reconcileLifecycle === true : true;
     const inStockBases = new Set(groups.map((g) => g.base));
     const existingCin7 = await prisma.colorway.findMany({
       where: { source: "CIN7_IMPORT" },
@@ -526,12 +552,14 @@ export async function runCin7Import(
     });
     const toCancel: string[] = [];
     const toRestock: string[] = [];
-    for (const cw of existingCin7) {
-      const entry = cw.entries[0];
-      if (!entry) continue;
-      const outOfStock = !inStockBases.has(cw.colorwaySku);
-      if (outOfStock && !entry.cancelled) toCancel.push(entry.id);
-      else if (!outOfStock && entry.cancelled) toRestock.push(entry.id);
+    if (lifecycle) {
+      for (const cw of existingCin7) {
+        const entry = cw.entries[0];
+        if (!entry) continue;
+        const outOfStock = !inStockBases.has(cw.colorwaySku);
+        if (outOfStock && !entry.cancelled) toCancel.push(entry.id);
+        else if (!outOfStock && entry.cancelled) toRestock.push(entry.id);
+      }
     }
     if (toCancel.length)
       await prisma.seasonEntry.updateMany({
