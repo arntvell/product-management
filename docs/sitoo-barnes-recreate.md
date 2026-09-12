@@ -36,22 +36,28 @@ than typing these, if the UI offers a duplicate action.
 two stores on 2026-09-12. The right-hand column is what Sitoo held before —
 wrong on seven of them, which is why those sizes would not scan.
 
-| SKU | Waist | Length | Barcode — use this | Sitoo had | |
+| Full SKU | Waist | Length | Barcode — use this | Friendly URL | Sitoo had |
 |---|---|---|---|---|---|
-| LIV-BRNS-JPN-DWN-3032 | 30 | 32 | `7072536051729` | 7072536087261 | **was wrong** |
-| LIV-BRNS-JPN-DWN-3034 | 30 | 34 | `7072536051781` | 7072536087322 | **was wrong** |
-| LIV-BRNS-JPN-DWN-3132 | 31 | 32 | `7072536051736` | 7072536087278 | **was wrong** |
-| LIV-BRNS-JPN-DWN-3134 | 31 | 34 | `7072536051798` | 7072536051798 | ok |
-| LIV-BRNS-JPN-DWN-3232 | 32 | 32 | `7072536051743` | 7072536087285 | **was wrong** |
-| LIV-BRNS-JPN-DWN-3234 | 32 | 34 | `7072536051804` | 7072536051804 | ok |
-| LIV-BRNS-JPN-DWN-3332 | 33 | 32 | `7072536051750` | 7072536087292 | **was wrong** |
-| LIV-BRNS-JPN-DWN-3334 | 33 | 34 | `7072536051811` | 7072536051811 | ok |
-| LIV-BRNS-JPN-DWN-3432 | 34 | 32 | `7072536051767` | 7072536087308 | **was wrong** |
-| LIV-BRNS-JPN-DWN-3434 | 34 | 34 | `7072536051828` | 7072536051828 | ok |
-| LIV-BRNS-JPN-DWN-3632 | 36 | 32 | `7072536051774` | 7072536087315 | **was wrong** |
-| LIV-BRNS-JPN-DWN-3634 | 36 | 34 | `7072536051835` | 7072536051835 | ok |
-| LIV-BRNS-JPN-DWN-4034 | 40 | 34 | `7072536051859` | 7072536051859 | ok |
+| `LIV-BRNS-JPN-DWN-3032` | 30 | 32 | `7072536051729` | `barnes-japan-dawn-3032` | 7072536087261 **wrong** |
+| `LIV-BRNS-JPN-DWN-3034` | 30 | 34 | `7072536051781` | `barnes-japan-dawn-3034` | 7072536087322 **wrong** |
+| `LIV-BRNS-JPN-DWN-3132` | 31 | 32 | `7072536051736` | `barnes-japan-dawn-3132` | 7072536087278 **wrong** |
+| `LIV-BRNS-JPN-DWN-3134` | 31 | 34 | `7072536051798` | `barnes-japan-dawn-3134` | same |
+| `LIV-BRNS-JPN-DWN-3232` | 32 | 32 | `7072536051743` | `barnes-japan-dawn-3232` | 7072536087285 **wrong** |
+| `LIV-BRNS-JPN-DWN-3234` | 32 | 34 | `7072536051804` | `barnes-japan-dawn-3234` | same |
+| `LIV-BRNS-JPN-DWN-3332` | 33 | 32 | `7072536051750` | `barnes-japan-dawn-3332` | 7072536087292 **wrong** |
+| `LIV-BRNS-JPN-DWN-3334` | 33 | 34 | `7072536051811` | `barnes-japan-dawn-3334` | same |
+| `LIV-BRNS-JPN-DWN-3432` | 34 | 32 | `7072536051767` | `barnes-japan-dawn-3432` | 7072536087308 **wrong** |
+| `LIV-BRNS-JPN-DWN-3434` | 34 | 34 | `7072536051828` | `barnes-japan-dawn-3434` | same |
+| `LIV-BRNS-JPN-DWN-3632` | 36 | 32 | `7072536051774` | `barnes-japan-dawn-3632` | 7072536087315 **wrong** |
+| `LIV-BRNS-JPN-DWN-3634` | 36 | 34 | `7072536051835` | `barnes-japan-dawn-3634` | same |
+| `LIV-BRNS-JPN-DWN-4034` | 40 | 34 | `7072536051859` | `barnes-japan-dawn-4034` | same |
 
+All 13 friendly URLs are **free** in Sitoo — checked against all 14,701 live products.
+
+The friendly format follows the parent record, product 175, which is
+`barnes-japan-dawn-3834`. Note that the other two survivors do not: 471 and 472
+carry `barnes-japan-dawn-liv-brns-dwn-2832` and `-2932`. Worth tidying those two
+to match while you are in there, so the whole family reads consistently.
 Machine-readable copy:
 `snapshots/2026-09-11/worklists/sitoo-recreate-barnes-japan-dawn.csv`
 
