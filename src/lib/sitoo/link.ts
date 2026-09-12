@@ -21,6 +21,15 @@ export interface LinkResult {
   ambiguous: Array<{ variantSku: string; productIds: number[] }>;
   /** Links where the channel calls the garment something else. */
   aliases: Array<{ variantSku: string; externalSku: string }>;
+  /**
+   * Links whose product id no longer resolves to this garment, re-pointed.
+   *
+   * Sitoo product ids are not stable. When 13 Barnes Japan Dawn variants were
+   * lost and recreated on 2026-09-12 they came back under new ids, leaving every
+   * link pointing at a dead one. A linker that treats "already linked" as "done"
+   * cannot repair that, so it checks the id still resolves.
+   */
+  repointed: Array<{ variantSku: string; from: string; to: string }>;
 }
 
 export interface LinkOptions {
@@ -63,18 +72,47 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
     unmatchedSitoo: 0,
     ambiguous: [],
     aliases: [],
+    repointed: [],
   };
   const writes: Array<{ variantId: string; externalId: string; externalSku: string | null }> = [];
   const aliasUpdates: Array<{ refId: string; externalSku: string | null }> = [];
+  const repoint: Array<{ refId: string; externalId: string }> = [];
   const matchedProductIds = new Set<number>();
 
   for (const v of variants) {
     if (v.channelRefs.length) {
-      result.alreadyLinked++;
-      // Refresh the alias even for links that already exist: the column was
-      // added after the first link run, and a channel can rename a product.
       const ref = v.channelRefs[0];
-      const theirs = byProductId.get(Number(ref.externalId))?.sku ?? null;
+      const current = byProductId.get(Number(ref.externalId));
+      const stillOurs =
+        current && normalizeSku(current.sku ?? "") === normalizeSku(v.variantSku);
+
+      if (!stillOurs) {
+        // The id is dead or now addresses a different garment. Re-match by SKU
+        // and re-point, rather than reporting it as linked and moving on.
+        const again = bySitooSku.get(normalizeSku(v.variantSku)) ?? [];
+        if (again.length === 1) {
+          repoint.push({ refId: ref.id, externalId: String(again[0].productid) });
+          result.repointed.push({
+            variantSku: v.variantSku,
+            from: ref.externalId,
+            to: String(again[0].productid),
+          });
+          continue;
+        }
+        if (again.length > 1) {
+          result.ambiguous.push({
+            variantSku: v.variantSku,
+            productIds: again.map((h) => h.productid),
+          });
+          continue;
+        }
+        // Gone from Sitoo entirely — report rather than silently keep a dead id.
+        result.unmatchedVariants++;
+        continue;
+      }
+
+      result.alreadyLinked++;
+      const theirs = current?.sku ?? null;
       const want =
         theirs && normalizeSku(theirs) !== normalizeSku(v.variantSku) ? theirs : null;
       if (want !== ref.externalSku) aliasUpdates.push({ refId: ref.id, externalSku: want });
@@ -124,6 +162,19 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
   }
   if (!opts.dryRun && aliasUpdates.length) {
     await applyAliasUpdates(aliasUpdates);
+  }
+  if (!opts.dryRun && repoint.length) {
+    for (let i = 0; i < repoint.length; i += 500) {
+      const vals = repoint
+        .slice(i, i + 500)
+        .map((r) => Prisma.sql`(${r.refId}, ${r.externalId})`);
+      await prisma.$executeRaw`
+        UPDATE "VariantChannelRef" r
+        SET "externalId" = v.eid
+        FROM (VALUES ${Prisma.join(vals)}) AS v(id, eid)
+        WHERE r.id = v.id
+      `;
+    }
   }
   return result;
 }
