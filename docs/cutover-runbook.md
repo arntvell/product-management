@@ -134,6 +134,12 @@ npm run db:deploy
 curl -sX POST localhost:3000/api/catalog/push/sitoo -d '{"dryRun":true}' | jq
 ```
 
+**Rehearse first.** `python3 scripts/sitoo/rehearse.py` replays the shape of the
+run against the sandbox — same family spread, same writes into the heaviest
+family, no delay — and checks that no product and no variant family is lost.
+Skipping this is how 13 Barnes Japan Dawn products came to be missing on
+2026-09-12.
+
 The plan separates `unwind` from `writes`. Rotated size runs are unwound before
 being rewritten — verified against both real cases: `LIV-CN-BCHK` plans 2 unwinds
 and 3 writes, `LIV-HNR-BGST` 3 and 4, with no target left blocked.
