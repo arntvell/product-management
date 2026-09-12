@@ -241,16 +241,21 @@ async function loadExisting(): Promise<{
   styleSkus: Set<string>;
   colorwaySkus: Set<string>;
   variantSkus: Set<string>;
+  colorwayIdBySku: Map<string, string>;
+  barcodes: Set<string>;
 }> {
   const [styles, colorways, variants] = await Promise.all([
     prisma.style.findMany({ select: { styleSku: true } }),
-    prisma.colorway.findMany({ select: { colorwaySku: true } }),
-    prisma.variant.findMany({ select: { variantSku: true } }),
+    prisma.colorway.findMany({ select: { id: true, colorwaySku: true } }),
+    prisma.variant.findMany({ select: { variantSku: true, barcode: true } }),
   ]);
   return {
     styleSkus: new Set(styles.map((s) => s.styleSku)),
     colorwaySkus: new Set(colorways.map((c) => c.colorwaySku)),
     variantSkus: new Set(variants.map((v) => v.variantSku)),
+    colorwayIdBySku: new Map(colorways.map((c) => [c.colorwaySku, c.id])),
+    // Barcode is uniquely indexed, so a colliding insert fails the whole batch.
+    barcodes: new Set(variants.map((v) => v.barcode).filter((b): b is string => Boolean(b))),
   };
 }
 
@@ -263,6 +268,17 @@ export interface Cin7ImportPreview {
   variants: number;
   toImportColorways: number;
   toImportVariants: number;
+  /**
+   * Sizes that belong to a colorway the master already has, and that the
+   * master is missing.
+   *
+   * The importer used to skip an existing colorway whole — variants included —
+   * so a size run that grew after the first import stayed short for ever. That
+   * left 1,465 variants behind across 385 colorways, and a half-populated size
+   * run is worse than an absent one because it looks complete.
+   */
+  topUpVariants: number;
+  topUpColorways: number;
   skippedExisting: number;
   wouldDrop: number; // already-imported colorways no longer in stock
   wouldRestock: number; // dropped colorways back in stock
@@ -280,6 +296,8 @@ export async function previewCin7Import(
 
   let toImportColorways = 0;
   let toImportVariants = 0;
+  let topUpVariants = 0;
+  let topUpColorways = 0;
   let skippedExisting = 0;
   let totalVariants = 0;
   const brandCounts = new Map<string, number>();
@@ -295,6 +313,12 @@ export async function previewCin7Import(
       g.variants.some((v) => existing.variantSkus.has(v.SKU));
     if (exists) {
       skippedExisting++;
+      // The colorway is present; its missing sizes are not.
+      const missing = g.variants.filter((v) => !existing.variantSkus.has(v.SKU));
+      if (missing.length && existing.colorwayIdBySku.has(g.base)) {
+        topUpColorways++;
+        topUpVariants += missing.length;
+      }
       continue;
     }
     const { brandName } = deriveBrandVendor(g.rep.Brand);
@@ -337,6 +361,8 @@ export async function previewCin7Import(
     variants: totalVariants,
     toImportColorways,
     toImportVariants,
+    topUpVariants,
+    topUpColorways,
     skippedExisting,
     wouldDrop,
     wouldRestock,
@@ -349,6 +375,11 @@ export async function previewCin7Import(
 export interface Cin7ImportResult {
   importedColorways: number;
   importedVariants: number;
+  /** Sizes added to colorways the master already had. */
+  toppedUpVariants: number;
+  toppedUpColorways: number;
+  /** Sizes skipped because their barcode is already on another variant. */
+  barcodeConflicts: Array<{ variantSku: string; barcode: string }>;
   skipped: number;
   droppedMarked: number; // previously imported, now out of stock -> cancelled
   restocked: number; // previously dropped, back in stock -> un-cancelled
@@ -394,6 +425,9 @@ export async function runCin7Import(
     const variantCreates: Array<Record<string, unknown>> = [];
     const entryCreates: Array<Record<string, unknown>> = [];
     const seasonVariantLinks: Array<{ seasonEntryId: string; variantId: string }> = [];
+    const topUp: Array<Record<string, unknown>> = [];
+    const topUpParents = new Set<string>();
+    const barcodeConflicts: Cin7ImportResult["barcodeConflicts"] = [];
     const priceCreates: Array<Record<string, unknown>> = [];
 
     const usedSkus = new Set(existing.variantSkus);
@@ -422,6 +456,38 @@ export async function runCin7Import(
         g.variants.some((v) => usedSkus.has(v.SKU));
       if (exists) {
         skipped++;
+        // Top up: the colorway is present, some of its sizes are not. Attach
+        // them to the existing record rather than leaving the run short — a
+        // half-populated size run is worse than an absent one, because nothing
+        // downstream can tell it is incomplete.
+        const parentId = existing.colorwayIdBySku.get(g.base);
+        const missing = g.variants.filter((v) => !usedSkus.has(v.SKU));
+        if (parentId && missing.length) {
+          for (const v of missing) {
+            const bc = canonical(v.Barcode);
+            // Variant.barcode is uniquely indexed, so one collision would fail
+            // the whole batch. Report it and carry on without the barcode.
+            const clash = bc ? existing.barcodes.has(bc) : false;
+            if (bc && clash) barcodeConflicts.push({ variantSku: v.SKU, barcode: bc });
+            usedSkus.add(v.SKU);
+            if (bc && !clash) existing.barcodes.add(bc);
+            const { size } = splitSku(v.SKU);
+            const { sizeLabel, dim1, dim2 } = deriveSize(size);
+            const variantId = randomUUID();
+            topUp.push({
+              id: variantId,
+              colorwayId: parentId,
+              variantSku: v.SKU,
+              barcode: clash ? null : bc,
+              sizeLabel,
+              dim1,
+              dim2,
+              averageCostNok:
+                typeof v.AverageCost === "number" && v.AverageCost > 0 ? v.AverageCost : null,
+            });
+            topUpParents.add(parentId);
+          }
+        }
         continue;
       }
 
@@ -533,6 +599,49 @@ export async function runCin7Import(
       await prisma.seasonVariant.createMany({ data: seasonVariantLinks, skipDuplicates: true });
     if (priceCreates.length) await prisma.price.createMany({ data: priceCreates as never });
 
+    // Write the top-up sizes, and link them into each parent's season entry so
+    // they behave exactly like sizes that arrived with the original import.
+    if (topUp.length) {
+      for (let i = 0; i < topUp.length; i += 500) {
+        await prisma.variant.createMany({ data: topUp.slice(i, i + 500) as never, skipDuplicates: true });
+      }
+      const parentEntries = await prisma.seasonEntry.findMany({
+        where: { seasonId: season.id, colorwayId: { in: [...topUpParents] } },
+        select: { id: true, colorwayId: true },
+      });
+      const entryByColorway = new Map(parentEntries.map((e) => [e.colorwayId, e.id]));
+      // Every Cin7-imported colorway has a CONTINUITY entry today (2,735 of
+      // 2,735), but a parent without one would leave its new sizes created and
+      // unlinked — present in the data and invisible in every season view. So
+      // the entry is created rather than the link dropped.
+      const missingEntry = [...topUpParents].filter((id) => !entryByColorway.has(id));
+      if (missingEntry.length) {
+        await prisma.seasonEntry.createMany({
+          data: missingEntry.map((colorwayId) => ({
+            colorwayId,
+            seasonId: season.id,
+            approvedForProduction: true,
+          })),
+          skipDuplicates: true,
+        });
+        const added = await prisma.seasonEntry.findMany({
+          where: { seasonId: season.id, colorwayId: { in: missingEntry } },
+          select: { id: true, colorwayId: true },
+        });
+        for (const e of added) entryByColorway.set(e.colorwayId, e.id);
+      }
+
+      const links = topUp
+        .map((v) => ({
+          seasonEntryId: entryByColorway.get(v.colorwayId as string),
+          variantId: v.id as string,
+        }))
+        .filter((l): l is { seasonEntryId: string; variantId: string } => Boolean(l.seasonEntryId));
+      for (let i = 0; i < links.length; i += 500) {
+        await prisma.seasonVariant.createMany({ data: links.slice(i, i + 500), skipDuplicates: true });
+      }
+    }
+
     // Lifecycle reconciliation: a previously-imported Cin7 colorway that's no
     // longer in stock at the target locations is marked dropped (cancelled) in
     // its CONTINUITY entry; one back in stock is un-dropped. Never deleted.
@@ -575,6 +684,9 @@ export async function runCin7Import(
     const result: Cin7ImportResult = {
       importedColorways,
       importedVariants,
+      toppedUpVariants: topUp.length,
+      toppedUpColorways: topUpParents.size,
+      barcodeConflicts,
       skipped,
       droppedMarked: toCancel.length,
       restocked: toRestock.length,
