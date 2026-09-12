@@ -42,14 +42,33 @@ NON_PRODUCT = [
     (r"GFTCRD|GIFT",                      "gift card"),
 ]
 
-# Channel policy, measured rather than assumed. Vintage is a webshop line: 0 of
-# it is in the POS against 3,762 in Shopify. Imperfects are a shop line: 1,197 in
-# the POS against 18 in Shopify. Absence from the "wrong" channel is intent, not
-# a gap, and reporting it as a gap buries the ~800 rows that do need a look under
-# ~1,750 that do not.
+# Channel policy, measured rather than assumed, and corrected on 2026-09-12
+# after the business explained how vintage actually sells.
+#
+# Vintage is TWO lines, not one, and they never overlap:
+#
+#   online vintage   VN-ONLN-####   one-of-one, individually numbered, the
+#                                   Friday drops. 3,305 live in Shopify, 0 in
+#                                   the POS. Shopify only.
+#
+#   store vintage    EXT-VN-*       category buckets — "Band Tee", "Burberry
+#                    VIN-*          Jacket", "Bucket hat". One SKU rings up any
+#                                   garment of that kind, because you do not
+#                                   barcode each second-hand item. 418 in the
+#                                   POS, absent from Shopify. Sitoo only.
+#
+# The earlier rule said simply "vintage is webshop-only", which was measured on
+# VN-ONLN and then wrongly generalised. It made every store-vintage bucket look
+# like a Shopify gap.
+#
+# Note also that store-vintage buckets are AGGREGATE in shape and sellable in
+# fact: 89 of the 108 aggregate colorways are present in the POS. `kind` records
+# what a row IS, not whether it sells, and nothing should use AGGREGATE as a
+# proxy for "exclude".
 CHANNEL_POLICY = {
-    "sitoo":   [(r"^VN-ONLN|^VN-", "vintage is webshop-only")],
-    "shopify": [(r"^IMP-",         "imperfects are shop-only")],
+    "sitoo":   [(r"^VN-ONLN|^VN-\d", "online vintage is webshop-only")],
+    "shopify": [(r"^IMP-",            "imperfects are shop-only"),
+                (r"^EXT-VN-|^VIN-",   "store vintage is shop-only")],
 }
 
 def policy_exempt(channel, skus):

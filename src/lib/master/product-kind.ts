@@ -10,6 +10,9 @@
 //   - A handful of aggregate rows hold enormous quantities — one sale bucket
 //     carries 2,040 units — so they dominate any list sorted by quantity and
 //     would be the first thing imported by anyone working top-down.
+//   - An aggregate is not the same as a non-product. Store vintage sells as
+//     category buckets and belongs in the master and in the POS; only its SHAPE
+//     is aggregate. Sellability is a channel question, not a kind question.
 //   - "Webshipper test jeans" hold 496 units across four sizes in live systems.
 //
 // Now they live in the model, so every consumer of the master gets the same
@@ -36,7 +39,14 @@ export interface KindRule {
 export const KIND_RULES: KindRule[] = [
   { kind: "TEST", pattern: /WBTST|WEBSHIPPER|-TEST-|^TEST/, label: "test data" },
   { kind: "AGGREGATE", pattern: /SLGSV/, label: "sale bucket" },
-  { kind: "AGGREGATE", pattern: /^EXT-VN-NW-|^EXT-VN-[A-Z]+$/, label: "vintage bulk lot" },
+  // Store vintage. One SKU rings up any garment of that kind — "Band Tee",
+  // "Burberry Jacket" — because second-hand items are not barcoded individually.
+  //
+  // AGGREGATE describes the SHAPE, not whether it sells. These do sell, in the
+  // shop: 89 of the 108 aggregate colorways are present in the POS. Nothing
+  // should read AGGREGATE as "exclude from channels" — that is the channel
+  // policy's job, and store vintage is Sitoo-only while VN-ONLN is Shopify-only.
+  { kind: "AGGREGATE", pattern: /^EXT-VN-NW-|^EXT-VN-[A-Z0-9]+$|^VIN-/, label: "store vintage category" },
   // Anchored deliberately: this matches the *bucket* forms LIV-IMP-TIA-OS and
   // EXT-IMP-MISC — one SKU standing for many garments — and must never match the
   // IMP- prefix forms like IMP-LIV-BRNS-JPN-DWN, which are individual imperfect
