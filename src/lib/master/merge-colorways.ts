@@ -474,14 +474,33 @@ export async function applyColorwayMerge(
         where: { id: a.loserVariantId },
         select: { barcode: true, averageCostNok: true },
       });
-      await prisma.variant.update({
-        where: { id: a.survivorVariantId },
-        data: {
-          ...(a.carriesBarcode ? { barcode: lv?.barcode ?? null } : {}),
-          ...(a.carriesCost ? { averageCostNok: lv?.averageCostNok ?? null } : {}),
-        },
+      // Release the loser's barcode BEFORE writing it to the survivor.
+      //
+      // `Variant.barcode` became unique on 2026-09-11, after this module was
+      // written. Two rows cannot hold the same code even momentarily, so the
+      // straight copy now fails outright — which is what it did on the
+      // LIV-Needle-W / LIV-NEEDLE-W merge. Same shape as the unwind phase in
+      // apply-barcodes.ts: release, then write.
+      //
+      // The pair is one transaction because the alternative to failing loudly
+      // is losing the barcode from both rows.
+      const carriesBarcode = a.carriesBarcode && hasText(lv?.barcode);
+      await prisma.$transaction(async (tx) => {
+        if (carriesBarcode) {
+          await tx.variant.update({
+            where: { id: a.loserVariantId },
+            data: { barcode: null },
+          });
+        }
+        await tx.variant.update({
+          where: { id: a.survivorVariantId! },
+          data: {
+            ...(carriesBarcode ? { barcode: lv?.barcode ?? null } : {}),
+            ...(a.carriesCost ? { averageCostNok: lv?.averageCostNok ?? null } : {}),
+          },
+        });
       });
-      if (a.carriesBarcode) barcodesCarried++;
+      if (carriesBarcode) barcodesCarried++;
     }
     if (a.survivorVariantId) {
       const links = await prisma.seasonVariant.findMany({
