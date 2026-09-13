@@ -205,3 +205,105 @@ export async function pushSkusToShopify(
   }
   return { ...plan, applied, failures, dryRun: false };
 }
+
+
+// ---------------------------------------------------------------------------
+// Freeing a SKU held by an archived predecessor.
+//
+// When Shopify recreates a product it archives the old record and suffixes the
+// handle (keri-japan-dawn -> keri-japan-dawn-1). The archived record KEEPS its
+// SKU. So renaming the live variant onto the master's SKU leaves that string on
+// two variants at once — 34 of them after the 2026-09-13 run.
+//
+// Our own linker is unaffected, since it only ever matches live rows. Pio is not:
+// it joins on SKU text, and a lookup that returns a live and an archived variant
+// is exactly the ambiguity the rename was meant to remove.
+//
+// Suffix rather than prefix, deliberately: the SKU keeps its stem, so it still
+// sorts and searches next to the live one and still reads as the same garment.
+
+const ARCHIVED_MARK = "--archived";
+
+export interface ArchivedSuffixPlan {
+  writes: Array<{ productGid: string; variantGid: string; from: string; to: string; handle: string }>;
+  /** Archived SKUs that collide with nothing live — left alone. */
+  untouched: number;
+  /** Already suffixed by an earlier run. */
+  alreadyMarked: number;
+}
+
+export interface ArchivedSuffixResult extends ArchivedSuffixPlan {
+  applied: number;
+  failures: Array<{ productGid: string; error: string }>;
+  dryRun: boolean;
+}
+
+export async function planArchivedSkuSuffix(
+  opts: { rows?: ShopifyVariantRow[]; skuPrefixes?: string[] } = {}
+): Promise<ArchivedSuffixPlan> {
+  const all = opts.rows ?? (await fetchShopifyVariants());
+  const liveSkus = new Set<string>();
+  for (const r of all) if (!r.archived && r.sku) liveSkus.add(normalizeSku(r.sku));
+
+  const plan: ArchivedSuffixPlan = { writes: [], untouched: 0, alreadyMarked: 0 };
+  for (const r of all) {
+    if (!r.archived || !r.sku) continue;
+    if (r.sku.includes(ARCHIVED_MARK)) {
+      plan.alreadyMarked++;
+      continue;
+    }
+    if (!liveSkus.has(normalizeSku(r.sku))) {
+      plan.untouched++;
+      continue;
+    }
+    if (
+      opts.skuPrefixes?.length &&
+      !opts.skuPrefixes.some((p) => normalizeSku(r.sku!).startsWith(normalizeSku(p)))
+    ) {
+      plan.untouched++;
+      continue;
+    }
+    // The product gid tail keeps it unique even if one SKU has two archived
+    // predecessors, which the handle suffix alone would not.
+    const tail = r.productGid.split("/").pop() ?? "x";
+    plan.writes.push({
+      productGid: r.productGid,
+      variantGid: r.variantGid,
+      from: r.sku,
+      to: `${r.sku}${ARCHIVED_MARK}-${tail.slice(-6)}`,
+      handle: r.productGid,
+    });
+  }
+  return plan;
+}
+
+export async function suffixArchivedSkus(
+  opts: { dryRun?: boolean; rows?: ShopifyVariantRow[]; skuPrefixes?: string[] } = {}
+): Promise<ArchivedSuffixResult> {
+  const plan = await planArchivedSkuSuffix(opts);
+  if (opts.dryRun) return { ...plan, applied: 0, failures: [], dryRun: true };
+
+  const byProduct = new Map<string, typeof plan.writes>();
+  for (const w of plan.writes) {
+    (byProduct.get(w.productGid) ?? byProduct.set(w.productGid, []).get(w.productGid)!).push(w);
+  }
+  const failures: ArchivedSuffixResult["failures"] = [];
+  let applied = 0;
+  for (const [productGid, ws] of byProduct) {
+    try {
+      const data = await shopifyGraphQL<BulkUpdateResult>(PRODUCT_VARIANTS_BULK_UPDATE_MUTATION, {
+        productId: productGid,
+        variants: ws.map((w) => ({ id: w.variantGid, inventoryItem: { sku: w.to } })),
+      });
+      const errs = data.productVariantsBulkUpdate.userErrors;
+      if (errs.length) {
+        failures.push({ productGid, error: errs.map((e) => e.message).join("; ") });
+        continue;
+      }
+      applied += ws.length;
+    } catch (e) {
+      failures.push({ productGid, error: (e as Error).message });
+    }
+  }
+  return { ...plan, applied, failures, dryRun: false };
+}

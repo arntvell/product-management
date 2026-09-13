@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { pushSkusToShopify } from "@/lib/shopify/push-skus";
+import { pushSkusToShopify, suffixArchivedSkus } from "@/lib/shopify/push-skus";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -15,6 +15,9 @@ export async function POST(req: Request) {
     dryRun?: boolean;
     variantIds?: string[];
     colorwaySkus?: string[];
+    /** Instead of renaming live variants, free a SKU an archived one still holds. */
+    suffixArchived?: boolean;
+    skuPrefixes?: string[];
   };
   try {
     body = await req.json();
@@ -22,6 +25,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
   try {
+    if (body.suffixArchived) {
+      const r = await suffixArchivedSkus({
+        dryRun: body.dryRun !== false,
+        skuPrefixes: body.skuPrefixes,
+      });
+      return NextResponse.json({ ok: true, ...r });
+    }
     const result = await pushSkusToShopify({
       dryRun: body.dryRun !== false,
       variantIds: body.variantIds,
