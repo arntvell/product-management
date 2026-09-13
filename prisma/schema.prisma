@@ -404,6 +404,22 @@ model VariantChannelRef {
    * own and the alias becomes history.
    */
   externalSku    String?
+  /**
+   * A SECOND id the channel uses for the same garment, when identity and stock
+   * are different objects there.
+   *
+   * Shopify is the case this exists for. `externalId` holds the ProductVariant
+   * gid, which is what a listing is; inventory moves against an InventoryItem,
+   * which is a different gid entirely:
+   *   externalId          gid://shopify/ProductVariant/42591569969401
+   *   externalInventoryId gid://shopify/InventoryItem/44686936178937
+   * Loom's stock registry joins on the inventory object, so a registry that
+   * carried only the ProductVariant would be reconciling against the wrong one.
+   *
+   * Null where the channel has no such split (Sitoo), or where we simply have
+   * no link — the registry falls back to barcode there.
+   */
+  externalInventoryId String?
   lastPushedAt   DateTime?
   lastPushStatus String?
 

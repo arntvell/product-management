@@ -60,10 +60,13 @@ export interface ProductsQueryResult {
         variants: {
           edges: Array<{
             node: {
+              /** The ProductVariant gid — the listing. */
               id: string;
               sku: string | null;
               price: string;
               compareAtPrice: string | null;
+              /** The InventoryItem gid — what stock moves against. Loom joins here. */
+              inventoryItem?: { id: string } | null;
             };
           }>;
         };

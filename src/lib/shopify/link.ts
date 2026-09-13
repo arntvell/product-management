@@ -18,6 +18,7 @@ import { shopifyGraphQL } from "@/lib/shopify/client";
 import { canonical } from "@/lib/master/barcode";
 import { normalizeSku } from "@/lib/master/sku";
 import { applyAliasUpdates } from "@/lib/sitoo/link";
+import { bulkUpdateById } from "@/lib/db-bulk";
 
 const VARIANTS_QUERY = `
   query LinkVariants($first: Int!, $after: String, $query: String) {
@@ -27,7 +28,10 @@ const VARIANTS_QUERY = `
           id
           status
           variants(first: 100) {
-            edges { node { id sku barcode } }
+            # inventoryItem.id is a DIFFERENT gid from the variant's own: the
+            # variant is the listing, the inventory item is what stock moves
+            # against, and Loom's registry joins on the latter.
+            edges { node { id sku barcode inventoryItem { id } } }
           }
         }
       }
@@ -42,7 +46,16 @@ interface QueryResult {
       node: {
         id: string;
         status: "ACTIVE" | "DRAFT" | "ARCHIVED";
-        variants: { edges: { node: { id: string; sku: string | null; barcode: string | null } }[] };
+        variants: {
+          edges: {
+            node: {
+              id: string;
+              sku: string | null;
+              barcode: string | null;
+              inventoryItem?: { id: string } | null;
+            };
+          }[];
+        };
       };
     }[];
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -55,6 +68,8 @@ export interface ShopifyVariantRow {
   sku: string | null;
   barcode: string | null;
   archived: boolean;
+  /** The InventoryItem gid — what stock moves against. Null if Shopify omits it. */
+  inventoryGid: string | null;
 }
 
 export async function fetchShopifyVariants(filter?: string): Promise<ShopifyVariantRow[]> {
@@ -76,6 +91,7 @@ export async function fetchShopifyVariants(filter?: string): Promise<ShopifyVari
           sku: v.node.sku,
           barcode: v.node.barcode,
           archived: p.status === "ARCHIVED",
+          inventoryGid: v.node.inventoryItem?.id ?? null,
         });
       }
     }
@@ -94,6 +110,8 @@ export interface ShopifyLinkResult {
   ambiguous: Array<{ variantSku: string; variantGids: string[] }>;
   /** Links where the channel calls the garment something else. */
   aliases: Array<{ variantSku: string; externalSku: string }>;
+  /** Existing links given their Shopify InventoryItem gid for the first time. */
+  inventoryBackfilled: number;
   skippedArchived: number;
   /** Colorway -> Shopify product gid mappings recorded on ChannelPublication. */
   productsLinked: number;
@@ -134,7 +152,7 @@ export async function linkShopifyVariants(
       barcode: true,
       channelRefs: {
         where: { channel: "SHOPIFY" },
-        select: { id: true, externalId: true, externalSku: true },
+        select: { id: true, externalId: true, externalSku: true, externalInventoryId: true },
       },
     },
   });
@@ -147,11 +165,21 @@ export async function linkShopifyVariants(
     unmatchedVariants: 0,
     ambiguous: [],
     aliases: [],
+    inventoryBackfilled: 0,
     skippedArchived: all.length - live.length,
     productsLinked: 0,
   };
-  const writes: Array<{ variantId: string; externalId: string; externalSku: string | null }> = [];
+  const writes: Array<{
+    variantId: string;
+    externalId: string;
+    externalSku: string | null;
+    externalInventoryId: string | null;
+  }> = [];
   const aliasUpdates: Array<{ refId: string; externalSku: string | null }> = [];
+  // Links made before 2026-09-13 carry no inventory gid, because we never asked
+  // Shopify for one. Re-running the linker backfills them in place rather than
+  // needing a separate migration script.
+  const inventoryUpdates: Array<{ id: string; value: string | null }> = [];
   // productVariantsBulkUpdate is grouped by product, so the writer needs the
   // product gid as well as the variant gid. It belongs on ChannelPublication,
   // which already has a colorway-level externalId slot for exactly this.
@@ -170,6 +198,10 @@ export async function linkShopifyVariants(
         known?.sku && normalizeSku(known.sku) !== normalizeSku(v.variantSku) ? known.sku : null;
       if (want !== ref.externalSku) aliasUpdates.push({ refId: ref.id, externalSku: want });
       if (want) result.aliases.push({ variantSku: v.variantSku, externalSku: want });
+      const inv = known?.inventoryGid ?? null;
+      if (inv && inv !== ref.externalInventoryId) {
+        inventoryUpdates.push({ id: ref.id, value: inv });
+      }
       continue;
     }
     let hits = bySku.get(normalizeSku(v.variantSku)) ?? [];
@@ -199,7 +231,12 @@ export async function linkShopifyVariants(
     const alias =
       theirSku && normalizeSku(theirSku) !== normalizeSku(v.variantSku) ? theirSku : null;
     if (alias) result.aliases.push({ variantSku: v.variantSku, externalSku: alias });
-    writes.push({ variantId: v.id, externalId: hits[0].variantGid, externalSku: alias });
+    writes.push({
+      variantId: v.id,
+      externalId: hits[0].variantGid,
+      externalSku: alias,
+      externalInventoryId: hits[0].inventoryGid,
+    });
     productByColorway.set(v.colorwayId, hits[0].productGid);
     if (how === "sku") result.bySku++;
     else result.byBarcode++;
@@ -218,6 +255,11 @@ export async function linkShopifyVariants(
   if (!opts.dryRun && aliasUpdates.length) {
     await applyAliasUpdates(aliasUpdates);
   }
+
+  if (!opts.dryRun && inventoryUpdates.length) {
+    await bulkUpdateById("VariantChannelRef", "externalInventoryId", inventoryUpdates);
+  }
+  result.inventoryBackfilled = inventoryUpdates.length;
 
   if (!opts.dryRun && productByColorway.size) {
     // Record the product mapping WITHOUT claiming a push. `published` means the

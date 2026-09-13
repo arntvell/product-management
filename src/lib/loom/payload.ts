@@ -12,7 +12,13 @@ export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: st
       style: true,
       brand: true,
       manufacturer: true,
-      variants: { orderBy: { sizeLabel: "asc" } },
+      variants: {
+        orderBy: { sizeLabel: "asc" },
+        // The registry joins on the channel's own stock object, so the variant's
+        // channel refs have to come with it. Cheap: one extra join, and the
+        // catalogue payload simply ignores them.
+        include: { channelRefs: true },
+      },
       prices: { where: { season: { code: seasonCode } } },
       seasonImages: { where: { slot: "MAIN", season: { code: seasonCode } } },
       entries: { where: { season: { code: seasonCode } } },
@@ -71,12 +77,24 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
     },
     registry_only: true,
-    variants: cw.variants.map((v) => ({
-      variant_id: v.id,
-      variant_sku: v.variantSku,
-      barcode: v.barcode ?? null,
-      dimensions: v.dim2 ? { waist: v.dim1, length: v.dim2 } : { size: v.dim1 },
-    })),
+    variants: cw.variants.map((v) => {
+      const shopify = v.channelRefs.find((r) => r.channel === "SHOPIFY");
+      const sitoo = v.channelRefs.find((r) => r.channel === "SITOO");
+      return {
+        variant_id: v.id,
+        variant_sku: v.variantSku,
+        barcode: v.barcode ?? null,
+        dimensions: v.dim2 ? { waist: v.dim1, length: v.dim2 } : { size: v.dim1 },
+        // Where the stock actually moves, per channel. Shopify's InventoryItem
+        // is NOT its ProductVariant — the variant is the listing, the inventory
+        // item is what a stock movement references, and Loom joins on the
+        // latter. Null where we have no link; the registry falls back to
+        // barcode, which is why barcode coverage gates what we send at all.
+        shopify_inventory_item_id: shopify?.externalInventoryId ?? null,
+        shopify_variant_id: shopify?.externalId ?? null,
+        sitoo_product_id: sitoo?.externalId ?? null,
+      };
+    }),
   };
 }
 
@@ -201,7 +219,11 @@ export interface LoomPayload {
  * uses Origio's own code, or nothing would be found.
  */
 const LOOM_SEASON_NAMES: Record<string, string> = {
-  CONTINUITY: "Archive",
+  // Loom's season IDENTIFIER, not its display name. The first registry push sent
+  // the literal "Archive" and Loom answered 200 with a completed job — so an
+  // accepted delivery is NOT evidence the season resolved to the one intended.
+  // Confirmed 2026-09-13: the id is "archv".
+  CONTINUITY: "archv",
 };
 
 export function loomSeasonName(seasonCode: string): string {

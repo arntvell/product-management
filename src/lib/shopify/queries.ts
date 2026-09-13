@@ -35,6 +35,13 @@ export const PRODUCTS_QUERY = `
                 sku
                 price
                 compareAtPrice
+                # Identity and stock are different objects in Shopify: id is the
+                # ProductVariant (the listing), inventoryItem.id is what inventory
+                # actually moves against. Loom's stock registry joins on the
+                # latter, so both are carried.
+                inventoryItem {
+                  id
+                }
               }
             }
           }
