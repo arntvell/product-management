@@ -17,6 +17,8 @@
 // Nothing is deleted. The loser's SKU is parked, its Threadflow id released and
 // the row archived, so the operation is reversible and a later sync ignores it.
 import { prisma } from "@/lib/db";
+import { recordDecisions, type Decision } from "./provenance";
+import type { Source } from "@/generated/prisma/client";
 
 export interface ColorwaySummary {
   id: string;
@@ -453,6 +455,11 @@ export async function applyColorwayMerge(
   let variantsMoved = 0;
   let variantsFolded = 0;
   let barcodesCarried = 0;
+  // A barcode that moves between rows is a change to identity, so it needs the
+  // same attribution as any other barcode write. Without this the survivor holds
+  // six codes that nothing in the database explains — the precise gap
+  // provenance.ts exists to close.
+  const carried: Decision[] = [];
 
   // 1. Variants the survivor lacks: rename onto its prefix and re-point.
   //    Their SeasonVariant links key on variant id, so they follow untouched.
@@ -500,7 +507,19 @@ export async function applyColorwayMerge(
           },
         });
       });
-      if (carriesBarcode) barcodesCarried++;
+      if (carriesBarcode) {
+        barcodesCarried++;
+        carried.push({
+          entityType: "variant",
+          entityId: a.survivorVariantId!,
+          field: "barcode",
+          owner: plan.lose.source as Source,
+          authority: "origio:merge",
+          evidence:
+            `carried from ${a.loserSku} when ${plan.lose.colorwaySku} was merged ` +
+            `into ${plan.keep.colorwaySku}`,
+        });
+      }
     }
     if (a.survivorVariantId) {
       const links = await prisma.seasonVariant.findMany({
@@ -747,6 +766,8 @@ export async function applyColorwayMerge(
       status: "ARCHIVED",
     },
   });
+
+  if (carried.length) await recordDecisions(carried);
 
   return { ...plan, applied: true, variantsMoved, variantsFolded, barcodesCarried };
 }
