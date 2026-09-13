@@ -18,6 +18,7 @@ export async function POST(req: Request) {
     /** Instead of renaming live variants, free a SKU an archived one still holds. */
     suffixArchived?: boolean;
     skuPrefixes?: string[];
+    markAllArchived?: boolean;
   };
   try {
     body = await req.json();
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
       const r = await suffixArchivedSkus({
         dryRun: body.dryRun !== false,
         skuPrefixes: body.skuPrefixes,
+        markAllArchived: body.markAllArchived,
       });
       return NextResponse.json({ ok: true, ...r });
     }

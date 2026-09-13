@@ -239,7 +239,21 @@ export interface ArchivedSuffixResult extends ArchivedSuffixPlan {
 }
 
 export async function planArchivedSkuSuffix(
-  opts: { rows?: ShopifyVariantRow[]; skuPrefixes?: string[] } = {}
+  opts: {
+    rows?: ShopifyVariantRow[];
+    skuPrefixes?: string[];
+    /**
+     * Suffix every archived variant in scope, not only those whose SKU an in-use
+     * variant also holds.
+     *
+     * The collision test alone leaves two gaps. A SKU can be duplicated BETWEEN
+     * two archived predecessors and so collide with nothing live while still
+     * being ambiguous — Burley Japan Shadow has -2834 and -2934 on both of its
+     * archived products. And a size that only ever existed on the retired record
+     * keeps a clean SKU that reads as current.
+     */
+    markAllArchived?: boolean;
+  } = {}
 ): Promise<ArchivedSuffixPlan> {
   const all = opts.rows ?? (await fetchShopifyVariants());
   const liveSkus = new Set<string>();
@@ -252,7 +266,7 @@ export async function planArchivedSkuSuffix(
       plan.alreadyMarked++;
       continue;
     }
-    if (!liveSkus.has(normalizeSku(r.sku))) {
+    if (!opts.markAllArchived && !liveSkus.has(normalizeSku(r.sku))) {
       plan.untouched++;
       continue;
     }
@@ -278,7 +292,12 @@ export async function planArchivedSkuSuffix(
 }
 
 export async function suffixArchivedSkus(
-  opts: { dryRun?: boolean; rows?: ShopifyVariantRow[]; skuPrefixes?: string[] } = {}
+  opts: {
+    dryRun?: boolean;
+    rows?: ShopifyVariantRow[];
+    skuPrefixes?: string[];
+    markAllArchived?: boolean;
+  } = {}
 ): Promise<ArchivedSuffixResult> {
   const plan = await planArchivedSkuSuffix(opts);
   if (opts.dryRun) return { ...plan, applied: 0, failures: [], dryRun: true };
