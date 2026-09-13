@@ -90,3 +90,64 @@ three need a decision about which garment owns the code — not a rename.
 
 One spurious alias was cleared: `LIV-CN-BCHK-3XL` was recorded as differing from
 itself, because the row I hand-inserted earlier set `externalSku` unnecessarily.
+
+---
+
+## NOV-GAT: Origio was the system in the wrong
+
+The instruction was "if Origio says the GAT in Sitoo is black, make it black in
+Sitoo." Origio did say black. Origio was wrong, and writing it outward would have
+put a black label on a white shoe at the till.
+
+Novesta uses two separate blocks for these colourways, and the sequences settle it
+without needing anyone to look at a garment:
+
+| | Base range | Sizes present |
+|---|---|---|
+| White | `…042`–`…053` | 36–45, all ten |
+| Black | `…019`–`…025` | 40, 42, 43, 44, 45 — **41 absent** |
+
+`8585052170441` has base `…044`, between white 40 (`…043`) and white 42 (`…045`).
+It cannot be black; black's entire run is elsewhere. **Sitoo and Shopify both call
+it white 41**, and Shopify gives `EXT-NOV-GAT-BLK-41` no barcode at all.
+
+The confirming detail: **Origio held no `EXT-NOV-GAT-WHT-41`** — nor `WHT-39` —
+while both channels carry all ten white sizes. The white 41 record was missing
+*because* its barcode had been attached to the black shoe by the Cin7 import.
+
+### Applied, entirely inside Origio
+
+1. Cleared `8585052170441` from `EXT-NOV-GAT-BLK-41` — released first, since the
+   unique index will not let the correct row take a code the wrong row still holds.
+2. Created `EXT-NOV-GAT-WHT-39` and `EXT-NOV-GAT-WHT-41` with their real barcodes,
+   season-linked, and linked to Sitoo 17445/17447 and the Shopify white variants
+   with their InventoryItem gids.
+3. Deleted `EXT-NOV-GAT-BLK-41`'s Sitoo ref, which pointed at **17447 — the white
+   product**. It had been matched on the borrowed barcode.
+4. Attributed all three under authority `barcode-sequence-2026-09-13`.
+
+Black 41 now has no barcode, matching Shopify, and no Sitoo product — it may
+simply not be a stocked size. By sequence it would be `8585052170205` (base
+`…020`, filling the gap between black 40 and 42), but that is an **inference**
+and needs Novesta or a scan before anyone writes it.
+
+Nothing was sent to Sitoo. All three systems now agree.
+
+---
+
+## Four more Sitoo products claimed by two Origio variants each
+
+Found by the integrity check run after the NOV-GAT fix. Every one is the same
+shape: Origio holds two rows for one garment — one matched by barcode, one by SKU
+— and both point at the same Sitoo product.
+
+| Sitoo | Origio holds the barcode on | Origio holds the matching SKU on | Verdict |
+|---|---|---|---|
+| 15095 | `EXT-KEEN-JAS-BB-40` | `EXT-KEEN-JAS-BB-40.5` | **Size 40 is spurious.** Sitoo has no size 40; Shopify's archived record carries `195208040573` on BOTH 40 and 40.5 |
+| 15166 | `EXT-BKST-BST-HR-42` | `EXT-BKST-BST-MNKSD-42` | **`BST-HR` exists in neither Sitoo nor Shopify.** A phantom row holding Mink Suede's barcode |
+| 18714 | `EXT-PF-4-INCN` | `EXT-PF-4-INCN-OS` | One product. Shopify calls it `-INCN`, Sitoo `-INCN-OS`. Genuine naming duplicate — merge |
+| 14238 | `LIV-REPS` | `LIV-REPSS-OS` | One repair line item, two rows. Merge, keeping Sitoo's name |
+
+Two are the NOV-GAT defect again — a row holding a barcode that belongs to another
+garment. Two are ordinary duplicates. None should be written outward until the
+pair is resolved in the master.
