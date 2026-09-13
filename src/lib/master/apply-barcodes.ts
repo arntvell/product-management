@@ -10,6 +10,7 @@
 // field every other system joins on.
 
 import { prisma } from "@/lib/db";
+import { bulkUpdateByKey } from "@/lib/db-bulk";
 import { canonical, parseAllocation, rejectionReason } from "./barcode";
 import { recordDecisions } from "./provenance";
 import type { Source } from "@/generated/prisma/client";
@@ -183,24 +184,22 @@ export async function applyBarcodeCorrections(
   // once the unique index is in place, but it is also the difference between a
   // rotation being applicable and being permanently refused.
   if (plan.unwind.length) {
-    await prisma.$transaction(
-      plan.unwind.map((u) =>
-        prisma.variant.update({ where: { variantSku: u.variantSku }, data: { barcode: null } })
-      )
+    await bulkUpdateByKey(
+      "Variant",
+      "variantSku",
+      "barcode",
+      plan.unwind.map((u) => ({ key: u.variantSku, value: null }))
     );
   }
 
-  let applied = 0;
-  const CHUNK = 200;
-  for (let i = 0; i < writes.length; i += CHUNK) {
-    const chunk = writes.slice(i, i + CHUNK);
-    await prisma.$transaction(
-      chunk.map((w) =>
-        prisma.variant.update({ where: { variantSku: w.variantSku }, data: { barcode: w.to } })
-      )
-    );
-    applied += chunk.length;
-  }
+  // One statement per chunk. The per-row form inside a $transaction is a round
+  // trip each and overran the 5 s budget at 175 rows — see src/lib/db-bulk.ts.
+  const applied = await bulkUpdateByKey(
+    "Variant",
+    "variantSku",
+    "barcode",
+    writes.map((w) => ({ key: w.variantSku, value: w.to as string | null }))
+  );
 
   // Attribution: the whole point. Each corrected barcode now says who decided it.
   await recordDecisions(
