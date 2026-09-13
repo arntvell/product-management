@@ -76,6 +76,10 @@ export interface ColorwayMergeResult extends ColorwayMergePlan {
   variantsMoved: number;
   variantsFolded: number;
   barcodesCarried: number;
+  /** Loser channel refs re-pointed at the survivor (it had none for that channel). */
+  refsMoved: number;
+  /** Loser channel refs deleted as redundant (the survivor already had one). */
+  refsDropped: number;
 }
 
 export interface MergeOptions {
@@ -455,6 +459,8 @@ export async function applyColorwayMerge(
   let variantsMoved = 0;
   let variantsFolded = 0;
   let barcodesCarried = 0;
+  let refsMoved = 0;
+  let refsDropped = 0;
   // A barcode that moves between rows is a change to identity, so it needs the
   // same attribution as any other barcode write. Without this the survivor holds
   // six codes that nothing in the database explains — the precise gap
@@ -541,6 +547,37 @@ export async function applyColorwayMerge(
         });
       }
     }
+    // Channel refs follow the garment, not the row. The loser is about to become
+    // a tombstone, and a tombstone must not keep claiming a live Sitoo product or
+    // Shopify variant — two Origio variants answering to one channel record makes
+    // "which variant does this stock belong to?" ambiguous. Where the survivor
+    // already has that channel the loser's ref is redundant and goes; where it
+    // does not, the ref moves across rather than being lost.
+    if (a.survivorVariantId) {
+      const loserRefs = await prisma.variantChannelRef.findMany({
+        where: { variantId: a.loserVariantId },
+        select: { id: true, channel: true },
+      });
+      for (const lr of loserRefs) {
+        const held = await prisma.variantChannelRef.findUnique({
+          where: {
+            variantId_channel: { variantId: a.survivorVariantId, channel: lr.channel },
+          },
+          select: { id: true },
+        });
+        if (held) {
+          await prisma.variantChannelRef.delete({ where: { id: lr.id } });
+          refsDropped++;
+        } else {
+          await prisma.variantChannelRef.update({
+            where: { id: lr.id },
+            data: { variantId: a.survivorVariantId },
+          });
+          refsMoved++;
+        }
+      }
+    }
+
     if (opts.deleteLoserVariants) {
       await prisma.variant.delete({ where: { id: a.loserVariantId } });
     } else {
@@ -769,5 +806,13 @@ export async function applyColorwayMerge(
 
   if (carried.length) await recordDecisions(carried);
 
-  return { ...plan, applied: true, variantsMoved, variantsFolded, barcodesCarried };
+  return {
+    ...plan,
+    applied: true,
+    variantsMoved,
+    variantsFolded,
+    barcodesCarried,
+    refsMoved,
+    refsDropped,
+  };
 }
