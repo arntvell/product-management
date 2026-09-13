@@ -59,7 +59,17 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     brand: cw.brand?.name ?? null,
     // Registry rows are stock-bearing records, not catalogue listings. loom:false
     // still means withdraw, so the archive signal has to survive.
-    channels: { loom: !archive?.has(cw.id), shopify: false },
+    //
+    // `shopify` must report the product's REAL state, exactly as the catalogue
+    // builder does. It was hardcoded false here, which is only true of a product
+    // that happens not to be on Shopify — and a registry push is an upsert, so
+    // for anything Loom already held it overwrote a correct flag with a wrong
+    // one. The first live registry push sent shopify:false for 81 products that
+    // do have a Shopify publication.
+    channels: {
+      loom: !archive?.has(cw.id),
+      shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
+    },
     registry_only: true,
     variants: cw.variants.map((v) => ({
       variant_id: v.id,
