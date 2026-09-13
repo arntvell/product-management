@@ -5,11 +5,15 @@
 // descriptions, prices or media are touched.
 //
 // The difference from Sitoo is that Shopify has no uniqueness constraint on
-// barcode. It currently holds 41 barcodes on more than one live variant, which
-// means a scan cannot tell those garments apart and stock movements against them
-// are already unreliable at source. So a rotation does not fail here — it
-// silently succeeds and leaves two variants sharing a code. The master has to
-// refuse that itself.
+// barcode, so a rotation does not fail here — it silently succeeds and leaves two
+// variants sharing a code. The master has to refuse that itself.
+//
+// Measured 2026-09-13: Shopify holds **2** barcodes on more than one LIVE variant
+// (103 if archived variants are counted, which is where the 41 in the original
+// version of this comment came from — it was a count across archived rows). Both
+// live cases are two sizes of one style sharing a code:
+//   3606621489698  EXT-PR-AVR-VLGR-7.5    | EXT-PR-AVR-VLGR-9.5
+//   4582746159205  EXT-RTTO-..-RYL-BL-M   | EXT-RTTO-..-RYL-BL-S
 
 import { prisma } from "@/lib/db";
 import { lockedFields } from "@/lib/master/provenance";

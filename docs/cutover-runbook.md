@@ -84,7 +84,8 @@ numbers to expect are known:
 | matched by barcode | — | 26 |
 | **ambiguous** | **0** | **0** |
 
-Shopify holds 41 barcodes on more than one variant and 150 repeated SKUs, but
+Shopify holds 2 barcodes on more than one *live* variant (103 counting archived,
+which is where the 41 previously quoted here came from) and 150 repeated SKUs, but
 none of them make an *Origio* variant ambiguous. The unmatched remainder is
 expected: SS27 is pre-season and not in Shopify, and 7,704 archived Shopify
 variants are deliberately excluded.
@@ -167,8 +168,8 @@ links and plans zero writes.
 curl -sX POST localhost:3000/api/catalog/push/shopify/barcodes -d '{"dryRun":true}' | jq
 ```
 
-Shopify does **not** enforce barcode uniqueness — it holds 41 barcodes on more
-than one live variant today — so the plan refuses any write that would put one
+Shopify does **not** enforce barcode uniqueness — it holds 2 barcodes on more
+than one live variant today (measured 2026-09-13) — so the plan refuses any write that would put one
 code on two variants rather than relying on the API to reject it. Read `blocked`
 before applying.
 
