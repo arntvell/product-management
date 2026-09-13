@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { pushColorwaysToLoom } from "@/lib/loom/push";
+import type { LoomMode } from "@/lib/loom/payload";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // includes waiting for Loom's job to settle
 
 // POST /api/catalog/push/loom
-//   { colorwayIds, seasonCode, dryRun?, archiveColorwayIds?, skipJobWait? }
+//   { colorwayIds, seasonCode, mode?, dryRun?, archiveColorwayIds?, skipJobWait? }
+//
+// `mode` decides what job Loom is doing, and it changes who is eligible:
+//   "full"  (default) the wholesale catalogue — Livid only, readiness-gated
+//   "data"            the stock registry — identity only, no readiness gate,
+//                     and nothing excluded, because stock that does not reach
+//                     the registry does not reconcile.
+// This was accepted by pushColorwaysToLoom but never read here, so every push
+// silently ran as "full" and the registry mode was unreachable through the API.
 // Writes LIVE to Loom's upsert endpoint unless dryRun is set, in which case the
 // payload is built and reported but nothing is transmitted or marked published.
 export async function POST(req: Request) {
@@ -16,6 +25,7 @@ export async function POST(req: Request) {
     archiveColorwayIds?: string[];
     skipJobWait?: boolean;
     eventId?: string;
+    mode?: string;
   };
   try {
     body = await req.json();
@@ -28,12 +38,20 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  const mode = body.mode ?? "full";
+  if (mode !== "full" && mode !== "data") {
+    return NextResponse.json(
+      { error: 'mode must be "full" (wholesale catalogue) or "data" (stock registry)' },
+      { status: 400 }
+    );
+  }
   try {
     const result = await pushColorwaysToLoom(body.colorwayIds, body.seasonCode, {
       dryRun: body.dryRun,
       archiveColorwayIds: body.archiveColorwayIds,
       skipJobWait: body.skipJobWait,
       eventId: body.eventId,
+      mode: mode as LoomMode,
     });
     return NextResponse.json(result, { status: result.ok ? 200 : 502 });
   } catch (err) {

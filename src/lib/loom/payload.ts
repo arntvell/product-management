@@ -178,6 +178,27 @@ export interface LoomPayload {
 }
 
 /**
+ * Origio's season code -> the season name Loom knows.
+ *
+ * These are not the same vocabulary. Origio models carry-over product as a
+ * season called CONTINUITY; Loom calls that shelf "Archive" and rejects the
+ * delivery outright with `Unknown season "CONTINUITY"` — verified live on
+ * 2026-09-13, HTTP 400, nothing transmitted.
+ *
+ * The distinction matters because `seasonCode` does double duty: it selects
+ * which SeasonEntry, prices and images to read on OUR side, and it names the
+ * season on THEIRS. Only the outbound half is translated — the selection still
+ * uses Origio's own code, or nothing would be found.
+ */
+const LOOM_SEASON_NAMES: Record<string, string> = {
+  CONTINUITY: "Archive",
+};
+
+export function loomSeasonName(seasonCode: string): string {
+  return LOOM_SEASON_NAMES[seasonCode.toUpperCase()] ?? seasonCode;
+}
+
+/**
  * A stable id for a delivery: same season, same colorways, same withdrawals →
  * same id, so a retry dedupes rather than re-applying.
  */
@@ -237,11 +258,12 @@ export function buildLoomPayloadFromColorways(
   });
 
   return {
-    season: seasonCode,
+    season: loomSeasonName(seasonCode),
     mode,
     // Derived from the delivery's contents when not supplied, so the same set
-    // of products retried produces the same id.
-    event_id: eventId ?? deliveryId(seasonCode, colorways, archive),
+    // of products retried produces the same id. Keyed on the season Loom sees,
+    // so the id and the delivery agree about what was sent.
+    event_id: eventId ?? deliveryId(loomSeasonName(seasonCode), colorways, archive),
     styles,
   };
 }
