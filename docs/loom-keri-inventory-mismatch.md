@@ -84,3 +84,44 @@ can *prove* the inventory id was correct and ignored.
 Nothing to fix on our side until those are answered. Origio, Sitoo and Shopify
 agree; guessing at Loom's resolution rules and renaming further would risk
 splitting products that currently reconcile.
+
+---
+
+## Re-push, 2026-09-14 — it worked, for the families we had realigned
+
+Re-sent the four SKU-aligned families with a **fresh `eventId`** (an identical
+resend is deduped into the previous job):
+
+```
+sent 4 colorways · 47 variants
+created 0 · updated 1 · variantsUpdated 44 · errors 0
+```
+
+`variantsUpdated: 44` is the signal. Every previous push of these returned **0**.
+Loom re-resolved the variant bindings because the live Shopify product finally
+carries the SKU the master sends. Confirmed: Loom resolves Shopify by SKU, and it
+had been reading the archived record.
+
+## What that does NOT fix
+
+The same re-push cannot help the rest, because we only realigned four families.
+Of the 3,153 at-risk variants:
+
+| | Variants | Shopify link | |
+|---|---:|---|---|
+| Keri Japan Dawn + Keri Black Linen | 34 | linked | **fixed** |
+| No live Shopify presence, in Sitoo | 3,001 | none | still bound to an archived record |
+| No live Shopify presence, not in Sitoo | 118 | none | same |
+
+Those **3,119 have no live Shopify variant at all** — their SKU survives only on
+an archived product. There is nothing for Loom to re-resolve *to*. We already send
+`shopify_inventory_item_id: null` for every one of them, which is the correct
+statement: this garment has no Shopify stock object.
+
+**So the remaining fix is Loom's, and it is one rule:** do not fall back to an
+archived Shopify record. A variant we send with a null inventory id has no live
+Shopify presence, and its stock lives in Sitoo — binding it to a retired listing
+attributes movement to a product nobody can sell.
+
+Realigning 1,113 more Shopify SKUs is not the answer here: those products are not
+on Shopify any more, so there is no live SKU to align.
