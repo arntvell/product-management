@@ -440,9 +440,10 @@ model Colorway {
   channelContent ChannelContent[]
   seasonImages   SeasonImage[]
 
-  archived  Boolean  @default(false) // whole-channel archive (plan §8)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  archived       Boolean         @default(false) // whole-channel archive (plan §8)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  pushBatchItems PushBatchItem[]
 
   @@index([styleId])
   @@index([brandId])
@@ -556,16 +557,76 @@ model MediaAsset {
 // ---------------------------------------------------------------------------
 
 model ChannelPublication {
-  id             String    @id @default(cuid())
-  colorwayId     String
-  colorway       Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
-  channel        Channel // SHOPIFY | LOOM
-  published      Boolean   @default(false)
-  externalId     String? // Shopify product GID / Loom key once pushed
-  lastPushedAt   DateTime?
-  lastPushStatus String?
+  id                   String    @id @default(cuid())
+  colorwayId           String
+  colorway             Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  channel              Channel // SHOPIFY | LOOM
+  published            Boolean   @default(false)
+  externalId           String? // Shopify product GID / Loom key once pushed
+  lastPushedAt         DateTime?
+  lastPushStatus       String?
+  /// When this colorway's CHANNEL IDS (shopify_inventory_item_id,
+  /// shopify_variant_id, sitoo_product_id) were last TRANSMITTED to Loom.
+  /// Separate from lastPushedAt because a push that predates the ids carried
+  /// none. It records SENT, never STORED: Loom answered `updated: 0` to all 355
+  /// identity rows sent so far (WORK-DECK A2), so storage is unproven.
+  loomIdentityPushedAt DateTime?
 
   @@unique([colorwayId, channel])
+}
+
+/// One finalize or backfill run — the unit of "retry", "resume" and "what
+/// happened". There is no job queue in this app and maxDuration is 300s, while
+/// waitForLoomJob budgets 600s, so no push may be a single long loop. These two
+/// tables ARE the queue: each invocation takes a time budget, does what it can,
+/// persists, and returns.
+model PushBatch {
+  id              String          @id @default(cuid())
+  kind            String // create | bulk | backfill-customs | identity-repush
+  seasonCode      String?
+  channels        Channel[]       @default([])
+  status          String          @default("pending") // pending | running | partial | ok | failed
+  /// Waive the merchandising half of the Shopify readiness gate for this batch.
+  /// A recorded decision, never a default — a candle has no care page or fit
+  /// guide, and publishing without one should take a decision.
+  allowIncomplete Boolean         @default(false)
+  note            String?
+  draftId         String?
+  items           PushBatchItem[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status])
+  @@index([kind, createdAt])
+  @@index([draftId])
+}
+
+/// One (colorway, channel) unit of work.
+model PushBatchItem {
+  id         String    @id @default(cuid())
+  batchId    String
+  batch      PushBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  colorwayId String
+  colorway   Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  channel    Channel
+  /// PENDING RUNNING AWAITING_JOB OK FAILED BLOCKED SKIPPED UNCONFIRMED
+  state      String    @default("PENDING")
+  attempts   Int       @default(0)
+  /// Shopify product gid / Sitoo parent productid. Written the moment the
+  /// channel answers, before anything else.
+  externalId String?
+  /// Loom only, and persisted BEFORE waiting: a crash mid-poll then resumes by
+  /// asking Loom about this job rather than re-sending the whole delivery.
+  eventId    String?
+  jobId      String?
+  error      String?
+  detail     Json?
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@unique([batchId, colorwayId, channel])
+  @@index([batchId, channel, state])
+  @@index([colorwayId])
 }
 
 model ChannelContent {

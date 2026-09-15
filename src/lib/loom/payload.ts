@@ -58,11 +58,47 @@ export function loomMissingForColorway(cw: LoomColorway): string[] {
  * rule this mode deliberately bypasses.
  */
 function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
+  // Enriched on request: the registry now carries price, category and the
+  // customs block alongside identity.
+  //
+  // The original note above argued against this — "a registry that carries
+  // merchandising data invites Loom to render products it must not sell". That
+  // concern is real and has NOT gone away; what changes is that `registry_only`
+  // is still true and still the flag Loom is meant to gate rendering on. Until
+  // Loom confirms it does, this remains the one thing here that depends on
+  // another team, and it belongs on the WORK-DECK §A list next to A2.
+  //
+  // What has not changed: eligibility. Externals and vintage still do not enter
+  // the wholesale catalogue — isLoomEligible is untouched.
+  const customs = {
+    hs_code: has(cw.hsCodeOverride) ?? cw.style.hsCode ?? null,
+    customs_description:
+      has(cw.customsDescriptionOverride) ?? cw.style.customsDescription ?? null,
+    weight_kg: (cw.weightKgOverride ?? cw.style.weightKg)?.toString() ?? null,
+    fiber_composition:
+      has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition ?? null,
+    country_of_origin: cw.countryOfOrigin ?? null,
+  };
+  const prices: Record<string, { msrp?: number; ws?: number; cost?: number }> = {};
+  for (const p of cw.prices) {
+    const slot = (prices[p.currency] ??= {});
+    if (p.priceType === "MSRP") slot.msrp = Number(p.amount);
+    else if (p.priceType === "WHOLESALE") slot.ws = Number(p.amount);
+    else if (p.priceType === "COST") slot.cost = Number(p.amount);
+  }
+
   return {
     colorway_id: cw.id,
     colorway_sku: cw.colorwaySku,
     name: cw.name,
     brand: cw.brand?.name ?? null,
+    color: cw.color ?? null,
+    product_type: toLoomCategory(cw.productType),
+    ...customs,
+    manufacturer_id: cw.manufacturer
+      ? (cw.manufacturer.threadflowId ?? cw.manufacturer.id)
+      : null,
+    prices,
     // Registry rows are stock-bearing records, not catalogue listings. loom:false
     // still means withdraw, so the archive signal has to survive.
     //

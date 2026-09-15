@@ -14,6 +14,7 @@ import {
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
 import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
+import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
 import {
   adoptExistingShopifyProduct,
   recordShopifyVariantRefs,
@@ -162,7 +163,13 @@ export async function pushColorwayToShopify(
    * anyone re-pushed a product. Clearing a field live is a deliberate act, so it
    * takes a deliberate flag.
    */
-  clearEmptied = false
+  clearEmptied = false,
+  /**
+   * Force the customs write on or off for this call, overriding
+   * SHOPIFY_CUSTOMS_WRITE. The backfill and the dry-run preview need to ask for
+   * it explicitly; nothing else should.
+   */
+  allowCustoms?: boolean
 ): Promise<PushResult> {
   const cw = await getColorwayForPublish(id, seasonCode);
   if (!cw) throw new Error("Colorway not found");
@@ -223,12 +230,29 @@ export async function pushColorwayToShopify(
     warnings.push("Pushed without a season — price is not season-scoped; verify it's correct.");
   const metafields = await buildMetafields(cw, warnings);
 
+  // Customs. Shopify has never received any of this — `sku` was the only
+  // inventoryItem field ever written — so it ships behind a flag and is inert
+  // until SHOPIFY_CUSTOMS_WRITE=on. Every flow funnels through this function
+  // (single push, bulk push, the orchestrator), so turning it on covers them all.
+  //
+  // Nothing is emitted for a value we do not have: omission leaves Shopify's
+  // value alone, the same policy clearEmptied applies to metafields, and
+  // productSet is declarative enough that a null would blank a merchant's data.
+  const customsEnabled = allowCustoms ?? process.env.SHOPIFY_CUSTOMS_WRITE === "on";
+  const customs = resolveCustoms(cw);
+  const customsInput = customsEnabled ? toInventoryItemInput(customs) : {};
+  if (customsEnabled && customs.countryUnresolved)
+    warnings.push(
+      `Country of origin "${customs.countryUnresolved}" is not a country code Shopify ` +
+        `recognises, so it was omitted. A wrong code would reject the whole product.`
+    );
+
   // One "Size" option; one variant per master variant (deduped size labels).
   const sizes = [...new Set(preview.variants.map((v) => v.size))];
   const variants = preview.variants.map((v) => ({
     optionValues: [{ optionName: "Size", name: v.size }],
     ...(v.price ? { price: v.price } : {}),
-    inventoryItem: { sku: v.sku },
+    inventoryItem: { sku: v.sku, ...customsInput },
     ...(v.barcode ? { barcode: v.barcode } : {}),
   }));
 

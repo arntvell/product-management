@@ -151,10 +151,14 @@ export async function pushColorwaysToLoom(
   if (opts.dryRun) {
     // Nothing leaves the process and no ChannelPublication is touched.
     const all = payload.styles.flatMap((s) => s.colorways);
-    // The registry payload carries identity only, so the merchandising figures
-    // below simply do not apply to it. Narrow once rather than guarding each.
+    // The merchandising figures below belong to the CATALOGUE payload only.
+    //
+    // This narrowed on `"prices" in c`, which stopped working the moment the
+    // registry payload gained prices. `registry_only` is the field that actually
+    // means "this is the registry shape" — it is the flag Loom itself is meant
+    // to gate on — so narrowing on its absence says what was always intended.
     const cat = all.filter(
-      (c): c is Extract<typeof c, { prices: unknown }> => "prices" in c
+      (c): c is Extract<typeof c, { is_core: unknown }> => !("registry_only" in c)
     );
     const currencies = new Set<string>();
     for (const c of cat) for (const k of Object.keys(c.prices)) currencies.add(k);
