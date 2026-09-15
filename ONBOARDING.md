@@ -34,6 +34,49 @@ per-season data) → enrich per channel → push out to **Shopify (→ Sitoo)** 
 
 ---
 
+## 1a. Where things stand (2026-09-15)
+
+The master cutover happened over 11–15 September. **Work is on
+`product-master-cutover`, not yet merged to `main`** — 77+ commits, and merging
+deploys production, so it is deliberate rather than routine.
+
+| | |
+|---|---:|
+| Colorways / variants | 4,595 / 14,784 |
+| Barcoded, all distinct | 10,494 · **0 duplicates, enforced by a unique index** |
+| In Loom's stock registry (`archv`) | ~3,985 colorways |
+| Origio vs Shopify SKU divergence | **0** |
+| Origio vs Sitoo SKU divergence | 8, all known |
+
+**Read these first, in this order:**
+
+1. `docs/roadmap-2026-09-13.md` — what is done, what is open, and the decisions
+   still waiting on a person
+2. `docs/data-integrity-2026-09-11.md` — why the model looks the way it does
+3. `docs/cutover-runbook.md` — the sequence, with every gotcha that cost us a day
+
+**Five things that will bite you, all learned the hard way:**
+
+- **`prisma.$transaction([...])` sends one round trip per element.** At ~200 rows
+  it blows the 5 s budget and leaves you half-applied. Use `src/lib/db-bulk.ts`.
+  This bit four times in one day.
+- **A barcode is unique.** Moving one between rows means *release, then write*, in
+  that order — see `apply-barcodes.ts` or `merge-colorways.ts`.
+- **`normalizeSku` uppercases before comparing**, so `LIV-Needle-W-L` and
+  `LIV-NEEDLE-W-L` look identical to us and differ to Pio and the shop stocktake,
+  which join on raw text.
+- **Loom dedupes on `eventId`**, which is derived from the payload. An identical
+  resend returns the *original job, including its failure*. A real retry needs an
+  explicit `eventId`.
+- **Turbopack bundles the Prisma client.** After `prisma generate`, restart
+  `npm run dev` or you will debug a stale bundle.
+
+**Never push to Loom without asking first.** It is the stock registry, the ingest
+token has no read endpoint, and a wrong payload cannot be inspected or easily
+undone.
+
+---
+
 ## 2. Setup on a new machine
 
 ```bash
