@@ -32,6 +32,7 @@ model Brand {
   styles    Style[]
   colorways Colorway[]
   template  BrandTemplate?
+  drafts    ProductDraft[]
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 }
@@ -135,18 +136,79 @@ model SizeSystemEntry {
   @@index([sizeSystemId, position])
 }
 
+// ---------------------------------------------------------------------------
+// Product drafts — the creation wizard's state
+// ---------------------------------------------------------------------------
+
+/// A creation session that survives a crash, a deploy or a closed laptop.
+///
+/// The payload is ONE JSON document rather than a normalised shadow of
+/// Style/Colorway/Variant, because a half-entered product is not a product: it
+/// has no SKU yet, sometimes no style, sometimes no brand. Normalising it would
+/// mean nullable everything plus a second set of unique indexes fighting the
+/// real ones. The real indexes on styleSku / colorwaySku / variantSku / barcode
+/// stay the only idempotency backstop; see finalize.ts.
+model ProductDraft {
+  id            String             @id @default(cuid())
+  title         String // "Paraboot — 3 colourways", for the drafts list
+  status        ProductDraftStatus @default(DRAFT)
+  /// Which step to reopen on: brand | style | colorways | sizes | prices |
+  /// barcodes | review.
+  step          String             @default("brand")
+  /// Payload shape version. Drafts outlive deploys, so parseDraftPayload()
+  /// migrates forward or refuses rather than crashing on a field that moved.
+  schemaVersion Int                @default(1)
+  /// Compare-and-swap token for autosave. A PUT carrying a stale revision is
+  /// rejected, so a second tab cannot silently overwrite the first.
+  revision      Int                @default(0)
+  payload       Json
+
+  brandId  String?
+  brand    Brand?    @relation(fields: [brandId], references: [id])
+  seasonId String?
+  season   Season?   @relation(fields: [seasonId], references: [id])
+  /// What this draft will publish to. Per-channel push OUTCOME is not stored
+  /// here — ChannelPublication and VariantChannelRef already model it, and a
+  /// retry reads them back through createdColorwayIds. A second record of one
+  /// fact is how the two drift.
+  channels Channel[] @default([])
+
+  /// Every id minted at the DRAFT -> FINALIZING claim, so a retry reuses them
+  /// and the resume probe has something definite to look for.
+  reservedIds        Json?
+  finalizeAttempts   Int       @default(0)
+  startedFinalizeAt  DateTime?
+  finalizeError      String?
+  completedAt        DateTime?
+  createdStyleIds    String[]  @default([])
+  createdColorwayIds String[]  @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, updatedAt])
+}
+
+enum ProductDraftStatus {
+  DRAFT // being edited
+  FINALIZING // claimed; ids reserved; the transaction may or may not have committed
+  COMPLETED // rows exist in the master
+  DISCARDED // abandoned. Never deleted — an allocated barcode needs a paper trail
+}
+
 model Season {
-  id           String        @id @default(cuid())
-  code         String        @unique // "SS27", "FW26"
+  id           String         @id @default(cuid())
+  code         String         @unique // "SS27", "FW26"
   name         String?
-  threadflowId String?       @unique // maps to TF seasonId
-  kind         SeasonKind    @default(REGULAR) // REGULAR | CONTINUITY (carry-over / season-less)
-  sortOrder    Int           @default(0)
+  threadflowId String?        @unique // maps to TF seasonId
+  kind         SeasonKind     @default(REGULAR) // REGULAR | CONTINUITY (carry-over / season-less)
+  sortOrder    Int            @default(0)
   entries      SeasonEntry[]
   prices       Price[]
   seasonImages SeasonImage[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  drafts       ProductDraft[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 }
 
 // ---------------------------------------------------------------------------
