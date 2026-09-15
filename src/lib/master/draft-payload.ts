@@ -57,6 +57,8 @@ export type DraftStyle =
   | { mode: "new"; styleName: string; styleSku: string; manualSku: boolean };
 
 export interface DraftTemplate {
+  /** The modelled category. The text `category` below is derived from its name. */
+  categoryId: string;
   category: string;
   gender: string;
   unisex: boolean;
@@ -66,6 +68,8 @@ export interface DraftTemplate {
   fiberComposition: string;
   countryOfOrigin: string;
   manufacturerId: string;
+  /** Preselected in the sizes step, from the brand's settings. */
+  defaultSizeSystemId: string;
 }
 
 export interface DraftPayloadV1 {
@@ -90,6 +94,7 @@ export function emptyDraftPayload(): DraftPayloadV1 {
     channels: ["SHOPIFY", "LOOM", "SITOO"],
     kind: "MERCHANDISE",
     template: {
+      categoryId: "",
       category: "",
       gender: "",
       unisex: false,
@@ -99,6 +104,7 @@ export function emptyDraftPayload(): DraftPayloadV1 {
       fiberComposition: "",
       countryOfOrigin: "",
       manufacturerId: "",
+      defaultSizeSystemId: "",
     },
     style: null,
     colorways: [],
@@ -152,6 +158,7 @@ export function parseDraftPayload(raw: unknown): DraftPayloadV1 {
       ? (str(raw.kind) as ProductKind)
       : base.kind,
     template: {
+      categoryId: str(template.categoryId),
       category: str(template.category),
       gender: str(template.gender),
       unisex: bool(template.unisex),
@@ -161,6 +168,7 @@ export function parseDraftPayload(raw: unknown): DraftPayloadV1 {
       fiberComposition: str(template.fiberComposition),
       countryOfOrigin: str(template.countryOfOrigin),
       manufacturerId: str(template.manufacturerId),
+      defaultSizeSystemId: str(template.defaultSizeSystemId),
     },
     style: parseStyle(raw.style),
     colorways: arr(raw.colorways).map(parseColorway),

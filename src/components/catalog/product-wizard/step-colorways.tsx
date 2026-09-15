@@ -60,7 +60,9 @@ export function StepColorways({ payload, update }: StepProps) {
               colorwaySku: "",
               manualSku: false,
               kind: null,
-              sizeSystemId: null,
+              // The brand's default size system, so the sizes step opens with a
+              // run already chosen rather than an empty picker per colourway.
+              sizeSystemId: payload.template.defaultSizeSystemId || null,
               variants: [],
               prices: {},
             },

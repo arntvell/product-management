@@ -82,7 +82,14 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
     process.env.SITOO_API_ID && process.env.SITOO_API_KEY && process.env.SITOO_BASE_URL
   );
 
-  const blocked: Array<{ colorwayId: string; channel: PushChannel; reason: string }> = [];
+  const blocked: Array<{
+    colorwayId: string;
+    channel: PushChannel;
+    reason: string;
+    /** True when an operator may waive this — the soft merchandising gaps only.
+     *  No variants and no price are never waivable, and the UI must not offer to. */
+    waivable: boolean;
+  }> = [];
   const items: Array<{
     colorwayId: string;
     channel: Channel;
@@ -94,6 +101,7 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
     for (const channel of channels) {
       let state: ItemState = "PENDING";
       let error: string | undefined;
+      let waivable = false;
 
       if (channel === "SHOPIFY") {
         const hasVariants = cw.variants.length > 0;
@@ -127,6 +135,7 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
             // button, rather than deciding on the operator's behalf.
             state = "BLOCKED";
             error = `missing ${soft.join(", ")}`;
+            waivable = true;
           }
         }
       }
@@ -139,7 +148,8 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
         error = "SITOO_* is not configured in this environment";
       }
 
-      if (state !== "PENDING") blocked.push({ colorwayId: cw.id, channel, reason: error! });
+      if (state !== "PENDING")
+        blocked.push({ colorwayId: cw.id, channel, reason: error!, waivable });
       items.push({ colorwayId: cw.id, channel: channel as Channel, state, error });
     }
   }
@@ -185,7 +195,8 @@ export async function runPushBatch(
     if (opts.only && !opts.only.includes(phase)) continue;
     if (Date.now() > deadline) break;
 
-    if (phase === "SHOPIFY") await stepShopify(batchId, deadline, batch.seasonCode, opts);
+    if (phase === "SHOPIFY")
+      await stepShopify(batchId, deadline, batch.seasonCode, batch.allowIncomplete, opts);
     if (phase === "LOOM") {
       await submitLoom(batchId, batch.seasonCode ?? "CONTINUITY", opts);
       const poll = await confirmLoom(batchId);
@@ -219,8 +230,26 @@ export async function resumePushBatch(
 
 export async function retryPushBatch(
   batchId: string,
-  opts: RunOptions & { channels?: PushChannel[]; colorwayIds?: string[] } = {}
+  opts: RunOptions & {
+    channels?: PushChannel[];
+    colorwayIds?: string[];
+    /**
+     * Waive the soft Shopify readiness gaps — care page, fit guide, description,
+     * image — for this batch, from here on.
+     *
+     * Recorded on the batch rather than passed per call, because the waiver is a
+     * decision about this product, not about this attempt: a later resume must
+     * honour it too. It never waives a blocking gap (no variants, no price),
+     * which `shopifyBlockingMissing` keeps separate for exactly this reason.
+     */
+    waiveIncomplete?: boolean;
+  } = {}
 ): Promise<BatchProgress> {
+  if (opts.waiveIncomplete)
+    await prisma.pushBatch.update({
+      where: { id: batchId },
+      data: { allowIncomplete: true },
+    });
   await prisma.pushBatchItem.updateMany({
     where: {
       batchId,
@@ -241,6 +270,10 @@ async function stepShopify(
   batchId: string,
   deadline: number,
   seasonCode: string | null,
+  /** The batch's recorded waiver. Without it a batch created with
+   *  allowIncomplete still throws "Not ready" here, and the waiver the operator
+   *  gave means nothing. */
+  allowIncomplete: boolean,
   opts: RunOptions
 ): Promise<void> {
   const items = await prisma.pushBatchItem.findMany({
@@ -266,7 +299,7 @@ async function stepShopify(
       const res = await pushColorwayToShopify(
         item.colorwayId,
         seasonCode ?? undefined,
-        undefined,
+        allowIncomplete,
         false
       );
       await prisma.pushBatchItem.update({
@@ -350,27 +383,49 @@ async function submitLoom(
   try {
     const res = await pushColorwaysToLoom(ids, seasonCode, {
       mode: "data",
+      // Submit only. waitForLoomJob budgets 600s inside a 300s function, which
+      // is the exact hazard this orchestrator exists to avoid — and a wait here
+      // would also mean the job id is never written, so a crash mid-poll could
+      // only recover by re-sending the delivery.
+      skipJobWait: true,
       // A retry after a FAILED job rotates the event id: Loom keeps the failure
       // against the original, so an identical resend returns the stale result.
       ...(attempt > 1 ? { eventIdSuffix: `r${attempt}` } : {}),
     });
-    for (const s of sendable)
+
+    // Loom can refuse individual colorways (not in season, ineligible) while
+    // accepting the delivery. Those are not awaiting anything.
+    const refused = new Map(res.skipped.map((k) => [k.colorwayId, k.reason]));
+
+    for (const s of sendable) {
+      const reason = refused.get(s.colorwayId);
+      const state: ItemState = reason
+        ? "SKIPPED"
+        : !res.ok
+          ? "FAILED"
+          : res.jobId
+            ? "AWAITING_JOB"
+            : "OK";
       await prisma.pushBatchItem.update({
         where: { id: s.id },
         data: {
-          state: res.ok ? "OK" : "FAILED",
+          state,
           eventId: res.eventId ?? null,
-          error: res.ok ? null : (res.raw ?? "Loom refused the delivery").slice(0, 900),
+          // Persisted BEFORE anything waits — this is what confirmLoom resumes
+          // from, and what makes a crash recoverable without a re-send.
+          jobId: reason ? null : (res.jobId ?? null),
+          error: reason ?? (res.ok ? null : (res.raw ?? "Loom refused the delivery").slice(0, 900)),
           attempts: { increment: 1 },
           startedAt: new Date(),
-          finishedAt: new Date(),
+          finishedAt: state === "AWAITING_JOB" ? null : new Date(),
         },
       });
-    if (res.ok)
-      await prisma.channelPublication.updateMany({
-        where: { colorwayId: { in: ids }, channel: "LOOM" },
-        data: { loomIdentityPushedAt: new Date() },
-      });
+    }
+
+    // Identity is stamped on a FINISHED job, in confirmLoom — not on acceptance.
+    // A delivery Loom accepts and then fails carried nothing, and "we sent the
+    // ids" has to mean Loom actually took them.
+    if (res.ok && !res.jobId) await stampLoomIdentity(ids);
   } catch (err) {
     for (const s of sendable)
       await prisma.pushBatchItem.update({
@@ -383,6 +438,15 @@ async function submitLoom(
         },
       });
   }
+}
+
+/** Record that this colorway's channel ids reached Loom. Separate from
+ *  lastPushedAt: a catalogue push that predates the ids carried none. */
+async function stampLoomIdentity(colorwayIds: string[]): Promise<void> {
+  await prisma.channelPublication.updateMany({
+    where: { colorwayId: { in: colorwayIds }, channel: "LOOM" },
+    data: { loomIdentityPushedAt: new Date() },
+  });
 }
 
 /** One poll per invocation. Returns a delay when the caller should come back. */
@@ -401,7 +465,16 @@ async function confirmLoom(batchId: string): Promise<number | undefined> {
         where: { id: item.id },
         data: { state: "OK", finishedAt: new Date(), detail: JSON.parse(JSON.stringify(job)) },
       });
+      await stampLoomIdentity([item.colorwayId]);
     } else if (job.status === "error") {
+      // The submit already marked the publication published, because acceptance
+      // is all it could observe. The job failing says that was wrong, so take it
+      // back rather than leaving a row claiming a push that did not land — the
+      // 26 August silent failure is exactly this shape.
+      await prisma.channelPublication.updateMany({
+        where: { colorwayId: item.colorwayId, channel: "LOOM" },
+        data: { published: false, lastPushStatus: "job failed" },
+      });
       await prisma.pushBatchItem.update({
         where: { id: item.id },
         data: {

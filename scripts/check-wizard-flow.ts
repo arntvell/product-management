@@ -12,6 +12,11 @@ import { PrismaClient } from "../src/generated/prisma/client.ts";
 import { buildStyleSku, buildColorwaySku, buildVariantSku } from "../src/lib/master/sku.ts";
 import { emptyDraftPayload, type DraftPayloadV1 } from "../src/lib/master/draft-payload.ts";
 import { parseCsvRecords } from "../src/lib/csv.ts";
+import { getColorwayForPublish, buildShopifyPreview } from "../src/lib/master/publish.ts";
+import {
+  loadColorwaysForLoom,
+  buildLoomPayloadFromColorways,
+} from "../src/lib/loom/payload.ts";
 
 const BASE = process.argv[2] ?? "http://localhost:3000";
 const PASSWORD = process.env.APP_PASSWORD ?? "";
@@ -58,6 +63,19 @@ async function main() {
     data: { name: `ZZ Wizard ${TAG}`, isLivid: false, skuToken: TAG },
   });
   const season = await prisma.season.findFirstOrThrow({ where: { code: "CONTINUITY" } });
+  // A modelled category with a mapped spelling for each channel: the point is
+  // that the ID reaches Style and Colorway, and that the pushes read the mapping
+  // rather than the free text.
+  const category = await prisma.category.create({
+    data: {
+      slug: `zz-wizard-${TAG.toLowerCase()}`,
+      name: `ZZ Wizard ${TAG}`,
+      path: `zz-wizard-${TAG.toLowerCase()}`,
+      depth: 0,
+      shopifyProductType: "ZZ Shopify Boots",
+      loomCategory: "Outerwear",
+    },
+  });
   const sizeSystem = await prisma.sizeSystem.create({
     data: {
       name: `ZZ Sizes ${TAG}`,
@@ -85,7 +103,12 @@ async function main() {
     ...emptyDraftPayload(),
     brand: { id: brand.id, name: brand.name, skuToken: TAG, isLivid: false },
     seasonId: season.id,
-    template: { ...emptyDraftPayload().template, category: "Footwear", countryOfOrigin: "France" },
+    template: {
+      ...emptyDraftPayload().template,
+      categoryId: category.id,
+      category: category.name,
+      countryOfOrigin: "France",
+    },
     style: { mode: "new", styleName: "Wizard Boot", styleSku, manualSku: false },
     colorways: [
       {
@@ -202,6 +225,28 @@ async function main() {
     `${styles}/${colorways}/${variants}`);
   check("the one good barcode landed", barcoded === 1, String(barcoded));
 
+  // --- the category model, and the status the product is born in ---
+  const styleRow = await prisma.style.findFirstOrThrow({ where: { brandId: brand.id } });
+  const cwRow = await prisma.colorway.findFirstOrThrow({ where: { brandId: brand.id } });
+  check("style carries the category id", styleRow.categoryId === category.id, String(styleRow.categoryId));
+  check("colorway carries the category id", cwRow.categoryId === category.id, String(cwRow.categoryId));
+  // A product created here has no description and no photograph. Born ACTIVE it
+  // would reach the storefront on the first push; DRAFT makes going live a
+  // decision taken on /catalog/publishing.
+  check("born DRAFT, not live", cwRow.status === "DRAFT", cwRow.status);
+
+  // The pushes must read the MAPPING, not the free text. Both are built without
+  // touching a channel, so this is a pure payload assertion.
+  const preview = buildShopifyPreview(await getColorwayForPublish(cwRow.id, "CONTINUITY") as never);
+  check("Shopify sends the mapped product type",
+    preview.product.productType === "ZZ Shopify Boots",
+    String(preview.product.productType));
+
+  const loomRows = await loadColorwaysForLoom([cwRow.id], "CONTINUITY");
+  const loomPayload = buildLoomPayloadFromColorways(loomRows, "CONTINUITY", new Set(), undefined, "data");
+  const loomCw = loomPayload.styles[0]?.colorways[0] as { product_type?: string } | undefined;
+  check("Loom sends the mapped category", loomCw?.product_type === "Outerwear", String(loomCw?.product_type));
+
   // --- finalizing again is a no-op ---
   const again = await api(`/api/catalog/drafts/${draftId}/finalize`, { method: "POST" });
   check("second finalize is safe", again.status === 201 || again.status === 200, String(again.status));
@@ -216,6 +261,7 @@ async function main() {
   await prisma.style.deleteMany({ where: { brandId: brand.id } });
   await prisma.brand.delete({ where: { id: brand.id } });
   await prisma.sizeSystem.delete({ where: { id: sizeSystem.id } });
+  await prisma.category.delete({ where: { id: category.id } });
   check("cleaned up", (await prisma.brand.count({ where: { name: { startsWith: "ZZ Wizard" } } })) === 0);
 
   console.log(fail ? `\n${fail} FAILURES` : "\nall assertions passed");

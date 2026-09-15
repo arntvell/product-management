@@ -173,6 +173,7 @@ export async function getBrandTemplate(brandId: string) {
     fiberComposition: t.fiberComposition ?? "",
     countryOfOrigin: t.countryOfOrigin ?? "",
     manufacturerId: t.manufacturerId ?? "",
+    defaultSizeSystemId: t.defaultSizeSystemId ?? "",
     sizes: t.sizes,
   };
 }

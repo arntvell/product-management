@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import type { StepProps } from "./types";
 
-export function StepPrices({ payload, update }: StepProps) {
+export function StepPrices({ payload, update, options }: StepProps) {
   if (!payload.colorways.length)
     return <p className="text-sm text-muted-foreground">Add a colourway first.</p>;
 
@@ -101,7 +103,7 @@ export function StepPrices({ payload, update }: StepProps) {
           and Shopify — Sitoo has no field for any of it.
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <TemplateField label="Category" field="category" payload={payload} update={update} />
+          <CategoryField payload={payload} update={update} options={options} />
           <TemplateField label="HS code" field="hsCode" payload={payload} update={update} />
           <TemplateField
             label="Country of origin"
@@ -153,6 +155,116 @@ function TemplateField({
           update((p) => ({ ...p, template: { ...p.template, [field]: e.target.value } }))
         }
       />
+    </div>
+  );
+}
+
+/**
+ * The category, chosen from the modelled vocabulary rather than typed.
+ *
+ * Free text is what produced 76 spellings of a few dozen categories, and it is
+ * what made `shopifyProductType` and `loomCategory` unreachable — nothing can
+ * map a string nobody has seen before. The name is written alongside the id so
+ * every existing text consumer keeps working unchanged.
+ */
+function CategoryField({ payload, update, options }: StepProps) {
+  const [extra, setExtra] = useState<{ id: string; name: string; depth: number }[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const all = [...options.categories, ...extra];
+  const chosen = all.find((c) => c.id === payload.template.categoryId);
+
+  function choose(id: string) {
+    const c = all.find((x) => x.id === id);
+    update((p) => ({
+      ...p,
+      template: { ...p.template, categoryId: c?.id ?? "", category: c?.name ?? "" },
+    }));
+  }
+
+  async function create() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setError(null);
+    try {
+      const res = await fetch("/api/catalog/categories", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error ?? "Could not create that category.");
+        return;
+      }
+      setExtra((x) => [...x, { id: body.id, name: trimmed, depth: 0 }]);
+      update((p) => ({
+        ...p,
+        template: { ...p.template, categoryId: body.id, category: trimmed },
+      }));
+      setName("");
+      setCreating(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create that category.");
+    }
+  }
+
+  return (
+    <div>
+      <Label className="text-xs">Category</Label>
+      {creating ? (
+        <div className="mt-1.5 flex gap-2">
+          <Input
+            autoFocus
+            value={name}
+            placeholder="New category name"
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void create();
+              }
+              if (e.key === "Escape") setCreating(false);
+            }}
+          />
+          <Button size="sm" onClick={() => void create()}>
+            Add
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <select
+          className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+          value={payload.template.categoryId}
+          onChange={(e) => {
+            if (e.target.value === "__new__") {
+              setCreating(true);
+              return;
+            }
+            choose(e.target.value);
+          }}
+        >
+          <option value="">— choose a category —</option>
+          {all.map((c) => (
+            <option key={c.id} value={c.id}>
+              {"\u00a0\u00a0".repeat(c.depth)}
+              {c.name}
+            </option>
+          ))}
+          <option value="__new__">+ new category…</option>
+        </select>
+      )}
+      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+      {!chosen && payload.template.category ? (
+        <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
+          &ldquo;{payload.template.category}&rdquo; is not a modelled category — pick one so
+          Shopify and Loom get the mapped spelling rather than a guess.
+        </p>
+      ) : null}
     </div>
   );
 }

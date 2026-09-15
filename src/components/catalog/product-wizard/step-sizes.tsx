@@ -49,7 +49,10 @@ export function StepSizes({ payload, update, options }: StepProps) {
               ...cw.variants,
               makeVariant(cw.colorwaySku, entry),
             ].sort(byPosition(system));
-        return { ...cw, variants };
+        // Picking a size settles the system too. Without this a colourway that
+        // merely INHERITED the brand default would keep a null systemId, and the
+        // next render's fallback could move under it.
+        return { ...cw, sizeSystemId: system.id, variants };
       }),
     }));
   }
@@ -61,6 +64,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
         if (cw.key !== colorwayKey) return cw;
         return {
           ...cw,
+          sizeSystemId: system.id,
           variants: on
             ? system.entries
                 .filter((e) => !e.archived)
@@ -110,7 +114,10 @@ export function StepSizes({ payload, update, options }: StepProps) {
       ) : null}
 
       {payload.colorways.map((cw) => {
-        const system = systems.find((s) => s.id === cw.sizeSystemId) ?? null;
+        // A colourway added before the brand's defaults arrived has no system of
+        // its own; fall back to the brand default rather than showing "choose".
+        const systemId = cw.sizeSystemId || payload.template.defaultSizeSystemId || "";
+        const system = systems.find((s) => s.id === systemId) ?? null;
         const active = system?.entries.filter((e) => !e.archived) ?? [];
         return (
           <div key={cw.key} className="rounded-md border p-4">
@@ -123,7 +130,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
                 <Label className="text-xs">Size system</Label>
                 <select
                   className="mt-1.5 h-9 rounded-md border bg-transparent px-3 text-sm"
-                  value={cw.sizeSystemId ?? ""}
+                  value={systemId}
                   onChange={(e) => setSystem(cw.key, e.target.value)}
                 >
                   <option value="">— choose —</option>

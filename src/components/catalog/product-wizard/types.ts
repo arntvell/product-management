@@ -6,6 +6,8 @@ export interface WizardOptions {
   seasons: { id: string; code: string }[];
   sizeSystems: SizeSystemView[];
   manufacturers: { id: string; name: string }[];
+  /** Active categories, in tree order. `depth` drives the indent. */
+  categories: { id: string; name: string; path: string; depth: number }[];
 }
 
 export interface StepProps {

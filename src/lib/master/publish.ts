@@ -12,7 +12,11 @@ export async function getColorwayForPublish(id: string, seasonCode?: string) {
   return prisma.colorway.findUnique({
     where: { id },
     include: {
-      style: true,
+      // The modelled category, at both levels — `shopifyProductType` on it is
+      // the deliberate spelling, and without the join the free-text column is
+      // the only thing this can send.
+      categoryRef: true,
+      style: { include: { categoryRef: true } },
       brand: true,
       channelContent: true,
       variants: { orderBy: { sizeLabel: "asc" } },
@@ -191,7 +195,13 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
       title: cw.name,
       handle: cw.colorwaySku.toLowerCase(),
       vendor: cw.vendor,
-      productType: cw.productType,
+      // A mapped category wins over the free text: someone chose the Shopify
+      // spelling on the categories screen, and the text column is 76 values of
+      // Cin7 history. Blank mapping falls through, so nothing regresses.
+      productType:
+        cw.categoryRef?.shopifyProductType ??
+        cw.style.categoryRef?.shopifyProductType ??
+        cw.productType,
       status: cw.status,
       tags,
     },

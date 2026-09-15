@@ -8,6 +8,12 @@ import { PUBLISH_CHANNEL_LABELS } from "@/lib/master/fields";
 
 type Channel = "SHOPIFY" | "LOOM" | "SITOO";
 
+interface Blocked {
+  channel: string;
+  reason: string;
+  waivable: boolean;
+}
+
 interface Progress {
   batchId: string;
   done: boolean;
@@ -28,7 +34,53 @@ export function DraftPushPanel({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
-  const [blocked, setBlocked] = useState<Array<{ channel: string; reason: string }>>([]);
+  const [blocked, setBlocked] = useState<Blocked[]>([]);
+  const [batchId, setBatchId] = useState<string | null>(null);
+
+  // The only gaps an operator may waive. A candle has no care page and no fit
+  // guide and never will, so without this the push is dead on arrival for most
+  // external product — but "no variants" and "no price" are not on this list and
+  // no button reaches them.
+  const waivable = blocked.filter((b) => b.waivable);
+
+  /** Drive a batch to completion in bounded calls. The server never blocks on a
+   *  channel, so the client keeps asking until it says done — that is how a 600s
+   *  Loom job fits inside a 300s function. */
+  async function drive(id: string, dryRun: boolean, endpoint: "run" | "retry", extra: object = {}) {
+    let p: Progress | null = null;
+    for (let i = 0; i < 40; i++) {
+      const res = await fetch(`/api/catalog/push/batch/${id}/${endpoint}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dryRun, ...(i === 0 ? extra : {}) }),
+      }).then((r) => r.json());
+      if (res.error) throw new Error(res.error);
+      p = res.progress;
+      setProgress(p);
+      if (p?.done) break;
+      await new Promise((r) => setTimeout(r, p?.nextPollAfterMs ?? 2000));
+      endpoint = "run"; // the waiver is recorded on the batch; only send it once
+    }
+    return p;
+  }
+
+  async function pushAnyway(dryRun: boolean) {
+    if (!batchId) return;
+    setBusy(true);
+    try {
+      // Every blocked channel, not just Shopify: Loom blocks itself on Shopify
+      // ("waiting on the Shopify push for its inventory ids"), so retrying
+      // Shopify alone would leave Loom stuck behind a block that just cleared.
+      const p = await drive(batchId, dryRun, "retry", { waiveIncomplete: true });
+      setBlocked([]);
+      toast[p?.status === "ok" ? "success" : "error"](`Push ${p?.status ?? "finished"}`);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Push failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function push(dryRun: boolean) {
     setBusy(true);
@@ -40,23 +92,9 @@ export function DraftPushPanel({
       }).then((r) => r.json());
       if (created.error) throw new Error(created.error);
       setBlocked(created.blocked ?? []);
+      setBatchId(created.batchId);
 
-      // Drive it to completion in bounded calls. The server never blocks on a
-      // channel, so the client keeps asking until it says done — that is how a
-      // 600s Loom job fits inside a 300s function.
-      let p: Progress | null = null;
-      for (let i = 0; i < 40; i++) {
-        const res = await fetch(`/api/catalog/push/batch/${created.batchId}/run`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ dryRun }),
-        }).then((r) => r.json());
-        if (res.error) throw new Error(res.error);
-        p = res.progress;
-        setProgress(p);
-        if (p?.done) break;
-        await new Promise((r) => setTimeout(r, p?.nextPollAfterMs ?? 2000));
-      }
+      const p = await drive(created.batchId, dryRun, "run");
       toast[p?.status === "ok" ? "success" : "error"](
         dryRun ? "Dry run finished" : `Push ${p?.status ?? "finished"}`
       );
@@ -98,6 +136,22 @@ export function DraftPushPanel({
               </li>
             ))}
           </ul>
+          {waivable.length ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || !batchId}
+                onClick={() => void pushAnyway(false)}
+              >
+                Push anyway ({waivableReasons(waivable)})
+              </Button>
+              <span className="text-[11px] opacity-80">
+                Recorded on the batch. A product with no variants or no price stays
+                blocked — that is not waivable.
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -117,4 +171,12 @@ export function DraftPushPanel({
       ) : null}
     </div>
   );
+}
+
+/** The distinct gaps being waived, so the button names what it is giving up. */
+function waivableReasons(blocked: Blocked[]): string {
+  const gaps = new Set<string>();
+  for (const b of blocked)
+    for (const g of b.reason.replace(/^missing /, "").split(", ")) gaps.add(g);
+  return `waives ${[...gaps].join(", ")}`;
 }

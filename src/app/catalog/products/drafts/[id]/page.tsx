@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getDraft, DraftNotFoundError } from "@/lib/master/drafts";
 import { listBrands, listSeasons, listManufacturers } from "@/lib/master/queries";
 import { listSizeSystems } from "@/lib/master/size-systems";
+import { listCategoryTree } from "@/lib/master/categories";
 import { prisma } from "@/lib/db";
 import { ProductWizard } from "@/components/catalog/product-wizard/product-wizard";
 
@@ -21,7 +22,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
   if (draft.status === "COMPLETED") redirect(`/catalog/products/drafts/${id}/done`);
   if (draft.status === "DISCARDED") redirect("/catalog/products/drafts");
 
-  const [brandRows, seasons, sizeSystems, manufacturers] = await Promise.all([
+  const [brandRows, seasons, sizeSystems, manufacturers, categoryTree] = await Promise.all([
     prisma.brand.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, isLivid: true, skuToken: true },
@@ -29,7 +30,15 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
     listSeasons(),
     listSizeSystems(),
     listManufacturers(),
+    listCategoryTree(),
   ]);
+
+  // Archived means "never offer this again", so the builder never sees one. A
+  // draft that already holds an archived id keeps it — retiring a category does
+  // not reach back and edit work in progress.
+  const categories = categoryTree
+    .filter((c) => c.active && !c.archived)
+    .map((c) => ({ id: c.id, name: c.name, path: c.path, depth: c.depth }));
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
@@ -60,7 +69,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
         initialPayload={draft.payload}
         initialRevision={draft.revision}
         initialStep={draft.step}
-        options={{ brands: brandRows, seasons, sizeSystems, manufacturers }}
+        options={{ brands: brandRows, seasons, sizeSystems, manufacturers, categories }}
       />
     </main>
   );

@@ -36,3 +36,20 @@ export function toLoomCategory(value: string | null | undefined): string {
   if (!v) return "Uncategorized";
   return TO_LOOM[v.toLowerCase()] ?? v;
 }
+
+/**
+ * Loom's category for a product, preferring the modelled one.
+ *
+ * `toLoomCategory` guesses from free text and is right for the ~4,500 rows that
+ * only ever had free text. Where a Category has been mapped deliberately — the
+ * review screen's whole purpose — that mapping wins, because someone chose it.
+ * The fallback keeps working untouched, so this can be adopted one product at a
+ * time rather than in a backfill.
+ */
+export function loomCategoryFor(
+  ref: { loomCategory: string | null } | null | undefined,
+  fallback: string | null | undefined
+): string {
+  const mapped = ref?.loomCategory?.trim();
+  return mapped ? mapped : toLoomCategory(fallback);
+}

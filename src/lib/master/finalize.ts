@@ -368,6 +368,10 @@ async function writeProduct(
           gender: blank(t.gender),
           unisex: t.unisex,
           category: blank(t.category) ?? "Uncategorized",
+          // Dual-written: the id is authoritative for product created here, the
+          // text keeps every existing consumer working. Retiring the text column
+          // is a later, separate decision.
+          categoryId: blank(t.categoryId),
           brandId,
           hsCode: blank(t.hsCode),
           customsDescription: blank(t.customsDescription),
@@ -399,13 +403,18 @@ async function writeProduct(
       manufacturerId: blank(t.manufacturerId),
       countryOfOrigin: blank(t.countryOfOrigin),
       productType: blank(t.category),
+      categoryId: blank(t.categoryId),
       vendor: p.brand.name,
       // Explicit, never inferred from the SKU. classifyKind reads EXT-VN-* as
       // AGGREGATE (the store-vintage buckets), which is wrong for an individual
       // garment — the MANUAL lock written below is what stops the classifier
       // overruling this later.
       kind: cw.kind ?? p.kind,
-      status: "ACTIVE",
+      // DRAFT, not ACTIVE. A product created here has no description, no
+      // photograph and often no barcode yet — the channel push is what makes it
+      // real, and /catalog/publishing is where it is flipped live deliberately.
+      // The old create path defaulted to DRAFT for the same reason.
+      status: "DRAFT",
     });
 
     entryRows.push({

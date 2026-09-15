@@ -3,13 +3,17 @@
 // customs block + manufacturer, channels, and per-season lifecycle flags.
 import { prisma } from "@/lib/db";
 import { loomMissing } from "@/lib/master/readiness";
-import { toLoomCategory } from "@/lib/master/loom-category";
+import { loomCategoryFor } from "@/lib/master/loom-category";
 
 export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: string) {
   return prisma.colorway.findMany({
     where: { id: { in: colorwayIds } },
     include: {
-      style: true,
+      // The mapped category, at both levels — a colourway may override its
+      // style's. Without these the 93 modelled categories are unreachable from
+      // the feed and every product falls back to free-text guessing.
+      categoryRef: true,
+      style: { include: { categoryRef: true } },
       brand: true,
       manufacturer: true,
       variants: {
@@ -93,7 +97,7 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     name: cw.name,
     brand: cw.brand?.name ?? null,
     color: cw.color ?? null,
-    product_type: toLoomCategory(cw.productType),
+    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType),
     ...customs,
     manufacturer_id: cw.manufacturer
       ? (cw.manufacturer.threadflowId ?? cw.manufacturer.id)
@@ -189,7 +193,7 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     // delivery carries.
     is_core: cw.isCore,
     tags: cw.tags,
-    product_type: toLoomCategory(cw.productType),
+    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType),
     image: cw.seasonImages[0]?.url ?? null,
     ...customs,
     manufacturer_id: manufacturer?.manufacturer_id ?? null,
@@ -337,7 +341,7 @@ export function buildLoomPayloadFromColorways(
       style_name: s.styleName,
       gender: s.gender,
       unisex: s.unisex,
-      category: toLoomCategory(s.category),
+      category: loomCategoryFor(s.categoryRef, s.category),
       colorways: cws.map((cw) => build(cw, archive)),
     };
   });
