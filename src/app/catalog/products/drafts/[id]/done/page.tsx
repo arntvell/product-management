@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { DraftPushPanel } from "@/components/catalog/draft-push-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +29,15 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
       <h1 className="text-2xl font-semibold">Created</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {colorways.length} colourway{colorways.length === 1 ? "" : "s"}, {variants} variants
-        are in the master. Nothing has been pushed to a channel yet — publishing is a
-        separate, retryable step.
+        are in the master. Publishing is a separate, retryable step — the product exists
+        whether or not a channel is reachable.
       </p>
+
+      <DraftPushPanel
+        draftId={id}
+        colorwayIds={draft.createdColorwayIds}
+        channels={draft.channels as ("SHOPIFY" | "LOOM" | "SITOO")[]}
+      />
 
       <div className="mt-6 rounded-md border">
         {colorways.map((c) => (

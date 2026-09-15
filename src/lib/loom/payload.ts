@@ -308,7 +308,16 @@ export function buildLoomPayloadFromColorways(
   seasonCode: string,
   archive?: Set<string>,
   eventId?: string,
-  mode: LoomMode = "full"
+  mode: LoomMode = "full",
+  /**
+   * Appended to the DERIVED event id on a retry.
+   *
+   * A failed Loom job keeps its id on Loom's side, so an identical resend
+   * returns the stale failure rather than running again. A retry after a
+   * *network* failure must keep the derived id so Loom dedupes; a retry after a
+   * *job* failure must change it. Hence a suffix rather than a fresh id.
+   */
+  eventIdSuffix?: string
 ): LoomPayload {
   // Group colorways under their style.
   const build = mode === "data" ? buildRegistryColorway : buildColorway;
@@ -339,7 +348,10 @@ export function buildLoomPayloadFromColorways(
     // Derived from the delivery's contents when not supplied, so the same set
     // of products retried produces the same id. Keyed on the season Loom sees,
     // so the id and the delivery agree about what was sent.
-    event_id: eventId ?? deliveryId(loomSeasonName(seasonCode), colorways, archive),
+    event_id:
+      eventId ??
+      deliveryId(loomSeasonName(seasonCode), colorways, archive) +
+        (eventIdSuffix ? `-${eventIdSuffix}` : ""),
     styles,
   };
 }

@@ -79,6 +79,16 @@ export interface LoomPushOptions {
    * products to be applied again.
    */
   eventId?: string;
+  /**
+   * Appended to the DERIVED delivery id, for a retry after a FAILED job.
+   *
+   * A failed job keeps its id on Loom's side, so an identical resend returns the
+   * stale failure instead of running again. A retry after a *network* failure
+   * must keep the derived id so Loom dedupes it; a retry after a *job* failure
+   * must change it. A suffix distinguishes the two without abandoning the
+   * content-derived id entirely.
+   */
+  eventIdSuffix?: string;
   /** "full" for a whole season, "data" for a targeted update. */
   mode?: LoomMode;
 }
@@ -146,7 +156,14 @@ export async function pushColorwaysToLoom(
   // add more, but cannot send an archived product as published by omission.
   const archive = new Set<string>(opts.archiveColorwayIds ?? []);
   for (const c of sendable) if (c.archived) archive.add(c.id);
-  const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive, opts.eventId, opts.mode);
+  const payload = buildLoomPayloadFromColorways(
+    sendable,
+    seasonCode,
+    archive,
+    opts.eventId,
+    opts.mode,
+    opts.eventIdSuffix
+  );
 
   if (opts.dryRun) {
     // Nothing leaves the process and no ChannelPublication is touched.
