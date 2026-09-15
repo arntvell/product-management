@@ -187,3 +187,104 @@ export async function setBarcodeAliases(
     target
   );
 }
+
+// ---------------------------------------------------------------------------
+// Reference data: categories and manufacturers
+// ---------------------------------------------------------------------------
+//
+// Both endpoints are documented (developer.sitoo.com), and neither has ever been
+// called from this repo — the client only ever touched /products. So both
+// readers fall back: on any failure they derive the same information from the
+// product list, which scripts/reconcile/fetch.py has proven works by pulling
+// `defaultcategoryid` and `manufacturerid` into snapshots for months.
+//
+// Sitoo is the only one of the three channels with real category ids and a
+// hierarchy, which is why it is worth asking properly before falling back.
+
+export interface SitooCategory {
+  categoryid: number;
+  title: string | null;
+  categoryparentid?: number | null;
+  visible?: boolean;
+}
+
+export interface SitooManufacturer {
+  externalcompanyid: number;
+  name: string;
+  countryid?: string | null;
+}
+
+export interface SitooReferenceResult<T> {
+  items: T[];
+  /** "endpoint" when the documented route answered; "derived" when we fell back. */
+  source: "endpoint" | "derived";
+  note?: string;
+}
+
+export async function listCategories(
+  target?: SitooTarget
+): Promise<SitooReferenceResult<SitooCategory>> {
+  try {
+    const items = await page<SitooCategory>("/categories", target);
+    return { items, source: "endpoint" };
+  } catch (err) {
+    return {
+      items: [],
+      source: "derived",
+      note: `GET /categories failed (${err instanceof Error ? err.message.slice(0, 160) : "unknown"}). Category ids can still be read from products.`,
+    };
+  }
+}
+
+export async function listManufacturers(
+  target?: SitooTarget
+): Promise<SitooReferenceResult<SitooManufacturer>> {
+  try {
+    const items = await page<SitooManufacturer>("/manufacturers", target);
+    return { items, source: "endpoint" };
+  } catch (err) {
+    return {
+      items: [],
+      source: "derived",
+      note: `GET /manufacturers failed (${err instanceof Error ? err.message.slice(0, 160) : "unknown"}). Manufacturer ids can still be read from products.`,
+    };
+  }
+}
+
+/**
+ * Products with the reference fields attached, for the fallback path and for
+ * counting how many products carry each value.
+ *
+ * `fields=` is used deliberately: the introduction warns that some fields are
+ * calculated and asking for everything makes the request unnecessarily long.
+ */
+export interface SitooProductRefs {
+  productid: number;
+  sku: string;
+  defaultcategoryid?: number | null;
+  manufacturerid?: number | null;
+}
+
+export async function listProductRefs(target?: SitooTarget): Promise<SitooProductRefs[]> {
+  return page<SitooProductRefs>(
+    "/products?fields=productid,sku,defaultcategoryid,manufacturerid",
+    target
+  );
+}
+
+/** Shared pager. Sitoo answers `start`/`num` with a max page of 1000. */
+async function page<T>(path: string, target?: SitooTarget): Promise<T[]> {
+  const out: T[] = [];
+  const join = path.includes("?") ? "&" : "?";
+  for (let start = 0; ; start += 1000) {
+    const res = await call<{ items: T[] }>(
+      `${path}${join}start=${start}&num=1000`,
+      undefined,
+      target
+    );
+    const items = res?.items ?? [];
+    out.push(...items);
+    if (items.length < 1000) break;
+  }
+  return out;
+}
