@@ -133,6 +133,36 @@ export async function updateBarcode(
 }
 
 /**
+ * Write a SKU.
+ *
+ * Needed because a merge can change the master's spelling while the channel keeps
+ * the old one, and our linker cannot see it: `normalizeSku` uppercases before
+ * comparing, so LIV-Needle-W-L and LIV-NEEDLE-W-L look identical to us and differ
+ * to anything joining on raw text — Pio and the shop stocktake both do.
+ *
+ * Verified against the sandbox on 2026-09-15, same way the barcode write was:
+ *
+ *   PUT /products/{id} with { sku } PATCHES. No populated field was lost.
+ *
+ *   A CASE-ONLY change is accepted — Sitoo does not treat it as a no-op, which
+ *   is the whole point here.
+ *
+ *   `sku: ""` is REJECTED with HTTP 400. A SKU cannot be blanked, only replaced.
+ */
+export async function updateSku(
+  productId: number,
+  sku: string,
+  target?: SitooTarget
+): Promise<void> {
+  if (!sku.trim()) throw new Error("refusing to blank a SKU — Sitoo rejects it anyway");
+  await call(
+    `/products/${productId}`,
+    { method: "PUT", body: JSON.stringify({ sku }) },
+    target
+  );
+}
+
+/**
  * Additional codes that also scan to this product.
  *
  * This is the answer to the store-label problem. Sitoo holds shop-printed codes

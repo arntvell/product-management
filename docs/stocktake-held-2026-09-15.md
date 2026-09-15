@@ -142,3 +142,39 @@ Worth a check after every merge, and there are 69 pairs still queued.
 
 **Fix:** rename those six in Sitoo to the master's spelling. Not done — it is a
 channel write and needs a decision.
+
+---
+
+## The six renamed in Sitoo — 2026-09-15
+
+Verified in the sandbox first, the same way the barcode write was proven on
+12 September, because getting a SKU write wrong costs more than finding out:
+
+| | |
+|---|---|
+| `PUT /products/{id}` with `{ sku }` | **patches** — no populated field lost |
+| A **case-only** change | **accepted**, not treated as a no-op — the whole point here |
+| `sku: ""` | **rejected, HTTP 400.** A SKU can be replaced, never blanked |
+
+Then applied to production, each product read back individually:
+
+```
+11580 LIV-Needle-W-3XL -> LIV-NEEDLE-W-3XL   barcode intact, 32 fields -> 32
+11581 LIV-Needle-W-2XL -> LIV-NEEDLE-W-2XL   ...
+11582 LIV-Needle-W-M   -> LIV-NEEDLE-W-M
+11583 LIV-Needle-W-L   -> LIV-NEEDLE-W-L
+11584 LIV-Needle-W-XL  -> LIV-NEEDLE-W-XL
+11585 LIV-Needle-W-S   -> LIV-NEEDLE-W-S
+```
+
+Whole account after: **14,714 products (delta 0), 0 duplicate barcodes, 0
+duplicate SKUs, 2,912 variant families unchanged.** That check exists because 13
+products disappeared during a push on 12 September and the cause is still unknown.
+
+**Origio and Sitoo now agree exactly on 8,082 of 8,090 linked variants, with zero
+case-only differences.** The remaining 8 are the known set: five `EEXT-PB-BRTH-AM`
+prefix twins and three where the two systems disagree about what a barcode
+identifies, which are decisions rather than renames.
+
+`updateSku` is now in `src/lib/sitoo/client.ts` with those three findings recorded
+against it.
