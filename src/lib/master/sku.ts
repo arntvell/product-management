@@ -291,3 +291,156 @@ export function validateSku(candidate: string, existing: Iterable<string>): SkuV
   }
   return { ok: errors.length === 0, normalized, errors, warnings, matches };
 }
+
+// ---------------------------------------------------------------------------
+// Three-level generation, for the product builder
+// ---------------------------------------------------------------------------
+//
+// buildSku above produces one flat string and is kept for its existing callers.
+// The builder needs the three levels to agree, because the master's structure is
+// Style -> Colorway -> Variant and the SKUs have to mirror it:
+//
+//   styleSku     EXT-PRBT-AVR-VLLGR
+//   colorwaySku  EXT-PRBT-AVR-VLLGR-DRK-BRWN      = styleSku + colour tokens
+//   variantSku   EXT-PRBT-AVR-VLLGR-DRK-BRWN-9.5  = colorwaySku + "-" + size
+//
+// The invariant `variantSku === colorwaySku + "-" + skuToken` is relied on by
+// pio.ts (stem derivation), cin7/import.ts (base/size split) and
+// normalize-size-labels.ts. Nothing may break it — which is why a disambiguating
+// suffix goes on the colorway, before the size, and never after it.
+
+/** Owner prefix. EXT for external brands, LIV for Livid's own production. */
+export type SkuPrefix = "EXT" | "LIV";
+
+export interface StyleSkuInput {
+  prefix: SkuPrefix;
+  /**
+   * The brand's token, when it has one. `Brand.skuToken` exists because the
+   * abbreviation rule cannot reach the spellings the corpus actually uses:
+   * abbreviate("Vintage", 4) is VNTG where the corpus writes VN, and Paraboot is
+   * PB in every one of its rows where the rule gives PRBT.
+   */
+  brandToken?: string | null;
+  /** Fallback when no token is set: abbreviate(name, 4). */
+  brandName?: string | null;
+  style: string;
+  modifiers?: string[];
+}
+
+/**
+ * EXT-PRBT-AVR-VLLGR — prefix, brand token, then one token per style word.
+ *
+ * A Livid SKU omits the brand segment entirely: 8,062 corpus rows are
+ * LIV-<style>-<colour>-<size> with nothing between the prefix and the style.
+ */
+export function buildStyleSku(input: StyleSkuInput): string {
+  const brand =
+    input.prefix === "LIV"
+      ? null
+      : (input.brandToken?.trim().toUpperCase() ||
+        (input.brandName ? abbreviate(input.brandName, 4) : null));
+
+  return normalizeSku(
+    [
+      ...(input.modifiers ?? []).map((m) => m.toUpperCase()),
+      input.prefix,
+      ...(brand ? [brand] : []),
+      ...styleTokens(input.style),
+    ]
+      .filter(Boolean)
+      .join("-")
+  );
+}
+
+/**
+ * styleSku + one token per colourway word.
+ *
+ * The styleSku is passed through VERBATIM and never re-derived. That is roadmap
+ * decision 2.2 made mechanical: existing SKUs are not rewritten, so a new
+ * colourway of an existing style inherits whatever that style is already
+ * called — EXT-PB-BARTH-HOMME included. Re-deriving is exactly how Barnes ended
+ * up as both LIV-BAR and LIV-BRNS.
+ */
+export function buildColorwaySku(styleSku: string, color: string): string {
+  return normalizeSku([normalizeSku(styleSku), ...styleTokens(color)].filter(Boolean).join("-"));
+}
+
+/**
+ * colorwaySku + "-" + the size's token.
+ *
+ * The token is passed through verbatim: a size must never meet `abbreviate`,
+ * which would turn "9.5" into "95" and "OS" into itself only by luck.
+ */
+export function buildVariantSku(colorwaySku: string, skuToken: string): string {
+  const size = skuToken.trim().toUpperCase();
+  if (!size) return normalizeSku(colorwaySku);
+  return normalizeSku(`${normalizeSku(colorwaySku)}-${size}`);
+}
+
+/**
+ * The SKU token for a size.
+ *
+ * 2-D folds to four digits — "32" + "34" -> "3234" — and that is not cosmetic.
+ * `deriveSize` in threadflow/sync.ts and cin7/import.ts both test `/^\d{4}$/`
+ * on the trailing token to recover waist and length, and `parseSku` recognises
+ * `\d{4}` as a size. A "-W32-L32" spelling would make a new 2-D garment
+ * invisible to duplicate detection and to both importers. normalizeSku already
+ * folds the 44 legacy slashed rows (28/34) to the same form.
+ */
+export function sizeSkuToken(entry: { dim1: string; dim2?: string | null }): string {
+  const a = entry.dim1.trim().toUpperCase();
+  const b = entry.dim2?.trim().toUpperCase();
+  return b ? `${a}${b}` : a;
+}
+
+/** Split a name into words and abbreviate each the way the corpus does. */
+function styleTokens(value: string): string[] {
+  return value
+    .split(/[\s/-]+/)
+    .filter(Boolean)
+    .map((w) => abbreviate(w));
+}
+
+/**
+ * One-of-one stock: vintage, where two garments legitimately share a name.
+ *
+ * Six second-hand Tommy Hilfiger shirts in XL are six garments with six SKUs and
+ * one name — they account for 138 of the 166 raw name collisions. The regex has
+ * lived unexported in duplicate-candidates.ts; it belongs here, because the SKU
+ * generator needs the same distinction the duplicate detector does.
+ */
+export function isOneOfOne(sku: string): boolean {
+  return /^(VN-|EXT-VN-)/.test(normalizeSku(sku));
+}
+
+export interface SuffixOptions {
+  /** Highest suffix to try. 49 has never been approached. */
+  max?: number;
+}
+
+/**
+ * Append -2, -3 … until the SKU is free.
+ *
+ * Use this ONLY where two different garments may legitimately generate the same
+ * string — which in this catalogue means one-of-one vintage and nothing else.
+ *
+ * Everywhere else a collision is not a coincidence to route around: a generated
+ * colorwaySku is a pure function of (brand token, style, colour), so if it is
+ * taken then the row that holds it has the same brand, style and colour, and
+ * suffixing would quietly create a second record for one garment. That is the
+ * failure this whole module exists to prevent, so the caller must block instead.
+ */
+export function suffixUntilFree(
+  base: string,
+  isTaken: (candidate: string) => boolean,
+  opts: SuffixOptions = {}
+): string | null {
+  const max = opts.max ?? 49;
+  const normalized = normalizeSku(base);
+  if (!isTaken(normalized)) return normalized;
+  for (let n = 2; n <= max; n++) {
+    const next = `${normalized}-${n}`;
+    if (!isTaken(next)) return next;
+  }
+  return null;
+}
