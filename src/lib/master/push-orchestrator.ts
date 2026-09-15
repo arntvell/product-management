@@ -22,7 +22,6 @@ import { pushColorwaysToLoom } from "@/lib/loom/push";
 import { getLoomJob } from "@/lib/loom/client";
 import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
 import { getSitooCreator, type SitooCreateInput } from "@/lib/sitoo/create";
-import { resolveCustoms } from "./customs-shopify";
 import type { Channel } from "@/generated/prisma/enums";
 
 export type PushChannel = "SHOPIFY" | "LOOM" | "SITOO";

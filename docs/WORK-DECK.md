@@ -87,7 +87,7 @@ every Sitoo write.
 |---|---|---|
 | B1 | **Give Pio the barcode as its join key** | The durable fix. Barcode survived every rename in this cutover; SKU did not. Until then every merge risks stranding central stock. |
 | B2 | **FW26 launch date** | Asked three times and still unknown. It decides whether §C1 jumps the queue. |
-| B3 | **The 38 shop-floor SKUs absent from Sitoo** | They hold stock nobody can ring up. Needs a Sitoo create path, which does not exist. |
+| B3 | **The 38 shop-floor SKUs absent from Sitoo** | They hold stock nobody can ring up. ~~Needs a Sitoo create path, which does not exist.~~ **A create path now exists** — `src/lib/sitoo/create/`, proven against the sandbox. Worklist mode (export, create in the UI, run the linker) unblocks these today; the API path is gated behind `SITOO_CREATE_MODE=api`. |
 | B4 | **3 barcode-identity disputes** | Two systems disagree about what a barcode identifies. Not renames — someone must say which garment owns the code. |
 | B5 | **`VPACK25-*` (40) and `B2B-EPL-*` (23)** | Classified MERCHANDISE, absent from both channels. Probably a `CHANNEL_POLICY` case like imperfects and vintage. |
 | B6 | **422 `VN-ONLN-*` never listed on Shopify** | ~308 units of unlisted sellable vintage. Publish, not retire. |
@@ -148,7 +148,27 @@ Only 5 of the Continuity ones have stock and need allocating — 3 Livid, 2 vint
 one-of-ones. Allocation is a one-way door (`recordIssued`), so it waits on B4's
 external/vintage rule.
 
-### C6 — The builders
+### C6 — The builders · **BUILT, on branch `product-builder`**
+
+> **Done 2026-09-16.** The external-brand builder and its shared spine are
+> implemented and verified. What follows is the original scope; see
+> `docs/product-builder.md` for what each item became.
+>
+> | Was | Now |
+> |---|---|
+> | SKU convention enforced in the create form | `buildStyleSku`/`buildColorwaySku`/`buildVariantSku`; generated, read-only by default, hand-edits flagged. `Brand.skuToken` seeded from what each brand actually writes — **40 of 51 external brands would have been renamed by the rule alone** |
+> | Barcode allocation wired to the UI | Blank by default, paste or CSV round-trip, explicit allocate. The CSV is sorted by size POSITION, not alphabetically |
+> | Colour, fibre, manufacturer, customs fillable | Brand settings page over `BrandTemplate`, inherited by every new product |
+> | Bulk paste, fill a column, apply across rows | Paste a colourway list, fill-down prices, "use the first colourway's sizes for all" |
+>
+> Plus three things that were not on the list and turned out to matter:
+> **size systems** (ordered runs, archived-not-deleted, 2-D sizes spelled as the
+> four digits both importers parse), **categories as a model** (93 created, all
+> 3,966 styles and 4,607 colorways pointed at one, archivable), and **brand
+> identity across channels**.
+>
+> Still open from this section: the **Livid builder** (5.2) and the **vintage
+> builder** (5.4), which remains gated on access control.
 
 The only item that stops any of this recurring.
 
@@ -182,7 +202,7 @@ Sitoo, Shopify and Cin7.
 
 | # | | |
 |---|---|---|
-| D1 | **Auth middleware fails open** | `if (!password) return NextResponse.next()`. `APP_PASSWORD` is set in Production so the app is gated today, but this branch adds writers to Sitoo, Shopify and Loom. A missing variable opens all of them silently. Few lines. |
+| D1 | ~~**Auth middleware fails open**~~ **Fixed** | Production now hard-fails with a 503 when `APP_PASSWORD` is unset, instead of passing every request through. Development still passes through — a local checkout is not a deployment. |
 | D2 | `SITOO_*` absent from Production | The Sitoo writer would be inert after a merge. Useful accident today; a to-do before C7. |
 | D3 | `snapshots/` is gitignored | Every `FieldOwner.evidence` points inside it. The evidence for a decision should outlive one laptop. |
 | D4 | 8 applied migrations | The database is already ahead of production. Additive, so old code is unaffected — the two converge on merge. |

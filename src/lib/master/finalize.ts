@@ -23,11 +23,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import type { Prisma as PrismaTypes } from "@/generated/prisma/client";
-import {
-  parseDraftPayload,
-  type DraftPayloadV1,
-  type DraftColorway,
-} from "./draft-payload";
+import { parseDraftPayload, type DraftPayloadV1 } from "./draft-payload";
 import { normalizeSku, findNearDuplicates, isOneOfOne, type SkuMatch } from "./sku";
 import { loadSkuCorpus, findExactSkuHolders } from "./sku-corpus";
 import { canonical, rejectionReason } from "./barcode";

@@ -17,13 +17,16 @@ export function StepColorways({ payload, update }: StepProps) {
 
   // Show what this style already has, so a duplicate name is visible before it
   // becomes a SKU collision.
+  //
+  // The effect only ever sets state from the fetch. Clearing it synchronously
+  // when the style changes would be a setState in an effect body — a cascading
+  // render — so the "no existing style, nothing to show" case is handled at
+  // render time instead, where it is a pure derivation.
+  const styleId = style?.mode === "existing" ? style.id : null;
   useEffect(() => {
-    if (style?.mode !== "existing") {
-      setExisting([]);
-      return;
-    }
+    if (!styleId) return;
     let cancelled = false;
-    fetch(`/api/catalog/builder/colorways?styleId=${style.id}`)
+    fetch(`/api/catalog/builder/colorways?styleId=${styleId}`)
       .then((r) => r.json())
       .then((j) => {
         if (!cancelled) setExisting(j.colorways ?? []);
@@ -32,11 +35,13 @@ export function StepColorways({ payload, update }: StepProps) {
     return () => {
       cancelled = true;
     };
-  }, [style]);
+  }, [styleId]);
 
   if (!style) return <p className="text-sm text-muted-foreground">Choose a style first.</p>;
 
-  const taken = new Map(existing.map((e) => [e.name.trim().toLowerCase(), e]));
+  // Stale results from a previously-selected style must not leak into this one.
+  const existingHere = styleId ? existing : [];
+  const taken = new Map(existingHere.map((e) => [e.name.trim().toLowerCase(), e]));
 
   function addColorways(names: string[]) {
     const clean = names.map((n) => n.trim()).filter(Boolean);
@@ -82,14 +87,14 @@ export function StepColorways({ payload, update }: StepProps) {
 
   return (
     <div className="space-y-5">
-      {existing.length ? (
+      {existingHere.length ? (
         <div className="rounded-md border bg-muted/30 p-3">
           <div className="text-xs font-medium">
-            {style.styleName} already has {existing.length} colourway
-            {existing.length === 1 ? "" : "s"}
+            {style.styleName} already has {existingHere.length} colourway
+            {existingHere.length === 1 ? "" : "s"}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {existing.map((e) => (
+            {existingHere.map((e) => (
               <span
                 key={e.id}
                 className="rounded border bg-background px-2 py-0.5 text-xs"
