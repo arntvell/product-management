@@ -71,6 +71,18 @@ a run once was, and a retired size still has order history behind it.
 pointing at the survivor — the `merge-colorways.ts` posture, which is why its 21
 merges can still be explained.
 
+**Category is dual-written.** `categoryId` is authoritative for product created
+here; the free-text `Style.category` / `Colorway.productType` columns keep being
+written so every existing consumer works unchanged. Outbound, the mapping wins
+and the text is the fallback: `loomCategoryFor(categoryRef, text)` and
+`categoryRef.shopifyProductType ?? text` in the Shopify preview. That is what
+lets the ~4,500 text-only rows stay exactly as they are.
+
+**A brand default fills, it never overwrites.** Selecting a brand merges its
+`BrandTemplate` into the draft — empty fields only, because a typed value was
+meant. Channels are the exception: a configured set replaces the default set,
+since a set has no "empty field" to fill.
+
 ---
 
 ## Creating is not publishing
@@ -100,6 +112,27 @@ configuration fact — `SITOO_*` is absent in Production); Sitoo in worklist mod
 is **SKIPPED** (nothing was written, so claiming OK would be an unobserved
 success); Shopify readiness gaps are **BLOCKED** with a waiver offered, never
 waived silently — a candle has no care page or fit guide.
+
+The waiver is recorded on the **batch**, not passed per call, because it is a
+decision about this product rather than about this attempt: a resume has to
+honour it too. `createPushBatch` marks each block `waivable`, and only the soft
+merchandising gaps are — no variants and no price are not on that list and no
+button reaches them.
+
+**Loom submits and confirms in separate invocations.** `submitLoom` passes
+`skipJobWait`, persists `jobId` and leaves the item **AWAITING_JOB**;
+`confirmLoom` makes one `getLoomJob` call per invocation. A crash mid-poll then
+resumes by asking Loom about that job instead of re-sending a delivery it may
+already be running. `loomIdentityPushedAt` is stamped on a **finished** job, not
+on acceptance — and a job that fails after acceptance takes its
+`ChannelPublication` back, because the 26 August failure was exactly the shape of
+a row claiming a push that never landed.
+
+**Product is born `DRAFT`.** It has no description, no photograph and often no
+barcode; with the waiver above, ACTIVE would put it on the storefront on the
+first push. Going live is a decision taken on `/catalog/publishing`. Adoption is
+safe either way — `push-shopify` refuses to move a live product to DRAFT and
+warns instead.
 
 ---
 
@@ -175,6 +208,11 @@ live products is a decision. The ladder is 1 → 50 → 250s → then
 Birkenstock is 53% BKST with BS on 28 rows, Subu is 31% SUBE. A null token means
 the rule applies; picking the plurality would be a guess dressed as a
 measurement.
+
+**The Loom submit/confirm split is unverified against a live channel.** So are
+the Shopify `inventoryItem { id }` capture, `recordShopifyVariantRefs`, and the
+enriched registry payload. All three have been dry-run and none has seen a real
+channel response — deliberately, since they write to production systems.
 
 **No actor identity.** Everything is attributed to `FieldOwner.authority`, not a
 person, and drafts are shared. Roles are step 0 for the vintage builder.
