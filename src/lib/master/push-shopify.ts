@@ -14,6 +14,12 @@ import {
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
 import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
+import {
+  adoptExistingShopifyProduct,
+  recordShopifyVariantRefs,
+  type AdoptionRoute,
+  type VariantRefResult,
+} from "@/lib/shopify/adopt";
 
 // Fetch the live product's fields we must MERGE with (not overwrite): tags a
 // merchant added in Shopify admin, and current publish status.
@@ -111,7 +117,16 @@ interface ProductSetResult {
       id: string;
       handle: string;
       status: string;
-      variants: { edges: { node: { id: string; sku: string; price: string } }[] };
+      variants: {
+        edges: {
+          node: {
+            id: string;
+            sku: string | null;
+            barcode: string | null;
+            inventoryItem: { id: string } | null;
+          };
+        }[];
+      };
     } | null;
     userErrors: { field: string[]; message: string }[];
   };
@@ -125,6 +140,10 @@ export interface PushResult {
   metafields: number;
   warnings: string[];
   adminUrl: string;
+  /** Set when a product we thought was new turned out to already exist. */
+  adopted?: AdoptionRoute;
+  /** Per-variant identity recorded from the response. */
+  variantRefs?: VariantRefResult;
 }
 
 export async function pushColorwayToShopify(
@@ -149,8 +168,22 @@ export async function pushColorwayToShopify(
   if (!cw) throw new Error("Colorway not found");
   const preview = buildShopifyPreview(cw);
 
-  const existing = cw.publications.find((p) => p.channel === "SHOPIFY");
-  const action: "create" | "update" = existing?.externalId ? "update" : "create";
+  // Never create blind. ChannelPublication is OUR record of what Shopify holds,
+  // and a crash between productSet returning and the publication write leaves
+  // Shopify with a product we have no row for — at which point this branch would
+  // say "create" and make a second one. Ask Shopify instead.
+  const publication = cw.publications.find((p) => p.channel === "SHOPIFY");
+  let externalId = publication?.externalId ?? null;
+  let adopted: AdoptionRoute | undefined;
+  if (!externalId) {
+    const found = await adoptExistingShopifyProduct(id);
+    if (found) {
+      externalId = found.productGid;
+      adopted = found.via;
+    }
+  }
+  const existing = externalId ? { externalId } : null;
+  const action: "create" | "update" = externalId ? "update" : "create";
 
   // --- Readiness gate: never push a product that can't publish correctly. ---
   const hasVariants = preview.variants.length > 0;
@@ -181,6 +214,11 @@ export async function pushColorwayToShopify(
     );
 
   const warnings: string[] = [];
+  if (adopted)
+    warnings.push(
+      `Shopify already held this product (found by ${adopted}) — updated it instead of creating a second one. ` +
+        `The master's publication record was missing; it has been repaired.`
+    );
   if (!seasonCode)
     warnings.push("Pushed without a season — price is not season-scoped; verify it's correct.");
   const metafields = await buildMetafields(cw, warnings);
@@ -331,6 +369,34 @@ export async function pushColorwayToShopify(
   const product = res.productSet?.product;
   if (!product) throw new Error("productSet returned no product");
 
+  // Identity first, before the metafield tidy-up below — a failure there must
+  // not cost us the variant and inventory-item ids. Until now these rows came
+  // only from the linker, so a freshly created product had no InventoryItem gid
+  // until someone remembered to run it, and Loom's registry joins on that gid.
+  let variantRefs: VariantRefResult | undefined;
+  try {
+    variantRefs = await recordShopifyVariantRefs(
+      id,
+      product.variants.edges.map((e) => e.node)
+    );
+    if (variantRefs.unmatched.length)
+      warnings.push(
+        `Shopify returned ${variantRefs.unmatched.length} variant SKU(s) the master does not hold: ${variantRefs.unmatched.join(", ")}.`
+      );
+    if (variantRefs.missing.length)
+      warnings.push(
+        `Shopify did not return ${variantRefs.missing.length} master variant(s): ${variantRefs.missing.join(", ")}.`
+      );
+    if (variantRefs.linked && !variantRefs.inventoryLinked)
+      warnings.push(
+        "No InventoryItem ids came back — Loom's stock registry has nothing to join on for this product."
+      );
+  } catch (err) {
+    warnings.push(
+      `Could not record Shopify variant identity: ${err instanceof Error ? err.message : String(err)}. Run the Shopify linker.`
+    );
+  }
+
   // Clear metafields the user emptied in master (productSet only upserts the
   // keys it's given; it never removes omitted ones). Skip keys we just set.
   // Only meaningful on update — a fresh create has nothing to delete — and only
@@ -389,6 +455,8 @@ export async function pushColorwayToShopify(
     metafields: metafields.length,
     warnings,
     adminUrl: `https://${store}/admin/products/${numericId}`,
+    ...(adopted ? { adopted } : {}),
+    ...(variantRefs ? { variantRefs } : {}),
   };
 }
 

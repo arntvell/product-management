@@ -135,8 +135,11 @@ export const PRODUCT_SET_MUTATION = `
         id
         handle
         status
-        variants(first: 100) {
-          edges { node { id sku price } }
+        variants(first: 250) {
+          # inventoryItem is what stock moves against, and it is a DIFFERENT
+          # object from the variant. Loom's registry joins on it, so a create
+          # that does not return it leaves the stock pipeline without its key.
+          edges { node { id sku barcode inventoryItem { id } } }
         }
       }
       userErrors {
