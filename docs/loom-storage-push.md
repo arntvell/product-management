@@ -42,9 +42,15 @@ reconcile a scan"* — and not one of these 67 carries a barcode. Under the rule
 written every row arrived with `variants: []`: a product Loom cannot hold stock
 against, which is the one thing they were being sent for.
 
-`be5e199` exempts `kind = CONSUMABLE` from that filter. Scoped deliberately —
-merchandise keeps the gate. These are counted by hand on a shelf and never
-scanned at a till, so no scan will ever need to reconcile against them.
+`be5e199` exempts `kind = CONSUMABLE` from that filter. Merchandise keeps the
+gate. These are counted by hand on a shelf and never scanned at a till, so no
+scan will ever need to reconcile against them.
+
+The exemption is keyed on the kind, so it is **wider than these 67**: the
+`Fitguide`, `Non-inventory`, `Shopify` and `SAVED` categories also classify as
+CONSUMABLE, and they will now pass the barcode gate on any future registry push.
+The same argument holds for them, but the archive full push deliberately held
+unbarcoded rows back — so this is a rule relaxed, not a special case granted.
 
 ## Worth knowing
 

@@ -130,6 +130,12 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     // the rule to them drops their only variant, and Loom receives a product that
     // cannot hold stock at all — which defeats the point of sending them. They
     // are not merchandise, so no scan will ever need to reconcile against them.
+    //
+    // The exemption is keyed on the kind, so it reaches every CONSUMABLE — the
+    // Fitguide, Non-inventory, Shopify and SAVED categories map there too
+    // (NON_MERCH_CATEGORIES). That is deliberate: the same argument holds for
+    // all of them. It is wider than "the STORAGE-* rows", which is what someone
+    // reading only the paragraph above would assume.
     variants: cw.variants
       .filter((v) => (v.barcode && v.barcode.trim()) || cw.kind === "CONSUMABLE")
       .map((v) => {
