@@ -22,6 +22,13 @@ model Brand {
   name      String         @unique // "Livid", external brand names
   isLivid   Boolean        @default(false)
   gender    String? // default gender for the brand's styles
+  // The token this brand uses in SKUs, when the abbreviation rule does not
+  // produce it. Required, not decorative: abbreviate("Vintage", 4) gives VNTG,
+  // but the corpus writes EXT-VN-; Paraboot is PB in every one of its rows
+  // while the rule gives PRBT. Null means derive. Seed it from what a brand
+  // already uses, never a guess — a new style SKU is never rewritten
+  // (roadmap 2.2), so a wrong token diverges that brand permanently.
+  skuToken  String?
   styles    Style[]
   colorways Colorway[]
   template  BrandTemplate?
@@ -48,23 +55,84 @@ model Manufacturer {
 // (footwear, accessories, scents, home…) reuse a saved template so only the
 // per-product bits are entered; customs defaults here flow to Loom.
 model BrandTemplate {
-  id                 String        @id @default(cuid())
-  brandId            String        @unique
-  brand              Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  category           String?
-  gender             String?
-  unisex             Boolean       @default(false)
-  channels           Channel[]     @default([])
-  hsCode             String?
-  customsDescription String?
-  weightKg           Decimal?      @db.Decimal(8, 3)
-  fiberComposition   String?
-  countryOfOrigin    String?
-  manufacturerId     String?
-  manufacturer       Manufacturer? @relation(fields: [manufacturerId], references: [id])
-  sizes              String[]      @default([]) // default size set, e.g. XS,S,M,L,XL or 39-45
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                  String        @id @default(cuid())
+  brandId             String        @unique
+  brand               Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category            String?
+  gender              String?
+  unisex              Boolean       @default(false)
+  channels            Channel[]     @default([])
+  hsCode              String?
+  customsDescription  String?
+  weightKg            Decimal?      @db.Decimal(8, 3)
+  fiberComposition    String?
+  countryOfOrigin     String?
+  manufacturerId      String?
+  manufacturer        Manufacturer? @relation(fields: [manufacturerId], references: [id])
+  // DEPRECATED — superseded by defaultSizeSystem. Kept populated so the old
+  // brand-product-builder and buildProductsForBrand keep working through the
+  // cutover; read through resolveBrandSizes(). Drop the column only once every
+  // row is empty.
+  sizes               String[]      @default([]) // default size set, e.g. XS,S,M,L,XL or 39-45
+  defaultSizeSystemId String?
+  defaultSizeSystem   SizeSystem?   @relation(fields: [defaultSizeSystemId], references: [id])
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Size systems
+// ---------------------------------------------------------------------------
+
+/// A named, ordered size run — "EU shoes 39-46", "Alpha", "One size",
+/// "Jeans W/L". Editable after creation: a size is ARCHIVED, never deleted, and
+/// `Variant` stores plain strings with no FK here, so neither archiving nor
+/// deleting an entry can orphan a garment that was minted from it.
+model SizeSystem {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  kind      SizeSystemKind    @default(ONE_D)
+  note      String?
+  archived  Boolean           @default(false)
+  entries   SizeSystemEntry[]
+  templates BrandTemplate[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+enum SizeSystemKind {
+  ONE_D // S/M/L, 39..46, 9..12.5
+  TWO_D // waist x length
+  ONE_SIZE // exactly one entry, OS
+}
+
+/// One size. Carries exactly what a Variant would, PLUS the token the SKU uses —
+/// and the difference is load-bearing:
+///
+///   sizeLabel "W32/L34"  dim1 "32"  dim2 "34"  skuToken "3234"
+///   sizeLabel "9.5"      dim1 "9.5" dim2 null  skuToken "9.5"
+///
+/// 2-D sizes MUST spell as a trailing four-digit token. Both importers parse
+/// `/^\d{4}$/` as waist+length (threadflow/sync.ts deriveSize, cin7/import.ts)
+/// and parseSku treats it as a size; `-W32-L32` would make a new 2-D garment
+/// invisible to duplicate detection and to both importers. The token is stored
+/// rather than derived because abbreviate("9.5") returns "95", so a size must
+/// never pass through it, and because one odd size can then be corrected
+/// without a code change.
+model SizeSystemEntry {
+  id           String     @id @default(cuid())
+  sizeSystemId String
+  sizeSystem   SizeSystem @relation(fields: [sizeSystemId], references: [id], onDelete: Cascade)
+  sizeLabel    String
+  dim1         String
+  dim2         String?
+  skuToken     String
+  position     Int
+  archived     Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@unique([sizeSystemId, sizeLabel])
+  @@index([sizeSystemId, position])
 }
 
 model Season {
@@ -388,11 +456,11 @@ model BarcodeAllocation {
 // (one record per SKU) or for the Loom stock registry (movements are per
 // variant). Seeded by matching, never by creating.
 model VariantChannelRef {
-  id             String    @id @default(cuid())
-  variantId      String
-  variant        Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  channel        Channel
-  externalId     String // Sitoo productid, Loom variant key
+  id                  String    @id @default(cuid())
+  variantId           String
+  variant             Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  channel             Channel
+  externalId          String // Sitoo productid, Loom variant key
   /**
    * What the channel calls this garment, when that differs from the master.
    * Null means the spellings agree. A value is an ALIAS, not a second identity:
@@ -403,28 +471,30 @@ model VariantChannelRef {
    * the name the channel uses has to stay known until the master asserts its
    * own and the alias becomes history.
    */
-  externalSku    String?
+  externalSku         String?
   /**
    * A SECOND id the channel uses for the same garment, when identity and stock
    * are different objects there.
-   *
    * Shopify is the case this exists for. `externalId` holds the ProductVariant
    * gid, which is what a listing is; inventory moves against an InventoryItem,
    * which is a different gid entirely:
-   *   externalId          gid://shopify/ProductVariant/42591569969401
-   *   externalInventoryId gid://shopify/InventoryItem/44686936178937
+   * externalId          gid://shopify/ProductVariant/42591569969401
+   * externalInventoryId gid://shopify/InventoryItem/44686936178937
    * Loom's stock registry joins on the inventory object, so a registry that
    * carried only the ProductVariant would be reconciling against the wrong one.
-   *
    * Null where the channel has no such split (Sitoo), or where we simply have
    * no link — the registry falls back to barcode there.
    */
   externalInventoryId String?
-  lastPushedAt   DateTime?
-  lastPushStatus String?
+  lastPushedAt        DateTime?
+  lastPushStatus      String?
 
   @@unique([variantId, channel])
   @@index([channel, externalId])
+  // Declared to match reality: migration 20260911160000 created this index and
+  // the model never named it, so every `migrate diff` since has reported drift
+  // and would have offered to DROP it. No DDL — the index already exists.
+  @@index([externalSku])
 }
 
 enum Source {
@@ -447,6 +517,8 @@ enum EntryOrigin {
 enum PriceType {
   MSRP
   WHOLESALE
+  COST // what Livid pays. Entered in the builder; season-scoped like the rest,
+  //      because a re-buy can land at a different cost.
 }
 
 enum ImageSlot {
