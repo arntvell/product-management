@@ -123,8 +123,15 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     // that turned out to belong to the white shoe. Fixing one row's identity must
     // not cost its siblings theirs. A variant with no barcode cannot reconcile a
     // scan, so it is omitted rather than sent empty.
+    //
+    // CONSUMABLE is the one exemption. The 67 STORAGE-* records — packaging,
+    // hangtags, shop lighting, swatches, tools — are counted by hand on a shelf,
+    // never scanned at a till, and not one of them carries a barcode. Applying
+    // the rule to them drops their only variant, and Loom receives a product that
+    // cannot hold stock at all — which defeats the point of sending them. They
+    // are not merchandise, so no scan will ever need to reconcile against them.
     variants: cw.variants
-      .filter((v) => v.barcode && v.barcode.trim())
+      .filter((v) => (v.barcode && v.barcode.trim()) || cw.kind === "CONSUMABLE")
       .map((v) => {
       const shopify = v.channelRefs.find((r) => r.channel === "SHOPIFY");
       const sitoo = v.channelRefs.find((r) => r.channel === "SITOO");
