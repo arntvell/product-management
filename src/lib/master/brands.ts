@@ -576,3 +576,80 @@ export async function backfillNormalizedNames(): Promise<number> {
   }
   return n;
 }
+
+export interface ExactLinkResult {
+  linked: number;
+  /** Rows whose name matches nothing in Origio — the real review queue. */
+  unmatched: { system: string; externalName: string; externalId: string | null; productCount: number }[];
+  /** Rows whose name matches more than one brand. Never auto-linked. */
+  ambiguous: { system: string; externalName: string; candidates: string[] }[];
+  dryRun: boolean;
+}
+
+/**
+ * Link every pulled channel value that matches exactly one Origio brand.
+ *
+ * The review queue was 137 rows and 108 of them were the same name spelled the
+ * same way — a clerical majority that made the 29 real decisions invisible, and
+ * in practice meant nobody did any of it. So the unambiguous ones are confirmed
+ * in bulk and what is left is only what needs a person.
+ *
+ * "Exactly one" is doing the work: a name matching two brands is the
+ * `P.F. Candle` / `P.F. Candles` case, which is a merge decision, not a link.
+ * Those are reported and skipped. `nearlySame` suggestions are deliberately NOT
+ * accepted here — a warning tier that auto-applies is not a warning.
+ *
+ * This writes nothing to any channel. It records which external object each
+ * brand already IS, which is what stops a second one being created.
+ */
+export async function linkExactBrandRefs(
+  opts: { dryRun?: boolean } = {}
+): Promise<ExactLinkResult> {
+  const [refs, brands] = await Promise.all([
+    db.brandChannelRef.findMany({ where: { brandId: null, role: { not: "IGNORE" } } }),
+    db.brand.findMany({ where: { mergedIntoId: null }, select: { id: true, name: true } }),
+  ]);
+
+  const byKey = new Map<string, { id: string; name: string }[]>();
+  for (const b of brands) {
+    const k = normalizeBrandName(b.name);
+    byKey.set(k, [...(byKey.get(k) ?? []), b]);
+  }
+
+  const result: ExactLinkResult = {
+    linked: 0,
+    unmatched: [],
+    ambiguous: [],
+    dryRun: Boolean(opts.dryRun),
+  };
+  const toLink: { id: string; brandId: string }[] = [];
+
+  for (const r of refs) {
+    const hits = byKey.get(normalizeBrandName(r.externalName)) ?? [];
+    if (hits.length === 1) toLink.push({ id: r.id, brandId: hits[0].id });
+    else if (hits.length > 1)
+      result.ambiguous.push({
+        system: r.system,
+        externalName: r.externalName,
+        candidates: hits.map((h) => h.name),
+      });
+    else
+      result.unmatched.push({
+        system: r.system,
+        externalName: r.externalName,
+        externalId: r.externalId,
+        productCount: r.productCount,
+      });
+  }
+
+  if (!opts.dryRun) {
+    // Grouped by brand so this is one statement per brand rather than per row —
+    // db-bulk.ts documents four production incidents caused by the other shape.
+    const byBrand = new Map<string, string[]>();
+    for (const t of toLink) byBrand.set(t.brandId, [...(byBrand.get(t.brandId) ?? []), t.id]);
+    for (const [brandId, ids] of byBrand)
+      await db.brandChannelRef.updateMany({ where: { id: { in: ids } }, data: { brandId } });
+  }
+  result.linked = toLink.length;
+  return result;
+}

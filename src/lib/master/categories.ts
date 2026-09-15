@@ -153,12 +153,26 @@ export async function mapExternalValue(mapId: string, categoryId: string | null)
     data: { categoryId },
   });
 
-  // Mapping a Sitoo value teaches us its id, which is the one outbound value we
-  // cannot derive from a name.
+  // Mapping teaches the outbound value the channel actually uses. Sitoo's is an
+  // id we cannot derive from a name; Loom's is its own vocabulary word, which
+  // `toLoomCategory` can only GUESS at from our text. Without this the Loom half
+  // of the queue was inert — a person could map all 11 and nothing would change,
+  // which is worse than not offering it.
+  //
+  // Shopify is deliberately absent: `shopifyProductType` is already set and is
+  // what live products send today, so writing Shopify's spelling here would
+  // silently re-type 4,584 products on their next push. That is a deliberate
+  // edit on the category screen, not a side effect of filing a review row.
   if (categoryId && map.system === "SITOO") {
     await prisma.category.update({
       where: { id: categoryId },
       data: { sitooCategoryId: map.externalKey },
+    });
+  }
+  if (categoryId && map.system === "LOOM" && LOOM_CATEGORIES.includes(map.externalName as never)) {
+    await prisma.category.update({
+      where: { id: categoryId },
+      data: { loomCategory: map.externalName },
     });
   }
 }
@@ -333,3 +347,199 @@ export async function adoptOrigioCategories(
 }
 
 export { normalizeCategoryKey };
+
+export interface ExactCategoryLinkResult {
+  linked: Record<string, number>;
+  sitooIds: number;
+  loomWords: number;
+  unmatched: { system: string; externalName: string; externalKey: string; productCount: number }[];
+  ambiguous: { system: string; externalName: string; candidates: string[] }[];
+  /** One Origio category matched by SEVERAL values of the same channel — a
+   *  duplicate inside that channel. The busiest wins; the rest are reported so
+   *  somebody can merge them at the source. */
+  collisions: { system: string; category: string; kept: string; dropped: string[] }[];
+  dryRun: boolean;
+}
+
+/**
+ * Link every pulled category value that matches exactly one Origio category.
+ *
+ * Same argument as `linkExactBrandRefs`, and the same limit — "exactly one" or
+ * it goes to a person. What makes this one matter more is the Sitoo id: 83 Sitoo
+ * categories were pulled and not one id was stored, so `categoryRef.sitooCategoryId`
+ * resolved to null for every product and a Sitoo create carried no category at
+ * all. That is the duplicate this model exists to prevent.
+ *
+ * Outbound-safe by construction: linking sets Sitoo's id and Loom's own word,
+ * and never touches `shopifyProductType`, which live products already send.
+ */
+export async function linkExactCategoryValues(
+  opts: { dryRun?: boolean } = {}
+): Promise<ExactCategoryLinkResult> {
+  const [rows, cats] = await Promise.all([
+    prisma.categoryChannelMap.findMany({ where: { categoryId: null } }),
+    prisma.category.findMany({ where: { archived: false }, select: { id: true, name: true } }),
+  ]);
+
+  const byKey = new Map<string, { id: string; name: string }[]>();
+  for (const c of cats) {
+    const k = normalizeCategoryKey(c.name);
+    byKey.set(k, [...(byKey.get(k) ?? []), c]);
+  }
+
+  const result: ExactCategoryLinkResult = {
+    linked: {},
+    sitooIds: 0,
+    loomWords: 0,
+    unmatched: [],
+    ambiguous: [],
+    collisions: [],
+    dryRun: Boolean(opts.dryRun),
+  };
+  const matched: { row: (typeof rows)[number]; categoryId: string }[] = [];
+
+  for (const r of rows) {
+    const hits = byKey.get(normalizeCategoryKey(r.externalName)) ?? [];
+    if (hits.length === 1) {
+      matched.push({ row: r, categoryId: hits[0].id });
+      result.linked[r.system] = (result.linked[r.system] ?? 0) + 1;
+      if (r.system === "SITOO") result.sitooIds++;
+      if (r.system === "LOOM" && LOOM_CATEGORIES.includes(r.externalName as never))
+        result.loomWords++;
+    } else if (hits.length > 1)
+      result.ambiguous.push({
+        system: r.system,
+        externalName: r.externalName,
+        candidates: hits.map((h) => h.name),
+      });
+    else
+      result.unmatched.push({
+        system: r.system,
+        externalName: r.externalName,
+        externalKey: r.externalKey,
+        productCount: r.productCount,
+      });
+  }
+
+  // A channel can hold two categories of the same name — Sitoo has two called
+  // "Bottoms", ids 6 and 24. Both match one Origio category, and only one id can
+  // be the outbound value. Take the one with the most product behind it, and
+  // REPORT the rest: an arbitrary winner here would be a silent decision about
+  // where new product lands, and the duplicate belongs on someone's list.
+  const winner = new Map<string, (typeof rows)[number]>();
+  for (const m of matched) {
+    const key = `${m.row.system}:${m.categoryId}`;
+    const held = winner.get(key);
+    if (!held || m.row.productCount > held.productCount) winner.set(key, m.row);
+  }
+  const byKeyRows = new Map<string, (typeof rows)[number][]>();
+  for (const m of matched) {
+    const key = `${m.row.system}:${m.categoryId}`;
+    byKeyRows.set(key, [...(byKeyRows.get(key) ?? []), m.row]);
+  }
+  const catName = new Map(cats.map((c) => [c.id, c.name]));
+  for (const [key, group] of byKeyRows) {
+    if (group.length < 2) continue;
+    const kept = winner.get(key)!;
+    result.collisions.push({
+      system: group[0].system,
+      category: catName.get(key.split(":")[1]) ?? key,
+      kept: `${kept.externalName} [${kept.externalKey}] (${kept.productCount} products)`,
+      dropped: group
+        .filter((g) => g.id !== kept.id)
+        .map((g) => `${g.externalName} [${g.externalKey}] (${g.productCount} products)`),
+    });
+  }
+
+  if (!opts.dryRun) {
+    const byCategory = new Map<string, string[]>();
+    for (const m of matched)
+      byCategory.set(m.categoryId, [...(byCategory.get(m.categoryId) ?? []), m.row.id]);
+    for (const [categoryId, ids] of byCategory)
+      await prisma.categoryChannelMap.updateMany({ where: { id: { in: ids } }, data: { categoryId } });
+
+    // Only the winning row per (system, category) writes an outbound value.
+    for (const [key, row] of winner) {
+      const categoryId = key.split(":")[1];
+      if (row.system === "SITOO")
+        await prisma.category.update({
+          where: { id: categoryId },
+          data: { sitooCategoryId: row.externalKey },
+        });
+      if (row.system === "LOOM" && LOOM_CATEGORIES.includes(row.externalName as never))
+        await prisma.category.update({
+          where: { id: categoryId },
+          data: { loomCategory: row.externalName },
+        });
+    }
+  }
+  return result;
+}
+
+/**
+ * Recompute each category's outbound Sitoo id and Loom word from the links that
+ * already exist, busiest channel row wins.
+ *
+ * Separate from `linkExactCategoryValues` because that one only ever looks at
+ * UNLINKED rows — so once a wrong winner is stored, re-running it is a no-op and
+ * the wrong value is stuck. This is the repair, and it is idempotent: run it any
+ * time the links change and the outbound values follow.
+ */
+export async function reconcileCategoryOutbound(
+  opts: { dryRun?: boolean } = {}
+): Promise<{ changed: { category: string; system: string; from: string | null; to: string }[] }> {
+  const rows = await prisma.categoryChannelMap.findMany({
+    where: { categoryId: { not: null }, system: { in: ["SITOO", "LOOM"] } },
+    select: {
+      system: true,
+      externalKey: true,
+      externalName: true,
+      productCount: true,
+      categoryId: true,
+      category: { select: { name: true, sitooCategoryId: true, loomCategory: true } },
+    },
+  });
+
+  const winner = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) {
+    const key = `${r.system}:${r.categoryId}`;
+    const held = winner.get(key);
+    if (!held || r.productCount > held.productCount) winner.set(key, r);
+  }
+
+  const changed: { category: string; system: string; from: string | null; to: string }[] = [];
+  for (const [key, row] of winner) {
+    const categoryId = key.split(":")[1];
+    if (row.system === "SITOO" && row.category!.sitooCategoryId !== row.externalKey) {
+      changed.push({
+        category: row.category!.name,
+        system: "SITOO",
+        from: row.category!.sitooCategoryId,
+        to: row.externalKey,
+      });
+      if (!opts.dryRun)
+        await prisma.category.update({
+          where: { id: categoryId },
+          data: { sitooCategoryId: row.externalKey },
+        });
+    }
+    if (
+      row.system === "LOOM" &&
+      LOOM_CATEGORIES.includes(row.externalName as never) &&
+      row.category!.loomCategory !== row.externalName
+    ) {
+      changed.push({
+        category: row.category!.name,
+        system: "LOOM",
+        from: row.category!.loomCategory,
+        to: row.externalName,
+      });
+      if (!opts.dryRun)
+        await prisma.category.update({
+          where: { id: categoryId },
+          data: { loomCategory: row.externalName },
+        });
+    }
+  }
+  return { changed };
+}

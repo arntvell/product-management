@@ -20,6 +20,43 @@ export function CategoryManager({
   const [q, setQ] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [mergeFrom, setMergeFrom] = useState<CategoryNode | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  /**
+   * Map every pulled value whose name matches exactly one category, and take the
+   * channel's own outbound value with it.
+   *
+   * The Sitoo id is the point: 83 Sitoo categories were pulled and none of their
+   * ids were stored, so `sitooCategoryId` was null for every product and a Sitoo
+   * create carried no category — which is how a duplicate category gets made at
+   * the far end. Shopify's product type is deliberately NOT overwritten here;
+   * live products already send it, and re-typing 4,584 of them is a deliberate
+   * edit, not a side effect of filing a review row.
+   */
+  async function linkExact() {
+    setBusy(true);
+    try {
+      const { result, reconciled } = await post("/api/catalog/categories/map", {
+        action: "link-exact",
+      });
+      const n = Object.values(result.linked as Record<string, number>).reduce(
+        (a: number, b: number) => a + b,
+        0
+      );
+      toast.success(
+        `Mapped ${n} — ${result.sitooIds} Sitoo ids, ${result.loomWords} Loom categories. ` +
+          `${result.unmatched.length} need a decision` +
+          (reconciled.changed.length ? `, ${reconciled.changed.length} corrected` : "")
+      );
+      for (const c of result.collisions as { system: string; category: string; kept: string }[])
+        toast.warning(`${c.system} has more than one "${c.category}" — kept ${c.kept}`);
+      start(() => router.refresh());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk map failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const live = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -64,9 +101,14 @@ export function CategoryManager({
 
       {unmapped.length ? (
         <section>
-          <h2 className="text-sm font-semibold">
-            Waiting to be mapped ({unmapped.length})
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">
+              Waiting to be mapped ({unmapped.length})
+            </h2>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void linkExact()}>
+              {busy ? "Mapping…" : "Map all exact matches"}
+            </Button>
+          </div>
           <p className="mt-1 text-xs text-muted-foreground">
             Values seen in a channel that do not yet resolve to a category. Most-used first
             — mapping the top of this list covers most of the catalogue.

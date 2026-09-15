@@ -22,6 +22,31 @@ export function BrandIdentityManager({
   const router = useRouter();
   const [, start] = useTransition();
   const [showAll, setShowAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  /**
+   * Confirm every row whose name matches exactly one brand.
+   *
+   * The queue was 137 rows, 108 of them the same name spelled the same way. A
+   * one-click-per-row review of a 79% clerical queue is a review nobody does —
+   * and until it is done, no brand knows its Sitoo manufacturer id, so a create
+   * would make a second one. Anything ambiguous is left alone.
+   */
+  async function linkExact() {
+    setBusy(true);
+    try {
+      const { result } = await post("/api/catalog/brands/refs", { action: "link-exact" });
+      toast.success(
+        `Linked ${result.linked}. ${result.unmatched.length} need a decision` +
+          (result.ambiguous.length ? `, ${result.ambiguous.length} ambiguous` : "")
+      );
+      start(() => router.refresh());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk link failed");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function post(path: string, body: unknown) {
     const res = await fetch(path, {
@@ -109,9 +134,16 @@ export function BrandIdentityManager({
       ) : null}
 
       <section>
-        <h2 className="text-sm font-semibold">
-          Channel spellings waiting to be linked ({unlinked.length})
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold">
+            Channel spellings waiting to be linked ({unlinked.length})
+          </h2>
+          {unlinked.some((r) => r.suggestions.some((x) => x.confidence === "certain")) ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void linkExact()}>
+              {busy ? "Linking…" : "Link all exact matches"}
+            </Button>
+          ) : null}
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">
           Sitoo&apos;s manufacturers carry real ids. Shopify&apos;s vendor is a free string
           with no id at all, so the spelling is the only thing to join on. A Sitoo row may
