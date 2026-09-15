@@ -1,10 +1,31 @@
 # Recreating the 13 Barnes Japan Dawn variants in Sitoo
 
 13 products (ids 473–485) disappeared from Sitoo between 2026-09-11 and
-2026-09-12. Recreate them through the **Sitoo UI**, not the API: the v2 products
-API rejects `variantparentid` and `variant` on both POST and PUT, so anything
-created through it is a standalone product rather than a size of Barnes Japan
-Dawn. There is no variant-group endpoint.
+2026-09-12.
+
+> **Correction, 2026-09-16.** The paragraph that stood here said to recreate
+> these through the UI because "the v2 products API rejects `variantparentid`
+> and `variant` on both POST and PUT … there is no variant-group endpoint."
+>
+> The rejection is real — both fields are `readOnly` — but the conclusion was
+> wrong. **A variant family IS creatable through the API**, just not through the
+> field the first attempt reached for:
+>
+> ```
+> POST /sites/{site}/products                          creates; `sku` is the
+>                                                      only required field
+> PUT  /sites/{site}/products/{parent}/productvariants  sets the family
+> ```
+>
+> Verified end-to-end against the sandbox by
+> `scripts/check-sitoo-create.ts`: three products created, the family set, all
+> three read back carrying `variantparentid` pointing at the main variant, the
+> size group present with all three options, and the account count up by exactly
+> three. `src/lib/sitoo/create/` implements it, gated behind
+> `SITOO_CREATE_MODE=api` with a worklist fallback as the default.
+>
+> Recreating these 13 through the UI is still reasonable — a restore keeps the
+> original ids — but it is now a choice, not a limitation.
 
 **Try Sitoo support first.** A restore keeps the original ids and the variant
 structure, and their audit log will say what removed these and when — which is
