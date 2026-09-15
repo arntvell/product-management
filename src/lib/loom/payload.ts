@@ -77,7 +77,15 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
     },
     registry_only: true,
-    variants: cw.variants.map((v) => {
+    // Barcoded variants only. The gate used to be colorway-level — any blank size
+    // held back the whole run — which cost LIV-BTH-JPN-BLCK-DSK all 22 of its
+    // sizes for one gap, and EXT-NOV-GAT-BLK all 6 after we cleared a barcode
+    // that turned out to belong to the white shoe. Fixing one row's identity must
+    // not cost its siblings theirs. A variant with no barcode cannot reconcile a
+    // scan, so it is omitted rather than sent empty.
+    variants: cw.variants
+      .filter((v) => v.barcode && v.barcode.trim())
+      .map((v) => {
       const shopify = v.channelRefs.find((r) => r.channel === "SHOPIFY");
       const sitoo = v.channelRefs.find((r) => r.channel === "SITOO");
       return {
@@ -94,7 +102,7 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
         shopify_variant_id: shopify?.externalId ?? null,
         sitoo_product_id: sitoo?.externalId ?? null,
       };
-    }),
+      }),
   };
 }
 
