@@ -26,16 +26,25 @@ export function DraftPushPanel({
   draftId,
   colorwayIds,
   channels,
+  unfinishedBatchId,
 }: {
   draftId: string;
   colorwayIds: string[];
   channels: Channel[];
+  /** A batch for this draft that is still running — typically Loom items left
+   *  AWAITING_JOB when the client stopped polling. Without this the batch is
+   *  only reachable through the API, and a refresh strands it. */
+  unfinishedBatchId?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [blocked, setBlocked] = useState<Blocked[]>([]);
-  const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(unfinishedBatchId ?? null);
+  // What the batch in `batchId` was last driven as. A dry run leaves BLOCKED
+  // items on the batch exactly as a live run does, so without this the waiver
+  // button below would turn a deliberate dry run into a live push.
+  const [lastDryRun, setLastDryRun] = useState(false);
 
   // The only gaps an operator may waive. A candle has no care page and no fit
   // guide and never will, so without this the push is dead on arrival for most
@@ -64,8 +73,12 @@ export function DraftPushPanel({
     return p;
   }
 
-  async function pushAnyway(dryRun: boolean) {
+  async function pushAnyway() {
     if (!batchId) return;
+    // A waiver given during a dry run is still a dry run. The waiver is recorded
+    // on the batch, so the later live push honours it — clicking this after a
+    // dry run must not be the one path that goes live without saying so.
+    const dryRun = lastDryRun;
     setBusy(true);
     try {
       // Every blocked channel, not just Shopify: Loom blocks itself on Shopify
@@ -73,10 +86,29 @@ export function DraftPushPanel({
       // Shopify alone would leave Loom stuck behind a block that just cleared.
       const p = await drive(batchId, dryRun, "retry", { waiveIncomplete: true });
       setBlocked([]);
-      toast[p?.status === "ok" ? "success" : "error"](`Push ${p?.status ?? "finished"}`);
+      toast[p?.status === "ok" ? "success" : "error"](
+        dryRun ? "Dry run finished — waiver recorded" : `Push ${p?.status ?? "finished"}`
+      );
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Push failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Pick a batch left in flight back up — one more round of polling. */
+  async function resume() {
+    if (!batchId) return;
+    setBusy(true);
+    try {
+      const p = await drive(batchId, false, "run");
+      toast[p?.done ? "success" : "info"](
+        p?.done ? `Push ${p.status}` : "Still running — Loom has not finished its job yet"
+      );
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Resume failed");
     } finally {
       setBusy(false);
     }
@@ -93,10 +125,17 @@ export function DraftPushPanel({
       if (created.error) throw new Error(created.error);
       setBlocked(created.blocked ?? []);
       setBatchId(created.batchId);
+      setLastDryRun(dryRun);
 
       const p = await drive(created.batchId, dryRun, "run");
-      toast[p?.status === "ok" ? "success" : "error"](
-        dryRun ? "Dry run finished" : `Push ${p?.status ?? "finished"}`
+      // A batch that has not finished is not a failure — Loom jobs outlive the
+      // polling window, and the resume button below picks it up.
+      toast[p?.done && p.status === "ok" ? "success" : p?.done ? "error" : "info"](
+        !p?.done
+          ? "Still running — Loom has not finished its job yet"
+          : dryRun
+            ? "Dry run finished"
+            : `Push ${p.status}`
       );
       router.refresh();
     } catch (err) {
@@ -117,6 +156,11 @@ export function DraftPushPanel({
           </div>
         </div>
         <div className="flex gap-2">
+          {unfinishedBatchId && !progress ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => void resume()}>
+              Resume last push
+            </Button>
+          ) : null}
           <Button size="sm" variant="outline" disabled={busy} onClick={() => push(true)}>
             Dry run
           </Button>
@@ -142,13 +186,17 @@ export function DraftPushPanel({
                 size="sm"
                 variant="outline"
                 disabled={busy || !batchId}
-                onClick={() => void pushAnyway(false)}
+                onClick={() => void pushAnyway()}
               >
-                Push anyway ({waivableReasons(waivable)})
+                {lastDryRun ? "Dry run anyway" : "Push anyway"} (
+                {waivableReasons(waivable)})
               </Button>
               <span className="text-[11px] opacity-80">
-                Recorded on the batch. A product with no variants or no price stays
-                blocked — that is not waivable.
+                {lastDryRun
+                  ? "Still a dry run — the waiver is recorded on the batch, so the live push honours it."
+                  : "Recorded on the batch."}{" "}
+                A product with no variants or no price stays blocked — that is not
+                waivable, and a retry reports it as failed rather than held.
               </span>
             </div>
           ) : null}

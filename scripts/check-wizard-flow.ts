@@ -92,6 +92,24 @@ async function main() {
     include: { entries: { orderBy: { position: "asc" } } },
   });
 
+  // --- brand settings must actually reach the wizard ---
+  await prisma.brandTemplate.create({
+    data: {
+      brandId: brand.id,
+      category: category.name,
+      hsCode: "6403991100",
+      countryOfOrigin: "France",
+      defaultSizeSystemId: sizeSystem.id,
+      channels: ["SHOPIFY", "LOOM"],
+    },
+  });
+  const tpl = await api(`/api/catalog/brands/${brand.id}/template`);
+  const t = (tpl.json.template ?? {}) as Record<string, unknown>;
+  check("brand template served", tpl.status === 200 && !!tpl.json.template, String(tpl.status));
+  check("free-text category resolves to a Category id", t.categoryId === category.id, String(t.categoryId));
+  check("default size system comes with it", t.defaultSizeSystemId === sizeSystem.id, String(t.defaultSizeSystemId));
+  check("customs defaults come with it", t.hsCode === "6403991100" && t.countryOfOrigin === "France");
+
   // --- create a draft ---
   const created = await api("/api/catalog/drafts", { method: "POST" });
   check("draft created", created.status === 201, String(created.status));
@@ -256,6 +274,7 @@ async function main() {
   // --- cleanup ---
   const cwIds = (await prisma.colorway.findMany({ where: { brandId: brand.id }, select: { id: true } })).map((c) => c.id);
   await prisma.productDraft.deleteMany({ where: { id: draftId } });
+  await prisma.brandTemplate.deleteMany({ where: { brandId: brand.id } });
   await prisma.fieldOwner.deleteMany({ where: { entityType: "colorway", entityId: { in: cwIds } } });
   await prisma.colorway.deleteMany({ where: { brandId: brand.id } });
   await prisma.style.deleteMany({ where: { brandId: brand.id } });

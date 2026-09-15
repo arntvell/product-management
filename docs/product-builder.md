@@ -78,10 +78,11 @@ and the text is the fallback: `loomCategoryFor(categoryRef, text)` and
 `categoryRef.shopifyProductType ?? text` in the Shopify preview. That is what
 lets the ~4,500 text-only rows stay exactly as they are.
 
-**A brand default fills, it never overwrites.** Selecting a brand merges its
-`BrandTemplate` into the draft — empty fields only, because a typed value was
-meant. Channels are the exception: a configured set replaces the default set,
-since a set has no "empty field" to fill.
+**Changing brand clears the template, then applies the new brand's.** Anything
+typed was typed about the brand you left: carrying Paraboot's HS code, country
+and weight onto a candle would be wrong, and — because defaults only fill what is
+empty — would also stop the candle's own settings applying. Everything stays
+editable by hand on step 5; the defaults are a starting position, not a lock.
 
 ---
 
@@ -107,6 +108,11 @@ succeeded is BLOCKED rather than sent carrying nulls.
 300s and `waitForLoomJob` budgets 600s. Every invocation takes a time budget,
 persists, and returns `done: false` if there is more to do.
 
+The client stops polling long before a Loom job has to finish, so a batch can
+outlive the page that started it. `/done` looks up any `pending`/`running` batch
+for the draft and offers **Resume last push** — otherwise the resume path exists
+in the API and is unreachable from the UI, which is the same as not existing.
+
 Three states that are not failures: Sitoo with no credentials is **SKIPPED** (a
 configuration fact — `SITOO_*` is absent in Production); Sitoo in worklist mode
 is **SKIPPED** (nothing was written, so claiming OK would be an unobserved
@@ -115,7 +121,8 @@ waived silently — a candle has no care page or fit guide.
 
 The waiver is recorded on the **batch**, not passed per call, because it is a
 decision about this product rather than about this attempt: a resume has to
-honour it too. `createPushBatch` marks each block `waivable`, and only the soft
+honour it too. It also means a waiver given during a **dry run** stays a dry run
+— the button says so, and the later live push honours the recorded waiver. `createPushBatch` marks each block `waivable`, and only the soft
 merchandising gaps are — no variants and no price are not on that list and no
 button reaches them.
 

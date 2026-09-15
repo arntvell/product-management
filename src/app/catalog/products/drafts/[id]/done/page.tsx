@@ -24,6 +24,16 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
 
   const variants = colorways.reduce((a, c) => a + c._count.variants, 0);
 
+  // A batch can outlive the page that started it: Loom jobs run past the client's
+  // polling window and leave items AWAITING_JOB. `PushBatchItem` is the queue and
+  // the API can resume it — but only if the operator can find it again, so hand
+  // the panel the batch rather than making a refresh strand it.
+  const unfinished = await prisma.pushBatch.findFirst({
+    where: { draftId: id, status: { in: ["pending", "running"] } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
       <h1 className="text-2xl font-semibold">Created</h1>
@@ -37,6 +47,7 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
         draftId={id}
         colorwayIds={draft.createdColorwayIds}
         channels={draft.channels as ("SHOPIFY" | "LOOM" | "SITOO")[]}
+        unfinishedBatchId={unfinished?.id ?? null}
       />
 
       <div className="mt-6 rounded-md border">

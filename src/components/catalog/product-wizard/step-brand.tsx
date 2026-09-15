@@ -7,7 +7,7 @@ import {
   PUBLISH_CHANNEL_LABELS,
   type PublishChannelKey,
 } from "@/lib/master/fields";
-import type { DraftTemplate } from "@/lib/master/draft-payload";
+import { emptyDraftPayload, type DraftTemplate } from "@/lib/master/draft-payload";
 import type { StepProps } from "./types";
 import type { ProductKind } from "@/generated/prisma/enums";
 
@@ -42,10 +42,14 @@ export function StepBrand({ payload, update, options }: StepProps) {
   /**
    * Pull the brand's saved defaults in and merge them.
    *
-   * Merge, not overwrite: someone who has already typed an HS code on this draft
-   * meant it, and a brand default must not quietly replace it. Only empty fields
-   * are filled. Channels are the exception — they are a set, not a value, so an
-   * explicitly configured set replaces the default rather than unioning with it.
+   * Called only from the brand select, which clears the template in the same
+   * change — so this fills rather than merges, and nothing typed is ever
+   * silently replaced. The clear is what makes that safe: anything typed was
+   * typed about the brand you just left, and carrying Paraboot's HS code,
+   * country and weight onto a candle would be worse than losing them.
+   *
+   * Everything after this point is editable by hand on step 5; the defaults are
+   * a starting position, not a lock.
    */
   async function applyBrandTemplate(brandId: string) {
     try {
@@ -68,20 +72,21 @@ export function StepBrand({ payload, update, options }: StepProps) {
       // Decide what to fill from the template as it stands now, outside the
       // updater — an updater can be invoked more than once for one state change,
       // and a count assembled inside it would double.
+      // Against the CLEARED template, not the one still on screen — the reset in
+      // the select below has been queued but this closure predates it.
       const fill: Partial<DraftTemplate> = {};
-      for (const k of TEMPLATE_KEYS) {
-        if (!payload.template[k] && str(k)) fill[k] = str(k);
-      }
+      for (const k of TEMPLATE_KEYS) if (str(k)) fill[k] = str(k);
       const filled = Object.keys(fill);
       update((p) => ({
         ...p,
-        template: { ...p.template, ...fill },
+        // unisex is a boolean, so it cannot ride the string path above.
+        template: { ...p.template, ...fill, unisex: Boolean(template.unisex) },
         channels: chan.length ? chan : p.channels,
       }));
       setApplied(
         filled.length
-          ? `brand defaults filled in: ${filled.length} field${filled.length === 1 ? "" : "s"}`
-          : "brand defaults loaded — nothing was empty to fill"
+          ? `brand defaults applied: ${filled.length} field${filled.length === 1 ? "" : "s"}`
+          : "this brand has a settings row, but every field on it is blank"
       );
     } catch {
       // A failed lookup leaves the draft exactly as it was; the operator can
@@ -113,7 +118,12 @@ export function StepBrand({ payload, update, options }: StepProps) {
                   isLivid: b?.isLivid ?? false,
                 },
                 // Changing brand invalidates the style — its SKU carries the
-                // brand token, and an existing style belongs to one brand.
+                // brand token, and an existing style belongs to one brand. The
+                // template goes with it: an HS code, country or size system
+                // entered for the old brand is not a considered value for this
+                // one, and leaving it would also block the new brand's defaults,
+                // which only fill what is empty.
+                template: emptyDraftPayload().template,
                 style: null,
                 colorways: [],
               }));
