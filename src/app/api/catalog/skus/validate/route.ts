@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { buildSku, normalizeSku, parseSku, validateSku, type SkuInput } from "@/lib/master/sku";
+import { loadSkuCorpus } from "@/lib/master/sku-corpus";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +20,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const existing = await prisma.colorway.findMany({
-    select: { colorwaySku: true, style: { select: { styleName: true } } },
-  });
-  const corpus = existing.map((c) => c.colorwaySku);
+  // Candidates only. This used to load every colorway SKU on every call — behind
+  // a field that validates as you type. loadSkuCorpus narrows to the SKUs that
+  // could actually collide, which scripts/check-sku-corpus.ts proves loses no
+  // match compareSku would have made (4,607 -> 197 on average).
+  const probe = body.sku ?? (body.suggest ? buildSku(body.suggest) : "");
+  const corpus = await loadSkuCorpus(probe, { includeStyles: true });
+  // establishedToken() needs style names, and only for styles sharing the typed
+  // name — a much smaller question than "every colorway in the catalogue".
+  const existing = body.suggest
+    ? await prisma.colorway.findMany({
+        where: { style: { styleName: { equals: body.suggest.style, mode: "insensitive" } } },
+        select: { colorwaySku: true, style: { select: { styleName: true } } },
+      })
+    : [];
 
   if (body.suggest) {
     // Reuse the token this style already uses, rather than re-deriving it.
