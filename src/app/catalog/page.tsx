@@ -106,6 +106,12 @@ export default async function CatalogPage() {
             Brands
           </Link>
           <Link
+            href="/catalog/categories"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          >
+            Categories
+          </Link>
+          <Link
             href="/catalog/size-systems"
             className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
           >

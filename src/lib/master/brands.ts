@@ -313,3 +313,266 @@ export async function resolveBrandSizes(
   return { source: "none", labels: [], systemId: null };
 }
 
+
+// ---------------------------------------------------------------------------
+// Cross-system identity, and merging duplicates
+// ---------------------------------------------------------------------------
+
+import { prisma as db } from "@/lib/db";
+
+export interface BrandDuplicate {
+  a: { id: string; name: string; colorways: number };
+  b: { id: string; name: string; colorways: number };
+  confidence: "certain" | "likely";
+  reason: string;
+}
+
+/**
+ * Brands that are probably one brand.
+ *
+ * Two tiers, mirroring compareSku, and for a concrete reason: `P.F. Candle` and
+ * `P.F. Candles` normalise DIFFERENTLY, so an exact-match check misses the very
+ * pair that motivated this. `certain` is safe to block a create on; `likely` is
+ * a warning, because a hard block on similarity would be wrong more often than
+ * right — Camper and Camperlab are two real brands.
+ */
+export async function suggestBrandDuplicates(): Promise<BrandDuplicate[]> {
+  const brands = await db.brand.findMany({
+    where: { mergedIntoId: null },
+    select: { id: true, name: true, _count: { select: { colorways: true } } },
+    orderBy: { name: "asc" },
+  });
+  const rows = brands.map((b) => ({
+    id: b.id,
+    name: b.name,
+    key: normalizeBrandName(b.name),
+    colorways: b._count.colorways,
+  }));
+
+  const out: BrandDuplicate[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const a = rows[i];
+      const b = rows[j];
+      if (a.key === b.key) {
+        out.push({
+          a: { id: a.id, name: a.name, colorways: a.colorways },
+          b: { id: b.id, name: b.name, colorways: b.colorways },
+          confidence: "certain",
+          reason: "identical once punctuation and case are removed",
+        });
+      } else if (nearlySame(a.key, b.key)) {
+        out.push({
+          a: { id: a.id, name: a.name, colorways: a.colorways },
+          b: { id: b.id, name: b.name, colorways: b.colorways },
+          confidence: "likely",
+          reason: "one character apart — a plural, or a typo",
+        });
+      }
+    }
+  }
+  return out.sort((x, y) => (x.confidence === y.confidence ? 0 : x.confidence === "certain" ? -1 : 1));
+}
+
+export interface BrandMergeResult {
+  styles: number;
+  colorways: number;
+  refs: number;
+  templateMoved: boolean;
+}
+
+/**
+ * Fold one brand into another. A tombstone, never a delete.
+ *
+ * A brand with product behind it cannot be removed without orphaning it, and the
+ * record that the two were the same thing is worth keeping — the same posture
+ * merge-colorways.ts takes, which is why its 21 merges can still be explained.
+ */
+export async function mergeBrands(loserId: string, winnerId: string): Promise<BrandMergeResult> {
+  if (loserId === winnerId) throw new BrandError("A brand cannot merge into itself.");
+  const [loser, winner] = await Promise.all([
+    db.brand.findUnique({ where: { id: loserId }, include: { template: true } }),
+    db.brand.findUnique({ where: { id: winnerId }, include: { template: true } }),
+  ]);
+  if (!loser || !winner) throw new BrandError("Brand not found.");
+  if (winner.mergedIntoId)
+    throw new BrandError(`"${winner.name}" has itself been merged away; pick its survivor.`);
+
+  return db.$transaction(async (tx) => {
+    const styles = await tx.style.updateMany({
+      where: { brandId: loserId },
+      data: { brandId: winnerId },
+    });
+    const colorways = await tx.colorway.updateMany({
+      where: { brandId: loserId },
+      data: { brandId: winnerId, vendor: winner.name },
+    });
+    const refs = await tx.brandChannelRef.updateMany({
+      where: { brandId: loserId },
+      data: { brandId: winnerId },
+    });
+
+    // The survivor keeps its own template; the loser's is only adopted when the
+    // survivor has none, so a merge never silently replaces settings.
+    let templateMoved = false;
+    if (!winner.template && loser.template) {
+      await tx.brandTemplate.update({
+        where: { id: loser.template.id },
+        data: { brandId: winnerId },
+      });
+      templateMoved = true;
+    } else if (loser.template) {
+      await tx.brandTemplate.delete({ where: { id: loser.template.id } });
+    }
+
+    await tx.brand.update({
+      where: { id: loserId },
+      data: { mergedIntoId: winnerId, archived: true },
+    });
+    // The survivor inherits a SKU token only if it has none — never overwritten,
+    // because that would rename every future style under it.
+    if (!winner.skuToken && loser.skuToken)
+      await tx.brand.update({ where: { id: winnerId }, data: { skuToken: loser.skuToken } });
+
+    return { styles: styles.count, colorways: colorways.count, refs: refs.count, templateMoved };
+  });
+}
+
+export interface BrandIdentityRow {
+  id: string;
+  name: string;
+  archived: boolean;
+  colorways: number;
+  refs: Array<{
+    id: string;
+    system: string;
+    externalName: string;
+    externalId: string | null;
+    role: string;
+    productCount: number;
+  }>;
+}
+
+export async function listBrandIdentity(): Promise<BrandIdentityRow[]> {
+  const brands = await db.brand.findMany({
+    where: { mergedIntoId: null },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      archived: true,
+      _count: { select: { colorways: true } },
+      channelRefs: {
+        select: {
+          id: true,
+          system: true,
+          externalName: true,
+          externalId: true,
+          role: true,
+          productCount: true,
+        },
+      },
+    },
+  });
+  return brands.map((b) => ({
+    id: b.id,
+    name: b.name,
+    archived: b.archived,
+    colorways: b._count.colorways,
+    refs: b.channelRefs,
+  }));
+}
+
+export interface UnlinkedBrandRef {
+  id: string;
+  system: string;
+  externalName: string;
+  externalId: string | null;
+  role: string;
+  productCount: number;
+  /** Brands whose name matches — offered, never applied automatically. */
+  suggestions: Array<{ id: string; name: string; confidence: "certain" | "likely" }>;
+}
+
+export async function listUnlinkedBrandRefs(): Promise<UnlinkedBrandRef[]> {
+  const [refs, brands] = await Promise.all([
+    db.brandChannelRef.findMany({
+      where: { brandId: null, role: { not: "IGNORE" } },
+      orderBy: [{ productCount: "desc" }, { externalName: "asc" }],
+      take: 400,
+    }),
+    db.brand.findMany({
+      where: { mergedIntoId: null },
+      select: { id: true, name: true },
+    }),
+  ]);
+  const keyed = brands.map((b) => ({ ...b, key: normalizeBrandName(b.name) }));
+
+  return refs.map((r) => {
+    const key = normalizeBrandName(r.externalName);
+    const suggestions: UnlinkedBrandRef["suggestions"] = [];
+    for (const b of keyed) {
+      if (b.key === key) suggestions.push({ id: b.id, name: b.name, confidence: "certain" });
+      else if (nearlySame(b.key, key))
+        suggestions.push({ id: b.id, name: b.name, confidence: "likely" });
+    }
+    return {
+      id: r.id,
+      system: r.system,
+      externalName: r.externalName,
+      externalId: r.externalId,
+      role: r.role,
+      productCount: r.productCount,
+      suggestions: suggestions.slice(0, 4),
+    };
+  });
+}
+
+export async function linkBrandRef(
+  refId: string,
+  input: { brandId?: string | null; role?: string }
+): Promise<void> {
+  const ref = await db.brandChannelRef.findUnique({ where: { id: refId } });
+  if (!ref) throw new BrandError("That value is not in the review queue.");
+
+  await db.brandChannelRef.update({
+    where: { id: refId },
+    data: {
+      ...(input.brandId !== undefined ? { brandId: input.brandId || null } : {}),
+      ...(input.role ? { role: input.role } : {}),
+    },
+  });
+
+  // No outbound copy on Brand. The ref row IS the identity — it already carries
+  // the channel's spelling and, where one exists, its id, keyed by
+  // (brandId, system). Mirroring those onto Brand columns would be the same fact
+  // in two places, which is how the master ended up with `vendor` and `brandId`
+  // disagreeing in the first place.
+}
+
+/** What each channel calls this brand, resolved from its linked refs. */
+export async function brandOutboundIdentity(
+  brandId: string
+): Promise<Record<string, { name: string; id: string | null }>> {
+  const refs = await db.brandChannelRef.findMany({
+    where: { brandId, role: "BRAND" },
+    select: { system: true, externalName: true, externalId: true },
+  });
+  const out: Record<string, { name: string; id: string | null }> = {};
+  for (const r of refs) out[r.system] = { name: r.externalName, id: r.externalId };
+  return out;
+}
+
+/** Fill Brand.normalizedName, so the eventual unique index has something to use. */
+export async function backfillNormalizedNames(): Promise<number> {
+  const brands = await db.brand.findMany({ select: { id: true, name: true } });
+  let n = 0;
+  for (const b of brands) {
+    await db.brand.update({
+      where: { id: b.id },
+      data: { normalizedName: normalizeBrandName(b.name) },
+    });
+    n++;
+  }
+  return n;
+}
