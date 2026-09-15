@@ -1,0 +1,83 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { prisma } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
+export default async function DraftDonePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const draft = await prisma.productDraft.findUnique({ where: { id } });
+  if (!draft) notFound();
+
+  const colorways = await prisma.colorway.findMany({
+    where: { id: { in: draft.createdColorwayIds } },
+    select: {
+      id: true,
+      colorwaySku: true,
+      name: true,
+      _count: { select: { variants: true } },
+      publications: { select: { channel: true, published: true, lastPushStatus: true } },
+    },
+    orderBy: { colorwaySku: "asc" },
+  });
+
+  const variants = colorways.reduce((a, c) => a + c._count.variants, 0);
+
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-8">
+      <h1 className="text-2xl font-semibold">Created</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {colorways.length} colourway{colorways.length === 1 ? "" : "s"}, {variants} variants
+        are in the master. Nothing has been pushed to a channel yet — publishing is a
+        separate, retryable step.
+      </p>
+
+      <div className="mt-6 rounded-md border">
+        {colorways.map((c) => (
+          <div key={c.id} className="border-b px-4 py-3 text-sm last:border-0">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <code className="font-mono text-xs">{c.colorwaySku}</code>
+                <div className="truncate text-muted-foreground">{c.name}</div>
+              </div>
+              <div className="shrink-0 text-xs text-muted-foreground">
+                {c._count.variants} sizes
+              </div>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {c.publications.map((p) => (
+                <span
+                  key={p.channel}
+                  className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {p.channel} · {p.published ? "published" : "queued"}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-2">
+        <Link
+          href="/catalog/products/new"
+          className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background"
+        >
+          + Another product
+        </Link>
+        <Link
+          href="/catalog/publishing"
+          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+        >
+          Publishing
+        </Link>
+        <Link
+          href="/catalog/products/drafts"
+          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+        >
+          All drafts
+        </Link>
+      </div>
+    </main>
+  );
+}
