@@ -77,7 +77,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
   const [rename, setRename] = useState(p.kind !== "duplicate-style");
   const [renamePublished, setRenamePublished] = useState(false);
   const [result, setResult] = useState<unknown>(null);
-  const [busy, setBusy] = useState<null | "preview" | "apply">(null);
+  const [busy, setBusy] = useState<null | "preview" | "apply" | "check" | "send">(null);
   const [error, setError] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
@@ -142,6 +142,31 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
     [selection, rename, renamePublished]
   );
 
+  // Push this one style to Loom and look at the result, before the other
+  // thousand go. Dry run unless explicitly sent: LOOM_URL is unset in local
+  // dev, so a real send from a laptop reaches production Loom.
+  const verify = useCallback(
+    async (dryRun: boolean) => {
+      setBusy(dryRun ? "check" : "send");
+      setError(null);
+      try {
+        const res = await fetch("/api/catalog/style-splits/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ styleIds: [p.target.styleId], dryRun }),
+        });
+        const body = await res.json();
+        if (!res.ok) setError(body?.error ?? `HTTP ${res.status}`);
+        setResult(body);
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [p.target.styleId]
+  );
+
   // Recording a rejection is what stops the same row coming back next run.
   //
   // Keyed on the styleSku, never the styleName: in a duplicate-style pair both
@@ -198,6 +223,33 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
             {busy === "apply" ? "Applying…" : `Apply ${chosen.size}`}
           </Button>
         </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-muted-foreground">
+          Then check it landed:
+        </span>
+        <Button variant="outline" size="sm" disabled={!!busy} onClick={() => verify(true)}>
+          {busy === "check" ? "Building…" : "Preview Loom payload"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!!busy}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Send ${p.target.styleSku} to PRODUCTION Loom now?\n\n` +
+                  "Every colourway of this style, one delivery per season, mode " +
+                  "\"data\". This is a real write to Loom — do it for one or two " +
+                  "styles, look at the result there, then come back for the rest."
+              )
+            )
+              verify(false);
+          }}
+        >
+          {busy === "send" ? "Sending…" : "Send this style to Loom"}
+        </Button>
       </div>
 
       <div className="mt-3">

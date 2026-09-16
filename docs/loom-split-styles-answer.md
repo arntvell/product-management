@@ -98,6 +98,20 @@ on every pull, so anything we did here would be undone on the next one — the s
 conclusion as the Barnes / Faded Porcelain case on 15 September. We are raising
 it upstream. Until it is settled, both styles stay as they are.
 
+### E. Colourways we cannot reach at all
+
+Verifying the first style turned up a case neither of us had accounted for.
+`LIV-ABY-WH--merged-into-5b168e9e` is in your list under Abby. On our side it is
+a parked merge loser: already archived, its SKU stamped with the id of the
+survivor. But it has **no season entry**, and our payload is season-scoped — so
+it cannot be put into any delivery. We can neither re-nest it nor send you
+`channels.loom = false` for it.
+
+There will be a handful of these wherever a merge has already happened. For each,
+the surviving colourway is the one named in its SKU after `--merged-into-`, and
+that is the canonical id. If you need them archived, tell us and we will give you
+the list of `colorway_id`s directly rather than through a push.
+
 ## Two things we need from you
 
 **1. Can a style be withdrawn?** You asked us to send a retiring style with
