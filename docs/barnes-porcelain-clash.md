@@ -153,3 +153,37 @@ The 4 extra (`-2732`, `-2832`, `-3632`, `-4034`, all unbarcoded) are sizes in
 Fade Bone's run. They were all created in the same pass on 2026-07-13, so this is
 **not** proven to be residue from the crossed binding the way the prices are —
 flagged, not concluded.
+
+### Applied 2026-09-16 — verified by dry-run
+
+The repoint was applied to production. `POST /api/catalog/sync
+{"seasonCode":"SS27","dryRun":true}` then reconciled exactly:
+
+| | before | after |
+|---|---|---|
+| skipped | 1 | **0** |
+| colorwayUpdates | 570 | 571 |
+| priceRows | 6664 | 6678 (+14 = 7 lists × msrp/ws) |
+| entryCreates | — | 1 (Fade Bone's SS27 entry) |
+| variantCreates | — | 6 (the missing sizes) |
+| renames / parks | — | empty — nothing moves SKU |
+
+### Two things to watch after the real sync
+
+**Loom re-nesting.** Fade Bone's row is already published to Loom (pushed
+2026-09-13 as `LIV-BAR-FAD-BON`). The sync re-parents it from `LIV-STY-BARNES`
+to `LIV-M-BRNS`, and Loom groups by `styleId` alone, so the next Loom push moves
+it to a different style block. `LIV-STY-BARNES` keeps 8 of its 9 colorways, so
+no empty shell is stranded.
+
+While the Porcelain residue above is left in place, **two Loom products carry the
+same SS27 price set** — Fade Bone's own (correct) and Faded Porcelain's
+(inherited from the crossed sync, pushed 2026-09-15). That is now a Loom data
+problem as well as an Origio one.
+
+**`source` stays `CIN7_IMPORT`.** `buildColorway`'s update branch never writes
+`source`, so the row is TF-bound and TF-synced but still labelled Cin7. Impact is
+small — Loom's payload does not gate on source, and the one
+`source === "CIN7_IMPORT"` check in `sync.ts` only picks suggestion wording. It
+does mean `enrich-cin7.ts` (`where: { source: "CIN7_IMPORT" }`) still treats the
+row as a Cin7 enrichment candidate.
