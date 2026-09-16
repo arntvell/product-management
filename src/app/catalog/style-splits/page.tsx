@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { buildStyleSplitReport } from "@/lib/master/style-splits";
 import { StyleSplitRow } from "@/components/catalog/style-split-row";
+import { StyleSplitPending } from "@/components/catalog/style-split-pending";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -85,6 +86,31 @@ export default async function StyleSplitsPage({
         re-pointing the parent is the whole fix. No colourway id is ever written,
         which is what keeps order history, stock and costs attached.
       </p>
+
+      <StyleSplitPending />
+
+      <ol className="mt-4 max-w-3xl list-decimal space-y-1 rounded-lg border p-4 pl-8 text-sm text-muted-foreground">
+        <li>
+          Work through a row: the ticked colourways are the ones that will move
+          under the style marked <strong className="text-foreground">keep</strong>.
+          Untick anything that does not belong, or use{" "}
+          <em>not this one</em> to reject a whole style — that is remembered, so
+          it will not come back on the next run.
+        </li>
+        <li>
+          <strong className="text-foreground">Dry run</strong> shows what would
+          change without writing anything.
+        </li>
+        <li>
+          <strong className="text-foreground">Apply &amp; push to Loom</strong> does
+          both halves: it re-nests the colourways here, then sends that style to
+          Loom, one delivery per season. The row then says what Loom made of it.
+        </li>
+        <li>
+          Start with one or two. Until Loom confirms what happens to a style that
+          has been emptied, there is no way to know from this side.
+        </li>
+      </ol>
 
       <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border p-4">
         {[

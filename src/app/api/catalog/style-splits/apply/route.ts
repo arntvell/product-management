@@ -55,6 +55,10 @@ export async function POST(req: Request) {
           finishedAt: new Date(),
           status: "ok",
           counts: {
+            // The styles that now hold the moved colourways. Recorded because a
+            // re-nest is only half done until Loom is told: this is what the
+            // pending-push queue reads to know what is still owed.
+            targetStyleIds: result.styles.map((s) => s.targetStyleId),
             colorwaysMoved: result.colorwaysMoved,
             colorwaysRenamed: result.colorwaysRenamed,
             stylesRenamed: result.stylesRenamed,
