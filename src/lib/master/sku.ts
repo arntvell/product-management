@@ -409,6 +409,27 @@ function styleTokens(value: string): string[] {
  * lived unexported in duplicate-candidates.ts; it belongs here, because the SKU
  * generator needs the same distinction the duplicate detector does.
  */
+/**
+ * A parent style SKU for a garment we are creating, in a grammar that can never
+ * collide with a colorway SKU — the shape Loom asked us to guarantee.
+ *
+ * Distinct from `buildStyleSku`: no vowel-dropping, full words joined by `-`.
+ * The prefix follows the brand. It used to be hard-coded to `LIV-`, which gave
+ * an external-brand Cin7 product a `LIV-STY-*` parent while its colourway kept
+ * its own `EXT-*` SKU.
+ */
+export function styleSkuFor(styleName: string, brandToken?: string | null): string {
+  // Livid omits the brand segment; everything else is EXT-<token>-, the grammar
+  // buildStyleSku and the existing corpus already use. Passing "EXT-ICHI" or
+  // "ICHI" gives the same answer, so a caller cannot invent a fourth spelling.
+  const token = brandToken?.trim() ? normalizeSku(brandToken).replace(/^EXT-|-+$/g, "") : null;
+  const prefix = token ? `EXT-${token}` : "LIV";
+  return (
+    `${prefix}-STY-` +
+    styleName.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "")
+  );
+}
+
 export function isOneOfOne(sku: string): boolean {
   return /^(VN-|EXT-VN-)/.test(normalizeSku(sku));
 }

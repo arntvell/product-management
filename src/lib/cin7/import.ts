@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { fetchAllProducts, fetchAllAvailability } from "./client";
 import type { Cin7Product } from "./types";
 import { canonical } from "@/lib/master/barcode";
+import { styleSkuFor } from "@/lib/master/sku";
 
 // The physical locations whose in-stock items we import (exact Cin7 names).
 export const TARGET_LOCATIONS = [
@@ -70,29 +71,34 @@ export function colorwayName(name: string, size: string): string {
  * when nothing matches, and the caller then creates a style of its own — but
  * one whose SKU is deliberately distinct from the colorway's, so a style can
  * never be its own colorway.
+ *
+ * It returns the matched style's ID, not just its name, and that is the whole
+ * point. Returning the name alone is what produced the second "Abby": the
+ * caller synthesised `LIV-STY-ABBY` from it, looked *that* up, missed — because
+ * the Threadflow style which supplied the name is `LIV-W-BBY` — and created a
+ * duplicate. The id is the only thing that cannot be re-derived wrongly.
  */
+export interface KnownStyle {
+  id: string;
+  styleName: string;
+}
+
 export function deriveParentStyle(
   name: string,
-  knownStyleNames: string[]
-): { styleName: string; colorName: string } | null {
+  knownStyles: KnownStyle[]
+): { styleId: string; styleName: string; colorName: string } | null {
   const n = name.trim();
-  for (const k of knownStyleNames) {
-    const s = k.trim();
+  for (const k of knownStyles) {
+    const s = k.styleName.trim();
     if (!s) continue;
-    if (n.toLowerCase() === s.toLowerCase()) return { styleName: s, colorName: n };
+    if (n.toLowerCase() === s.toLowerCase()) {
+      return { styleId: k.id, styleName: s, colorName: n };
+    }
     if (n.toLowerCase().startsWith(s.toLowerCase() + " ")) {
-      return { styleName: s, colorName: n.slice(s.length).trim() || n };
+      return { styleId: k.id, styleName: s, colorName: n.slice(s.length).trim() || n };
     }
   }
   return null;
-}
-
-/** A style SKU that can never collide with a colorway SKU. */
-export function styleSkuFor(styleName: string): string {
-  return (
-    "LIV-STY-" +
-    styleName.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "")
-  );
 }
 
 function weightToKg(weight: number | null, units: string | null): number | null {
@@ -389,6 +395,15 @@ export interface Cin7ImportResult {
   droppedMarked: number; // previously imported, now out of stock -> cancelled
   restocked: number; // previously dropped, back in stock -> un-cancelled
   brands: number;
+  /**
+   * Parent styles minted because no known style matched the product name.
+   *
+   * Each one is a garment the catalogue did not know about — or a name the
+   * vocabulary failed to match. Surfaced rather than silent: an unreviewed mint
+   * is how the catalogue accumulated 997 `LIV-STY-*` styles. Check them in
+   * /catalog/style-splits.
+   */
+  mintedStyles: Array<{ styleSku: string; styleName: string }>;
   syncRunId: string;
 }
 
@@ -436,18 +451,40 @@ export async function runCin7Import(
     const priceCreates: Array<Record<string, unknown>> = [];
 
     const usedSkus = new Set(existing.variantSkus);
-    // Threadflow decides where a garment name ends and a colour begins.
-    const knownStyleNames = (
+    // Threadflow decides where a garment name ends and a colour begins, so its
+    // styles are the vocabulary — carrying their ids, because the id is what the
+    // colourway gets attached to.
+    //
+    // A MANUAL row qualifies only if it is not a self-named singleton. Without
+    // that filter the vocabulary poisons itself: the bogus one-colour style
+    // "Barnes Japan Fade" is a longer match than "Barnes", so it swallows
+    // "Barnes Japan Fade Selvage" and the error chains.
+    const knownStyles: KnownStyle[] = (
       await prisma.style.findMany({
         where: { source: { in: ["THREADFLOW", "MANUAL"] } },
-        select: { styleName: true },
+        select: {
+          id: true,
+          styleName: true,
+          threadflowId: true,
+          colorways: { select: { name: true }, take: 2 },
+        },
       })
     )
-      .map((s) => s.styleName.trim())
-      .filter(Boolean)
-      .sort((a, b) => b.length - a.length);
+      .filter((s) => {
+        if (!s.styleName.trim()) return false;
+        if (s.threadflowId) return true;
+        const selfNamed =
+          s.colorways.length === 1 &&
+          s.colorways[0].name.trim().toLowerCase() === s.styleName.trim().toLowerCase();
+        return !selfNamed;
+      })
+      .map((s) => ({ id: s.id, styleName: s.styleName.trim() }))
+      .sort((a, b) => b.styleName.length - a.styleName.length);
     // Styles created during this run, so sibling colours share one parent.
     const styleIdByName = new Map<string, string>();
+    // Parents minted because nothing matched — worth reviewing, not worth
+    // failing the import over.
+    const mintedStyles: { styleSku: string; styleName: string }[] = [];
     let importedColorways = 0;
     let importedVariants = 0;
     let skipped = 0;
@@ -507,42 +544,56 @@ export async function runCin7Import(
       const category = g.rep.Category || "Uncategorized";
 
       // Model this as a colour of a garment, not a garment of its own.
-      const parent = deriveParentStyle(g.name, knownStyleNames);
+      const parent = deriveParentStyle(g.name, knownStyles);
       const styleName = parent?.styleName ?? g.name;
       const colorName = parent?.colorName ?? g.name;
-      const styleSku = styleSkuFor(styleName);
 
-      // A style must never be its own colorway — the assertion Loom asked for.
-      if (styleSku === g.base) {
-        throw new Error(
-          `Refusing to import ${g.base}: style SKU would equal the colorway SKU, ` +
-            `which is the shape that modelled colours as standalone styles.`
-        );
-      }
-
-      let styleId = styleIdByName.get(styleName.toLowerCase());
-      if (!styleId) {
-        const already = await prisma.style.findUnique({
-          where: { styleSku },
-          select: { id: true },
-        });
-        if (already) {
-          styleId = already.id;
-        } else {
-          styleId = randomUUID();
-          styleCreates.push({
-            id: styleId,
-            source: "CIN7_IMPORT",
-            styleSku,
-            styleName,
-            gender,
-            category,
-            brandId,
-            hsCode: g.rep.HSCode || null,
-            weightKg: weightToKg(g.rep.Weight, g.rep.WeightUnits),
-          });
-        }
+      let styleId: string;
+      if (parent) {
+        // The matched style IS the parent. Attach to its id and stop — do not
+        // synthesise a SKU and look that up, which is how a second style with
+        // the same name got created every time the real one was not a
+        // `LIV-STY-*` row.
+        styleId = parent.styleId;
         styleIdByName.set(styleName.toLowerCase(), styleId);
+      } else {
+        const styleSku = styleSkuFor(styleName, isLivid ? null : brandName);
+
+        // A style must never be its own colorway — the assertion Loom asked for.
+        if (styleSku === g.base) {
+          throw new Error(
+            `Refusing to import ${g.base}: style SKU would equal the colorway SKU, ` +
+              `which is the shape that modelled colours as standalone styles.`
+          );
+        }
+
+        const cached = styleIdByName.get(styleName.toLowerCase());
+        if (cached) {
+          styleId = cached;
+        } else {
+          const already = await prisma.style.findUnique({
+            where: { styleSku },
+            select: { id: true },
+          });
+          if (already) {
+            styleId = already.id;
+          } else {
+            styleId = randomUUID();
+            styleCreates.push({
+              id: styleId,
+              source: "CIN7_IMPORT",
+              styleSku,
+              styleName,
+              gender,
+              category,
+              brandId,
+              hsCode: g.rep.HSCode || null,
+              weightKg: weightToKg(g.rep.Weight, g.rep.WeightUnits),
+            });
+            mintedStyles.push({ styleSku, styleName });
+          }
+          styleIdByName.set(styleName.toLowerCase(), styleId);
+        }
       }
       colorwayCreates.push({
         id: colorwayId,
@@ -717,6 +768,7 @@ export async function runCin7Import(
       droppedMarked: toCancel.length,
       restocked: toRestock.length,
       brands: brandIdByName.size,
+      mintedStyles,
       syncRunId: run.id,
     };
     await prisma.syncRun.update({

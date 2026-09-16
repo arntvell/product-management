@@ -42,6 +42,14 @@ export function StepStyle({ payload, update }: StepProps) {
   const exactNameMatch = hits.find(
     (h) => h.styleName.toLowerCase() === query.trim().toLowerCase()
   );
+  // "Barnes Japan Gravel" typed while "Barnes" exists is a colour of Barnes,
+  // not a garment. Creating it as a style is the shape that put a thousand
+  // one-colour styles in the catalogue and split them again in Loom — the
+  // colour ends up in the style name and the colourway nests under itself.
+  // Longest match wins, so "Fealy Twisted" beats "Fealy".
+  const parentMatch = hits
+    .filter((h) => query.trim().toLowerCase().startsWith(h.styleName.toLowerCase() + " "))
+    .sort((a, b) => b.styleName.length - a.styleName.length)[0];
 
   function pickExisting(h: StyleHit) {
     update((p) =>
@@ -154,6 +162,15 @@ export function StepStyle({ payload, update }: StepProps) {
                 <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
                   {payload.brand.name} already has a style called “{exactNameMatch.styleName}”.
                   Pick it above unless this really is a different garment.
+                </p>
+              ) : null}
+              {!exactNameMatch && parentMatch ? (
+                <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                  This reads like a colour of “{parentMatch.styleName}”, not a garment
+                  of its own — pick that style above and add “
+                  {query.trim().slice(parentMatch.styleName.length).trim()}” as a
+                  colourway. Create it as a style only if it is a different garment,
+                  the way Fealy Twisted is not Fealy.
                 </p>
               ) : null}
               <Button size="sm" variant="outline" onClick={createNew}>

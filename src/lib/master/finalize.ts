@@ -1,7 +1,9 @@
 // Turning a draft into product, and surviving being interrupted while doing it.
 //
-// This replaces buildProductsForBrand for the new wizard. What it does
-// differently, and why each one matters:
+// This replaced buildProductsForBrand (src/lib/master/create.ts), which was
+// retired in 2026-09 once the style-splits repair showed how much of the Loom
+// nesting damage it had caused. What it does differently, and why each one
+// matters:
 //
 //   one Style, many Colorways   create.ts wrote styleSku === colorwaySku and a
 //                               Style per row, so colourways never nested under

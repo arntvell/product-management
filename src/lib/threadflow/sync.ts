@@ -283,6 +283,8 @@ interface PlannedStyle {
   tf: TFStyle;
   id: string;
   wasNew: boolean;
+  /** Matched on styleSku, not threadflowId — stamp the id on so it sticks. */
+  adopted: boolean;
   vendor: string;
   productType: string | null;
 }
@@ -900,6 +902,30 @@ async function planSeason(
     existingStyles.map((s) => [s.threadflowId!, s.id])
   );
 
+  // Styles matched only on threadflowId, unlike colorways above, which also
+  // fall back to their SKU. That asymmetry costs a whole style per run: a row
+  // already holding Threadflow's style_sku — imported from Cin7 or built by
+  // hand before the sync ever saw the garment — collides on the unique index,
+  // becomes a named skip, and its colorways are left under the wrong parent.
+  // Adopt that row instead, which is also what stops a second style with the
+  // same name being created beside it.
+  const styleSkusIncoming = styles.map((s) => s.style_sku).filter(Boolean);
+  const adoptable = await chunkedFind(styleSkusIncoming, (skus) =>
+    prisma.style.findMany({
+      where: { styleSku: { in: skus }, threadflowId: null },
+      select: { id: true, styleSku: true },
+    })
+  );
+  const adoptableBySku = new Map(adoptable.map((s) => [s.styleSku, s.id]));
+  const adoptedStyles: Array<{ styleSku: string; id: string }> = [];
+  for (const s of styles) {
+    if (styleIdByTf.has(s.style_id)) continue;
+    const adopt = adoptableBySku.get(s.style_sku);
+    if (!adopt) continue;
+    styleIdByTf.set(s.style_id, adopt);
+    adoptedStyles.push({ styleSku: s.style_sku, id: adopt });
+  }
+
   // Threadflow assigns colorway ids PER SEASON, so a carry-over colorway
   // appears in a new season with a fresh colorway_id but the SAME colorway_sku.
   // Match on threadflowId first, then fall back to colorwaySku (the stable
@@ -976,6 +1002,7 @@ async function planSeason(
   // and would disagree with itself.
   const plannedStyles: PlannedStyle[] = [];
   const planned: PlannedColorway[] = [];
+  const adoptedIds = new Set(adoptedStyles.map((a) => a.id));
   for (const s of styles) {
     const wasNew = !styleIdByTf.has(s.style_id);
     const id =
@@ -985,6 +1012,7 @@ async function planSeason(
       tf: s,
       id,
       wasNew,
+      adopted: adoptedIds.has(id),
       vendor: deriveVendor(s.gender, s.unisex),
       productType: s.category || null,
     };
@@ -1256,6 +1284,11 @@ export async function syncSeason(
             prisma.style.update({
               where: { id: s.id },
               data: {
+                // Claim an adopted row, or it is re-adopted every run and never
+                // becomes a Threadflow style.
+                ...(s.adopted
+                  ? { threadflowId: s.tf.style_id, source: "THREADFLOW" as const }
+                  : {}),
                 styleSku: s.tf.style_sku,
                 styleName: s.tf.style_name,
                 gender: s.tf.gender,

@@ -824,3 +824,32 @@ enum MediaRole {
   WOMEN // custom.women_images (unisex)
   SWATCH // colour swatch
 }
+
+/// Names that must not be re-grouped by their leading word.
+///
+/// "Barnes Japan Gravel" is a colour of Barnes, but "Keri Surf" is a short and
+/// not the Keri jeans, and "Hayes Suit Jacket" is not "Hayes Suit Pant". No rule
+/// separates the two cases, so the decisions are recorded here as they are made
+/// and every later report starts from them. This replaces the hand-edited
+/// NEW_STYLE_GROUPS / PARENT_OVERRIDE constants in master/regroup-styles.ts,
+/// which a review screen cannot append to.
+model StyleNameRule {
+  id        String            @id @default(cuid())
+  /// Normalised (lower-cased, whitespace-collapsed) style or colorway name.
+  name      String            @unique
+  kind      StyleNameRuleKind
+  /// For PARENT_OVERRIDE: the style name this must nest under instead.
+  parent    String?
+  note      String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+enum StyleNameRuleKind {
+  /// A garment in its own right — never absorb it into its leading word.
+  COMPOUND
+  /// Nest under `parent`, whatever the name suggests.
+  PARENT_OVERRIDE
+  /// Reviewed and deliberately left alone.
+  KEEP_SEPARATE
+}

@@ -31,6 +31,7 @@ const DATA_REPAIR_TOOLS = [
   { href: "/catalog/import-gaps", label: "Import gaps" },
   { href: "/catalog/skus", label: "SKUs" },
   { href: "/catalog/duplicates", label: "Duplicates" },
+  { href: "/catalog/style-splits", label: "Style splits" },
   { href: "/catalog/cutover", label: "Cutover" },
   { href: "/catalog/identity", label: "Identity" },
 ];
