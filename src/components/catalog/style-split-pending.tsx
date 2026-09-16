@@ -24,6 +24,7 @@ interface PendingStyle {
  */
 export function StyleSplitPending() {
   const [pending, setPending] = useState<PendingStyle[] | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -31,11 +32,22 @@ export function StyleSplitPending() {
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/catalog/style-splits/pending");
+      if (!res.ok) {
+        // A 404 here means the deployment predates this endpoint, which is
+        // worth saying out loud — it is indistinguishable from "nothing
+        // pending" otherwise, and the two call for opposite reactions.
+        throw new Error(
+          res.status === 404
+            ? "This build does not have /api/catalog/style-splits/pending yet — the deployment is older than the code."
+            : `HTTP ${res.status} from /api/catalog/style-splits/pending`
+        );
+      }
       const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
       setPending(body.pending ?? []);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setLoaded(true);
     }
   }, []);
 
@@ -83,7 +95,22 @@ export function StyleSplitPending() {
     [load]
   );
 
-  if (!pending?.length) return null;
+  if (error) {
+    return (
+      <div className="mt-5 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-xs">
+        <strong className="text-foreground">
+          Could not check what is waiting to go to Loom.
+        </strong>{" "}
+        {error}
+        <p className="mt-1 text-muted-foreground">
+          Styles already re-nested here would not be listed, so treat this as
+          unknown rather than empty.
+        </p>
+      </div>
+    );
+  }
+
+  if (!loaded || !pending?.length) return null;
 
   return (
     <div className="mt-5 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
