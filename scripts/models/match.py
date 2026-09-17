@@ -10,7 +10,7 @@ rather than a best guess per row. A wrong model-info line is worse than a
 missing one: "Model is 189cm and wears 32/34" against the wrong garment is
 silently misleading on a product page, and nothing downstream would catch it.
 """
-import csv, json, re, sys, unicodedata
+import csv, json, os, re, sys, unicodedata
 from collections import defaultdict
 
 # Typos and shorthand in the styling list, mapped to the master's spelling.
@@ -65,20 +65,27 @@ def candidates(query, master, season):
     q = norm(query)
     qt = set(q.split())
 
-    exact = [m for m in master if m["full"] == q]
-    if exact:
-        pool = exact
-    else:
+    # Season first, THEN name. A shoot is for one season, so a colourway from
+    # another season is not a candidate at all while an in-season one exists.
+    # Doing this after the name match lets an exact out-of-season name beat an
+    # in-season one: "Cavi Black" matched the SS27 "Cavi / Black" exactly and so
+    # never reached the FW26 "Cavi / Black Waffle" the shoot actually meant.
+    scoped = [m for m in master if season in m["seasons"]]
+    pool = []
+    for pool_source in (scoped, master):
+        if not pool_source:
+            continue
+        exact = [m for m in pool_source if m["full"] == q]
+        if exact:
+            pool = exact
+            break
         # The styling name is shorthand, so its words should all appear in the
         # master's — not the other way round.
-        pool = [m for m in master if qt and qt <= m["toks"]]
+        pool = [m for m in pool_source if qt and qt <= m["toks"]]
+        if pool:
+            break
     if not pool:
         return [], "none"
-
-    # A look belongs to a season; prefer that season when it decides anything.
-    in_season = [m for m in pool if season in m["seasons"]]
-    if in_season:
-        pool = in_season
 
     if len(pool) == 1:
         return pool, "confident"
@@ -111,15 +118,28 @@ def main():
     looks = json.load(open(sys.argv[1]))
     master = load_master(sys.argv[2])
     season = sys.argv[3]
+    # Names the matcher cannot resolve and a person has settled. Keyed on the
+    # normalised shoot name so spelling drift in the source does not break it.
+    ov_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "overrides.json")
+    overrides = {}
+    if os.path.exists(ov_path):
+        overrides = {norm(k): v for k, v in json.load(open(ov_path)).items()
+                     if not k.startswith("_")}
+    by_sku = {m["sku"]: m for m in master}
     out = []
     for look in looks:
         for item in look["items"]:
             if not item["hero"]:
                 continue
             name, size = split_size(item["raw"])
-            cands, state = candidates(name, master, season)
-            if state == "none":
-                cands, state = fuzzy(name, master, season), "unmatched"
+            forced = overrides.get(norm(name))
+            if forced and forced in by_sku:
+                cands, state = [by_sku[forced]], "confident"
+            else:
+                cands, state = candidates(name, master, season)
+                if state == "none":
+                    cands, state = fuzzy(name, master, season), "unmatched"
             rec = {
                 "model": look["model"], "look": look["look"], "raw": item["raw"],
                 "query": name, "size": size, "state": state,
