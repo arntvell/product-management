@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Upload the FW26 flat-lays and record them as FLAT MediaAssets.
 
+NOT FOR THIS PASS (2026-09-18): the FW26 flats are being reshot, so what is in
+FLATS/FW26 today is superseded. Run this once the new ones land. The four that
+were loaded on 18 September were removed again for that reason.
+
 FLATS/FW26/{MENS,WOMENS}/<STYLE-COLOURWAY>.jpg (FLATS/ is those two combined,
 so it is ignored). The flat is what the push uses as a unisex product's gallery,
 and it becomes custom.flat on every product.
