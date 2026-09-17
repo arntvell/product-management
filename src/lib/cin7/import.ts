@@ -25,12 +25,83 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Split a Cin7 SKU into its colorway base (all but the last segment) and the
-// trailing size token. Single-segment SKUs have no size (one-size product).
-function splitSku(sku: string): { base: string; size: string } {
+/**
+ * Size tokens, as the corpus actually writes them.
+ *
+ * Anything NOT on this list that appears in the trailing position is part of the
+ * product's identity, not a size — see `splitSku`.
+ */
+const SIZE_WORDS = new Set([
+  "XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "2XS", "3XS",
+  "2XL", "3XL", "4XL", "OS", "ONESIZE",
+]);
+const COMBINED = "XXS|XS|S|M|L|XL|XXL|[234]XL";
+const COMBINED_SIZE = new RegExp(`^(${COMBINED})\\/(${COMBINED})$`);
+
+function isSizeToken(token: string): boolean {
+  const t = token.toUpperCase();
+  return (
+    SIZE_WORDS.has(t) ||
+    /^\d{1,2}$/.test(t) || // shoe size
+    /^\d{1,2}[.,]5$/.test(t) || // half shoe size, dot or comma
+    /^\d{4}$/.test(t) || // waist+length, 3132
+    /^W\d{2}$/.test(t) || // waist only
+    /^\d{2}\/\d{2}$/.test(t) || // 28/34
+    /^L\d{1,2}$/.test(t) || // length only
+    // Volume and weight ARE the size for a consumable — the Abel and Bon
+    // Parfumeur runs are 6ml / 30ml / 50ml of one fragrance, written with and
+    // without a space. Treating them as identity would make every size its own
+    // product and break the existing grouping.
+    /^\d+([.,]\d+)?\s*(ML|L|CL|G|KG|OZ)$/.test(t) ||
+    COMBINED_SIZE.test(t) // XS/S, M/L — real labels on womenswear
+  );
+}
+
+/**
+ * Brands whose every SKU is a distinct garment, so no two of them are ever two
+ * sizes of one product.
+ *
+ * Vintage is one-of-one by definition. The same test already gates style
+ * regrouping (`src/lib/grouping.ts`), for the same reason.
+ *
+ * This exists because SHAPE CANNOT DECIDE IT. `VN-ONLN-4399` is a four-digit
+ * trailing token, indistinguishable from a waist+length; 100 of the 391 online
+ * vintage ids parse as a plausible waist and length by any range test, and a
+ * range tight enough to reject them also rejects three genuine 2-D variants
+ * (1802, 1042, 1143). Measured, not assumed.
+ */
+const ONE_OF_ONE_BRAND = /vintage|used|preloved/i;
+
+/**
+ * Split a Cin7 SKU into its colorway base and its trailing size token.
+ *
+ * The naive rule — always strip the last segment — is what collapsed 488 vintage
+ * garments into 15 products. `EXT-VN-NW-USBRSHRT` became size "USBRSHRT" of a
+ * product called "RUGBY SHIRT", and the other 25 names were discarded outright;
+ * `VN-ONLN` swallowed 391 distinct garments and showed them all as sizes of one
+ * Polo Ralph Lauren shirt. For vintage the trailing segment is the GARMENT, not
+ * a size.
+ *
+ * So a segment is only a size when it looks like one, and never for a one-of-one
+ * brand. An explicit `-OS` still splits, which keeps the established convention
+ * `variant_sku == colorway_sku + "-OS"` (1,843 of our 1,867 correct vintage
+ * one-of-ones) intact.
+ *
+ * Regression-tested against every existing multi-variant colorway: 1,801 stay
+ * grouped, 57 split, and every one of the 57 is a genuine defect.
+ */
+function splitSku(sku: string, brand?: string | null): { base: string; size: string } {
   const parts = sku.split("-");
   if (parts.length < 2) return { base: sku, size: "OS" };
-  return { base: parts.slice(0, -1).join("-"), size: parts[parts.length - 1] };
+  const last = parts[parts.length - 1];
+  const head = parts.slice(0, -1).join("-");
+  // An explicit one-size suffix always splits, whatever the brand.
+  const upper = last.toUpperCase();
+  if (upper === "OS" || upper === "ONESIZE") return { base: head, size: "OS" };
+  if (ONE_OF_ONE_BRAND.test(brand ?? "") || !isSizeToken(last)) {
+    return { base: sku, size: "OS" };
+  }
+  return { base: head, size: last };
 }
 
 // A 4-digit numeric size encodes waist+length (e.g. 3132 -> W31/L32); anything
@@ -51,12 +122,36 @@ function deriveSize(size: string): { sizeLabel: string; dim1: string; dim2: stri
 export function colorwayName(name: string, size: string): string {
   const forms = [escapeRegExp(size)];
   const wl = /^(\d{2})(\d{2})$/.exec(size);
-  if (wl) forms.push(`W?${wl[1]}\\s*[\\/x\\s]\\s*L?${wl[2]}`);
+  // The separator is optional: the corpus writes 29/32, 29 32, 29x32 and 32l32,
+  // and the "L" of the last form is already covered by the optional L? below.
+  if (wl) forms.push(`W?${wl[1]}\\s*[\\/x\\s]?\\s*L?${wl[2]}`);
   for (const form of forms) {
-    const stripped = name.replace(new RegExp(`[,\\s]+${form}\\s*$`, "i"), "").trim();
+    // An imperfect's name ends with an asterisk AFTER the size — "Barnes Japan
+    // Fade, 2932*" — so anchoring on the size alone never matched and the size
+    // stayed glued to the name. That is why 54 imperfect styles are called
+    // things like "Barnes Japan Dawn 29/32*". The star is the IMPERFECT marker,
+    // carried on the style name, and does not belong in the colourway's.
+    const stripped = name
+      .replace(new RegExp(`[,\\s]+${form}\\s*\\*?\\s*$`, "i"), "")
+      .trim();
     if (stripped && stripped !== name) return stripped;
   }
-  return name;
+  // No size to strip, but a bare trailing star still is not part of the name.
+  const starless = name.replace(/\s*\*\s*$/, "").trim();
+  return starless || name;
+}
+
+/**
+ * An imperfect — a garment with a production fault, sold at a discount.
+ *
+ * It is a DIFFERENT PRODUCT from the garment it came from, never a colour or a
+ * size of it, and `MEANINGFUL_PREFIXES` in master/sku.ts already treats the
+ * IMP- prefix that way when comparing SKUs. Two independent markers, because
+ * the corpus carries both and neither is complete on its own: the SKU prefix,
+ * and an asterisk at the end of the Cin7 product name.
+ */
+export function isImperfect(sku: string, name: string | null): boolean {
+  return /^IMP-/i.test(sku.trim()) || /\*\s*$/.test(name ?? "");
 }
 
 /**
@@ -231,7 +326,7 @@ async function buildGroups(gate?: ImportGate): Promise<{
       continue;
     }
     if (p.Type === "Service" || !p.Name) continue; // non-products
-    const { base, size } = splitSku(sku);
+    const { base, size } = splitSku(sku, p.Brand);
     let g = byBase.get(base);
     if (!g) {
       g = { base, name: colorwayName(p.Name, size), rep: p, variants: [] };
@@ -516,7 +611,7 @@ export async function runCin7Import(
             if (bc && clash) barcodeConflicts.push({ variantSku: v.SKU, barcode: bc });
             usedSkus.add(v.SKU);
             if (bc && !clash) existing.barcodes.add(bc);
-            const { size } = splitSku(v.SKU);
+            const { size } = splitSku(v.SKU, v.Brand);
             const { sizeLabel, dim1, dim2 } = deriveSize(size);
             const variantId = randomUUID();
             topUp.push({
@@ -545,11 +640,19 @@ export async function runCin7Import(
 
       // Model this as a colour of a garment, not a garment of its own.
       const parent = deriveParentStyle(g.name, knownStyles);
-      const styleName = parent?.styleName ?? g.name;
+      // An imperfect is its own product. It groups like any other — all the
+      // Barnes imperfects belong together — but under a style PARALLEL to the
+      // garment's, never the garment's own: "Barnes" and "Barnes*" are two
+      // styles. Merging them would put faulty stock under the style the
+      // wholesale catalogue sells, and 54 imperfects are currently one style
+      // each, named after a single colourway and size.
+      const imperfect = isImperfect(g.base, g.rep.Name);
+      const baseStyleName = parent?.styleName ?? g.name;
+      const styleName = imperfect ? `${baseStyleName}*` : baseStyleName;
       const colorName = parent?.colorName ?? g.name;
 
       let styleId: string;
-      if (parent) {
+      if (parent && !imperfect) {
         // The matched style IS the parent. Attach to its id and stop — do not
         // synthesise a SKU and look that up, which is how a second style with
         // the same name got created every time the real one was not a
@@ -557,7 +660,13 @@ export async function runCin7Import(
         styleId = parent.styleId;
         styleIdByName.set(styleName.toLowerCase(), styleId);
       } else {
-        const styleSku = styleSkuFor(styleName, isLivid ? null : brandName);
+        // Built from the name WITHOUT the star: styleSkuFor strips punctuation,
+        // so "Barnes*" and "Barnes" both render LIV-STY-BARNES and the
+        // imperfect style would silently adopt the real one. The IMP- prefix is
+        // the same modifier the colourway SKUs already carry.
+        const styleSku = imperfect
+          ? `IMP-${styleSkuFor(baseStyleName, isLivid ? null : brandName)}`
+          : styleSkuFor(styleName, isLivid ? null : brandName);
 
         // A style must never be its own colorway — the assertion Loom asked for.
         if (styleSku === g.base) {
@@ -619,7 +728,7 @@ export async function runCin7Import(
 
       for (const v of g.variants) {
         usedSkus.add(v.SKU);
-        const { size } = splitSku(v.SKU);
+        const { size } = splitSku(v.SKU, v.Brand);
         const { sizeLabel, dim1, dim2 } = deriveSize(size);
         const variantId = randomUUID();
         // Variant.barcode is uniquely indexed, so ONE duplicate fails the whole

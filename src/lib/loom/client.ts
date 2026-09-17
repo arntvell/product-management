@@ -35,6 +35,23 @@ export interface LoomJob {
     created?: number;
     updated?: number;
     archived?: number;
+    /** Variants Loom MOVED to a different colorway (needs allow_variant_reparent). */
+    variantsMoved?: number;
+    /** Moves Loom refused — the colorway is skipped whole, in preflight. */
+    variantsMoveRefused?: number;
+    /**
+     * Moved SKUs Loom did NOT push to Pio. Pio's product grouping id is
+     * immutable, so a re-parented size gets 409 there; Loom blocks the push and
+     * lists them rather than failing the job. The warehouse keeps the OLD
+     * grouping and name until someone reconciles it there.
+     */
+    pioReparentPending?: string[];
+    /** Written, not just accepted — the counters that prove identity landed. */
+    variantsCreated?: number;
+    variantsUpdated?: number;
+    pricesCreated?: number;
+    pricesUpdated?: number;
+    itemErrors?: unknown[];
     fatalError?: string;
     /** Loom warns when a style looks like a colorway modelled as its own style. */
     shapeWarnings?: string[];

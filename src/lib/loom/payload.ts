@@ -143,6 +143,14 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       const sitoo = v.channelRefs.find((r) => r.channel === "SITOO");
       return {
         variant_id: v.id,
+        // Loom derives `{colorway_sku}-{suffix}` when `sku` is absent and treats
+        // the result as a RENAME. That derivation is a no-op today only because
+        // every colorway_sku happens to be the variant SKU minus its last
+        // segment; the moment a variant is re-parented it is not, and the
+        // rename would rewrite the SKU Sitoo matches on. Send both spellings —
+        // `sku` is the field Loom's feed reads, `variant_sku` is what we have
+        // always sent, and they must never disagree.
+        sku: v.variantSku,
         variant_sku: v.variantSku,
         barcode: v.barcode ?? null,
         dimensions: v.dim2 ? { waist: v.dim1, length: v.dim2 } : { size: v.dim1 },
@@ -226,6 +234,8 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     prices,
     variants: cw.variants.map((v) => ({
       variant_id: v.id,
+      // See the note in buildRegistryColorway: `sku` is what Loom reads.
+      sku: v.variantSku,
       variant_sku: v.variantSku,
       barcode: v.barcode ?? null,
       dimensions: v.dim2
@@ -251,6 +261,16 @@ export interface LoomPayload {
    * natural response to that is to send it again.
    */
   event_id: string;
+  /**
+   * Opt in to Loom MOVING a variant to a different colorway.
+   *
+   * Loom's default is to refuse: the variant row is where stock, weighted
+   * average cost and every order, PO and receipt line live, so a nesting bug
+   * upstream would otherwise relocate all of it silently. Omitted entirely
+   * unless asked for — Loom requires a strict boolean `true` and treats
+   * anything else as off.
+   */
+  allow_variant_reparent?: true;
   styles: Array<{
     style_id: string;
     style_sku: string;
@@ -334,7 +354,12 @@ export function buildLoomPayloadFromColorways(
    * *network* failure must keep the derived id so Loom dedupes; a retry after a
    * *job* failure must change it. Hence a suffix rather than a fresh id.
    */
-  eventIdSuffix?: string
+  eventIdSuffix?: string,
+  /**
+   * Ask Loom to re-parent variants whose colorway has changed. Only ever set
+   * for a deliberate restructure; see `allow_variant_reparent` on LoomPayload.
+   */
+  allowVariantReparent?: boolean
 ): LoomPayload {
   // Group colorways under their style.
   const build = mode === "data" ? buildRegistryColorway : buildColorway;
@@ -362,6 +387,10 @@ export function buildLoomPayloadFromColorways(
   return {
     season: loomSeasonName(seasonCode),
     mode,
+    // Present only when true. Loom reads a strict boolean, so sending `false`
+    // and sending nothing are the same thing to them — but omitting it keeps
+    // the payload honest about what this delivery is asking for.
+    ...(allowVariantReparent ? { allow_variant_reparent: true as const } : {}),
     // Derived from the delivery's contents when not supplied, so the same set
     // of products retried produces the same id. Keyed on the season Loom sees,
     // so the id and the delivery agree about what was sent.

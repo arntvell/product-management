@@ -139,13 +139,28 @@ export function stripPrefix(name: string, prefix: string): string {
  * Find the trailing size, then hand the stripping to `colorwayName` from the
  * Cin7 importer, which already knows both spellings (2834 and "28 34"). A second
  * regex here would drift from that one.
+ *
+ * The asterisk is NOT discarded. It marks an imperfect, which is a different
+ * product from the garment it came from, and it moves to the FRONT so the
+ * marker survives both passes:
+ *
+ *   pass A matches `matchName` exactly   — "*barnes" never equals "barnes"
+ *   pass B matches `startsWith(v + " ")` — "*barnes forest fog" never starts
+ *                                          with "barnes ", only with "*barnes "
+ *
+ * Stripping it instead — which this did until 2026-09-17 — made "Barnes*"
+ * normalise to "barnes" and the report would have proposed merging the
+ * imperfect style into the real one, undoing the split deliberately.
+ * Imperfects group with imperfects; they never join the wholesale style.
  */
 export function nameForMatching(name: string): string {
+  const imperfect = /\*+\s*$/.test(name);
+  const mark = (v: string) => (imperfect ? `*${v}` : v);
   const n = name.replace(/\*+\s*$/, "").trim();
   const m = /[,\s]+(\d{2})\s*[\/x\s]\s*(\d{2})\s*$|[,\s]+(\d{4})\s*$|[,\s]+(\d{2})\s*$/.exec(n);
-  if (!m) return n;
+  if (!m) return mark(n);
   const size = m[1] && m[2] ? `${m[1]}${m[2]}` : (m[3] ?? m[4])!;
-  return colorwayName(n, size).replace(/[,\s]+$/, "");
+  return mark(colorwayName(n, size).replace(/[,\s]+$/, ""));
 }
 
 // ---------------------------------------------------------------------------
@@ -566,7 +581,7 @@ export async function buildStyleSplitReport(): Promise<SplitReport> {
     (clusters.get(word) ?? clusters.set(word, []).get(word)!).push(s);
   }
 
-  for (const [, members] of clusters) {
+  for (const [clusterWord, members] of clusters) {
     if (members.length < 2) {
       skipped.push({
         styleSku: members[0].styleSku,
@@ -580,7 +595,14 @@ export async function buildStyleSplitReport(): Promise<SplitReport> {
     // its style_id, so Loom sees a rename instead of a create plus an orphan.
     // Display casing comes from a real row, not from the normalised cluster key.
     const shared = commonWordPrefix(members.map((m) => m.styleName));
-    const parentName = (shared.length ? shared : [members[0].styleName.trim().split(/\s+/)[0]]).join(" ");
+    const bareName = (shared.length ? shared : [members[0].styleName.trim().split(/\s+/)[0]]).join(" ");
+    // The cluster key carries the imperfect marker, so a cluster is all
+    // imperfect or none of it. The shared prefix is taken from the RAW style
+    // names, where the star sits at the end after the size and is lost when the
+    // common prefix is computed — so twelve rows called "Barnes … 29/32*"
+    // promote to a style called plainly "Barnes", which is the wholesale
+    // garment's name. Put the marker back.
+    const parentName = clusterWord.startsWith("*") ? `${bareName}*` : bareName;
     // A row already called exactly the parent name is the natural survivor: the
     // promotion is then a no-op rename and Loom sees nothing move at all.
     const exact = members.filter((m) => m.matchName === normName(parentName));

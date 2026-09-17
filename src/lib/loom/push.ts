@@ -36,6 +36,23 @@ export interface LoomPushResult {
     created?: number;
     updated?: number;
     archived?: number;
+    /**
+     * What the job did to VARIANTS. `updated` counts colorway rows only, so an
+     * identity-only delivery that worked perfectly reports `updated: 0` — which
+     * we previously read as "nothing landed" and recorded in the schema as
+     * storage being unproven. Confirmed by Loom 2026-09-17.
+     */
+    variantsCreated?: number;
+    variantsUpdated?: number;
+    variantsMoved?: number;
+    variantsMoveRefused?: number;
+    /** Moved SKUs Loom could not push to Pio; the warehouse keeps the old grouping. */
+    pioReparentPending?: string[];
+    /** Prices actually stored. A list Loom does not know is dropped in silence. */
+    pricesCreated?: number;
+    pricesUpdated?: number;
+    /** Per-item refusals. Empty is the only good value. */
+    itemErrors?: unknown[];
     fatalError?: string;
     shapeWarnings?: string[];
     /** The job never settled inside our polling window. */
@@ -91,6 +108,19 @@ export interface LoomPushOptions {
   eventIdSuffix?: string;
   /** "full" for a whole season, "data" for a targeted update. */
   mode?: LoomMode;
+  /**
+   * Ask Loom to MOVE a variant whose parent colorway has changed, instead of
+   * refusing the whole colorway.
+   *
+   * Off by default, and deliberately so — Loom's refusal is the guard that stops
+   * an upstream nesting bug from silently relocating stock, cost and order
+   * history. Set it only for a reviewed restructure, such as splitting a
+   * collapsed vintage colorway into one colorway per garment.
+   *
+   * Loom refuses a move regardless of this flag when the variant id already
+   * belongs to a different stable row, or when no variant id asserts the move.
+   */
+  allowVariantReparent?: boolean;
 }
 
 export async function pushColorwaysToLoom(
@@ -162,7 +192,8 @@ export async function pushColorwaysToLoom(
     archive,
     opts.eventId,
     opts.mode,
-    opts.eventIdSuffix
+    opts.eventIdSuffix,
+    opts.allowVariantReparent
   );
 
   if (opts.dryRun) {
@@ -244,6 +275,14 @@ export async function pushColorwaysToLoom(
         created: settled.summary?.created,
         updated: settled.summary?.updated,
         archived: settled.summary?.archived,
+        variantsCreated: settled.summary?.variantsCreated,
+        variantsUpdated: settled.summary?.variantsUpdated,
+        variantsMoved: settled.summary?.variantsMoved,
+        variantsMoveRefused: settled.summary?.variantsMoveRefused,
+        pioReparentPending: settled.summary?.pioReparentPending,
+        pricesCreated: settled.summary?.pricesCreated,
+        pricesUpdated: settled.summary?.pricesUpdated,
+        itemErrors: settled.summary?.itemErrors,
         fatalError: settled.summary?.fatalError,
         shapeWarnings: settled.summary?.shapeWarnings,
         unconfirmed: settled.status === "running" || settled.status === "queued",
@@ -254,6 +293,10 @@ export async function pushColorwaysToLoom(
       // 26 August failure went unnoticed in the first place.
       if (settled.status === "error") ok = false;
       if (job.unconfirmed) ok = false;
+      // A refused move skips the whole colorway in Loom's preflight, so the
+      // products simply are not there — but the job itself still reports done.
+      // Marking those published would record a state Loom does not hold.
+      if ((job.variantsMoveRefused ?? 0) > 0) ok = false;
     }
   }
 
