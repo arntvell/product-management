@@ -21,7 +21,7 @@ Uploads nothing without --apply. Re-running is safe: a colorway that already has
 MediaAsset rows is skipped unless --replace is given.
 """
 import argparse, json, mimetypes, os, re, subprocess, sys, urllib.parse, urllib.request
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 
 BLOB_API = "https://blob.vercel-storage.com"
 
@@ -76,7 +76,8 @@ def main():
                     help="upload even where the colorway already has media")
     ap.add_argument("--unisex-roles", action="store_true",
                     help="tag shot-both products MEN/WOMEN instead of GALLERY")
-    ap.add_argument("--only", help="only this folder name (for a trial run)")
+    ap.add_argument("--only", help="only this folder name or colorwaySku")
+    ap.add_argument("--skus", help="comma-separated colorwaySkus to limit to")
     ap.add_argument("--limit", type=int)
     args = ap.parse_args()
 
@@ -85,29 +86,48 @@ def main():
 
     rows = [r for r in json.load(open(args.match)) if r["state"] == "confident"]
     if args.only:
-        rows = [r for r in rows if r["folder"] == args.only]
+        rows = [r for r in rows if r["folder"] == args.only
+                or r["candidates"][0]["sku"] == args.only]
+    if args.skus:
+        want = set(args.skus.split(","))
+        rows = [r for r in rows if r["candidates"][0]["sku"] in want]
     if args.limit:
         rows = rows[: args.limit]
 
-    have = existing_media(db, [r["candidates"][0]["id"] for r in rows])
-    plan, skipped = [], []
+    # One colorway can be spread over several folders — the retouched REST set
+    # often names it differently from the original ("MILA BUTTERNUT" vs "MILA
+    # BUTTERNUT FADE OUT"). Group by colorway so every folder's files land on
+    # the product, rather than the first folder winning and the rest being
+    # skipped as "already has media".
+    grouped = OrderedDict()
     for r in rows:
         c = r["candidates"][0]
-        if have.get(c["id"]) and not args.replace:
-            skipped.append((c["sku"], have[c["id"]]))
+        g = grouped.setdefault(c["id"], {
+            "sku": c["sku"], "id": c["id"],
+            "label": f"{c['style']} / {c['name']}",
+            "folders": [], "by_gender": defaultdict(list)})
+        g["folders"].append(r["folder"])
+        for gender, files in r["files"].items():
+            g["by_gender"][gender].extend(files)
+
+    have = existing_media(db, list(grouped))
+    plan, skipped = [], []
+    for g in grouped.values():
+        if have.get(g["id"]) and not args.replace:
+            skipped.append((g["sku"], have[g["id"]]))
             continue
-        # HERRE before DAME so a men's-first gallery reads consistently.
+        shot_both = "DAME" in g["by_gender"] and "HERRE" in g["by_gender"]
+        # HERRE before DAME so a men's-first gallery reads consistently; REST
+        # is the ungendered retouched set and follows.
         items = []
-        for gender in ("HERRE", "DAME"):
-            for f in r["files"].get(gender, []):
-                if r["shot_both"] and args.unisex_roles:
+        for gender in ("HERRE", "DAME", "REST"):
+            for f in sorted(g["by_gender"].get(gender, []), key=lambda x: x["pos"]):
+                if shot_both and args.unisex_roles and gender != "REST":
                     role = "MEN" if gender == "HERRE" else "WOMEN"
                 else:
                     role = "GALLERY"
                 items.append({**f, "gender": gender, "role": role})
-        plan.append({"sku": c["sku"], "id": c["id"],
-                     "label": f"{c['style']} / {c['name']}",
-                     "shot_both": r["shot_both"], "items": items})
+        plan.append({**g, "shot_both": shot_both, "items": items})
 
     total = sum(len(p["items"]) for p in plan)
     print(f"colorways: {len(plan)}   files: {total}   "

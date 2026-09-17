@@ -3,12 +3,19 @@
 
 Layout (CONTENT/FW26/ECOMMERCE_MEDIA):
 
-    DAME|HERRE / <STYLE COLOURWAY> / <id>_<pos>_<role>_<original>.jpg
+    DAME|HERRE|REST / <STYLE COLOURWAY>[ F|M|2] / <id>_<pos>_<role>_<original>.jpg
 
 `pos` is the gallery order and `role` is one of main | hover | keep | extra-N.
-A product folder appearing under BOTH DAME and HERRE was shot on a woman and a
-man — that is the unisex case the push routes to custom.men_images /
+
+Gender comes from the top folder for DAME/HERRE. REST is the retouched final
+selection and is not split by folder — it marks gender with a trailing " F" or
+" M" on the product name instead, and " 2" for a second set of the same thing.
+A product that ends up with both a women's and a men's source was shot on a
+woman and a man: that is the unisex case the push routes to custom.men_images /
 custom.women_images.
+
+A folder whose name carries a note rather than a colourway ("… MISSING IMAGES")
+is reported, never matched.
 
 Reports confident / ambiguous / unmatched rather than guessing: a photo on the
 wrong product page is worse than a product with no photo, and nothing
@@ -56,11 +63,29 @@ def load_master(path):
     return rows
 
 
+NOTE_RE = re.compile(r"\b(MISSING|TBC|TODO|NO)\s+IMAGES?\b", re.I)
+SUFFIX_RE = re.compile(r"\s+(F|M|\d+)$", re.I)
+
+
+def split_suffix(name):
+    """"UTMOST GREEN PLAID F" -> ("UTMOST GREEN PLAID", "DAME").
+
+    A trailing F or M is the gender of the shot; a trailing number is just a
+    second set of the same product and carries no gender."""
+    m = SUFFIX_RE.search(name)
+    if not m:
+        return name, None
+    base = name[: m.start()].strip()
+    tag = m.group(1).upper()
+    return base, {"F": "DAME", "M": "HERRE"}.get(tag)
+
+
 def scan(root):
     """-> {folder_name: {gender: [ {path,pos,role,file}, ... ] }}"""
     out = defaultdict(lambda: defaultdict(list))
-    for gender in ("DAME", "HERRE"):
-        gdir = os.path.join(root, gender)
+    notes = []
+    for top in ("DAME", "HERRE", "REST"):
+        gdir = os.path.join(root, top)
         if not os.path.isdir(gdir):
             continue
         for raw in sorted(os.listdir(gdir)):
@@ -72,6 +97,14 @@ def scan(root):
             # unisex pair is missed — the same whitespace trap the Threadflow
             # client documents on SKUs.
             folder = raw.strip()
+            if NOTE_RE.search(folder):
+                notes.append(os.path.join(top, raw))
+                continue
+            if top == "REST":
+                folder, tagged = split_suffix(folder)
+                gender = tagged or "REST"
+            else:
+                gender = top
             for fn in sorted(os.listdir(fdir)):
                 if fn.startswith("."):
                     continue
@@ -90,7 +123,7 @@ def scan(root):
     for f in out:
         for g in out[f]:
             out[f][g].sort(key=lambda x: x["pos"])
-    return out
+    return out, notes
 
 
 def match(folder, master):
@@ -123,12 +156,28 @@ def match(folder, master):
 def main():
     root, master_tsv, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
     master = load_master(master_tsv)
-    folders = scan(root)
+    folders, notes = scan(root)
+    # Folder names a person has settled: confirmed decisions and typos the
+    # matcher must not guess at.
+    ov_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "overrides.json")
+    overrides = {}
+    if os.path.exists(ov_path):
+        overrides = {norm(k): v for k, v in json.load(open(ov_path)).items()
+                     if not k.startswith("_")}
+    by_sku = {m["sku"]: m for m in master}
 
     rows = []
     for folder, by_gender in sorted(folders.items()):
-        cands, state = match(folder, master)
-        shot_both = len(by_gender) > 1
+        forced = overrides.get(norm(folder))
+        if forced and forced in by_sku:
+            cands, state = [by_sku[forced]], "confident"
+        else:
+            cands, state = match(folder, master)
+        # Women's and men's sources, however they were marked.
+        womens = "DAME" in by_gender
+        mens = "HERRE" in by_gender
+        shot_both = womens and mens
         rows.append({
             "folder": folder,
             "genders": sorted(by_gender),
@@ -144,6 +193,11 @@ def main():
 
     from collections import Counter
     c = Counter(r["state"] for r in rows)
+    if notes:
+        print(f"folders skipped — the name is a note, not a colourway: {len(notes)}")
+        for n in notes:
+            print(f"    {n}")
+        print()
     print(f"photo folders: {len(rows)}   files: {sum(r['n_files'] for r in rows)}")
     print(f"  {dict(c)}")
     print(f"  shot on both DAME and HERRE: {sum(1 for r in rows if r['shot_both'])}")
