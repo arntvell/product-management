@@ -136,9 +136,8 @@ export function colorwayName(name: string, size: string): string {
       .trim();
     if (stripped && stripped !== name) return stripped;
   }
-  // No size to strip, but a bare trailing star still is not part of the name.
-  const starless = name.replace(/\s*\*\s*$/, "").trim();
-  return starless || name;
+  // No size to strip, but the imperfect markers still are not part of the name.
+  return withoutImperfectMarker(name) || name;
 }
 
 /**
@@ -151,7 +150,23 @@ export function colorwayName(name: string, size: string): string {
  * and an asterisk at the end of the Cin7 product name.
  */
 export function isImperfect(sku: string, name: string | null): boolean {
-  return /^IMP-/i.test(sku.trim()) || /\*\s*$/.test(name ?? "");
+  // The IMP token, wherever it sits. Both spellings are live: IMP-LIV-BRNS-…
+  // (1,484 Cin7 rows, name ends "*") and the older LIV-IMP-JNE-… (67 rows, name
+  // says "(Imperfect)" or starts with "Imperfect"). Matching only the prefix
+  // missed the second family entirely, and style-splits then proposed absorbing
+  // "Jone Japan Worn Indigo (Imperfect)" into the wholesale Jone style.
+  if (sku.split("-").some((t) => t.trim().toUpperCase() === "IMP")) return true;
+  return /\*\s*$/.test(name ?? "") || /\bimperfect\b/i.test(name ?? "");
+}
+
+/** Strip the imperfect markers from a name: the trailing star and the word. */
+export function withoutImperfectMarker(name: string): string {
+  return name
+    .replace(/\*+\s*$/, "")
+    .replace(/\(?\bimperfect\b\)?/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,\-]+|[\s,\-]+$/g, "")
+    .trim();
 }
 
 /**
@@ -646,7 +661,7 @@ export async function runCin7Import(
       // styles. Merging them would put faulty stock under the style the
       // wholesale catalogue sells, and 54 imperfects are currently one style
       // each, named after a single colourway and size.
-      const imperfect = isImperfect(g.base, g.rep.Name);
+      const imperfect = isImperfect(g.rep.SKU ?? g.base, g.rep.Name);
       const baseStyleName = parent?.styleName ?? g.name;
       const styleName = imperfect ? `${baseStyleName}*` : baseStyleName;
       const colorName = parent?.colorName ?? g.name;

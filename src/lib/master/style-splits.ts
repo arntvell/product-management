@@ -28,7 +28,7 @@
 // is style-splits-apply.ts, and it previews first.
 import { prisma } from "@/lib/db";
 import { isOneOfOne } from "./sku";
-import { colorwayName } from "@/lib/cin7/import";
+import { colorwayName, isImperfect, withoutImperfectMarker } from "@/lib/cin7/import";
 import { SEED_NAME_RULES } from "./style-name-rules";
 
 export type SplitConfidence = "high" | "medium" | "low";
@@ -153,10 +153,10 @@ export function stripPrefix(name: string, prefix: string): string {
  * imperfect style into the real one, undoing the split deliberately.
  * Imperfects group with imperfects; they never join the wholesale style.
  */
-export function nameForMatching(name: string): string {
-  const imperfect = /\*+\s*$/.test(name);
+export function nameForMatching(name: string, sku?: string | null): string {
+  const imperfect = isImperfect(sku ?? "", name);
   const mark = (v: string) => (imperfect ? `*${v}` : v);
-  const n = name.replace(/\*+\s*$/, "").trim();
+  const n = withoutImperfectMarker(name);
   const m = /[,\s]+(\d{2})\s*[\/x\s]\s*(\d{2})\s*$|[,\s]+(\d{4})\s*$|[,\s]+(\d{2})\s*$/.exec(n);
   if (!m) return mark(n);
   const size = m[1] && m[2] ? `${m[1]}${m[2]}` : (m[3] ?? m[4])!;
@@ -199,7 +199,7 @@ async function loadStyles(): Promise<LoadedStyle[]> {
     styleId: s.id,
     styleSku: s.styleSku,
     styleName: s.styleName,
-    matchName: normName(nameForMatching(s.styleName)),
+    matchName: normName(nameForMatching(s.styleName, s.styleSku)),
     source: s.source,
     threadflowId: s.threadflowId,
     gender: s.gender,
@@ -289,7 +289,8 @@ async function loadNameRules(): Promise<NameRules> {
 export function isSelfNamed(s: SplitStyle): boolean {
   return (
     s.colorways.length === 1 &&
-    normName(nameForMatching(s.colorways[0].name)) === normName(nameForMatching(s.styleName))
+    normName(nameForMatching(s.colorways[0].name, s.colorways[0].colorwaySku)) ===
+    normName(nameForMatching(s.styleName, s.styleSku))
   );
 }
 
