@@ -51,7 +51,18 @@ export interface ShopifyPreview {
   // Managed custom.* keys whose master value is now empty — the push deletes
   // these from Shopify so clearing a field in master clears it live.
   emptyMetafieldKeys: string[];
-  variants: Array<{ sku: string; barcode: string | null; size: string; price: string | null }>;
+  // dim1/dim2 carry the size axes: 1-D is { dim1: "M" }, 2-D (bottoms) is
+  // { dim1: "30", dim2: "32" }. The push needs them separately because Shopify
+  // identifies a variant by its option VALUES — a 2-D product live as
+  // Waist x Length must keep being pushed that way. See push-shopify.ts.
+  variants: Array<{
+    sku: string;
+    barcode: string | null;
+    size: string;
+    dim1: string;
+    dim2: string | null;
+    price: string | null;
+  }>;
   media: string[];
   // Role-tagged media that become file-reference metafields on push
   // (uploaded to Shopify Files, then custom.flat / men_images / women_images).
@@ -87,6 +98,28 @@ const SINGLE_REFERENCE_FIELDS: Array<{ key: string; type: string; get: (c: Publi
   { key: "recommended_product_from_collection", type: "collection_reference", get: (c) => c.recommendedCollectionId },
   { key: "model_info", type: "metaobject_reference", get: (c) => c.modelInfoId },
 ];
+
+/**
+ * The customer-facing product title: style then colourway — "Barnes Japan Dawn",
+ * not "Japan Dawn".
+ *
+ * `Colorway.name` holds the colourway alone ("Japan Dawn"), because the style is
+ * a separate record. Shopify has no style/colourway split — the product IS the
+ * colourway — so the title has to be composed, and 117 of the 128 FW26 products
+ * live on Shopify are titled that way already. Sending the bare colourway name
+ * renamed them on every update.
+ *
+ * Skipped when the name already leads with the style, so an imported colorway
+ * named "Barnes Japan Dawn" does not become "Barnes Barnes Japan Dawn".
+ */
+export function shopifyTitle(styleName: string, colorwayName: string): string {
+  const style = styleName.trim();
+  const name = colorwayName.trim();
+  if (!style) return name;
+  if (!name) return style;
+  if (name.toLowerCase().startsWith(style.toLowerCase())) return name;
+  return `${style} ${name}`;
+}
 
 export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
   const warnings: string[] = [];
@@ -188,7 +221,7 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
     externalId: shopifyPub?.externalId ?? null,
     unisex,
     product: {
-      title: cw.name,
+      title: shopifyTitle(cw.style.styleName, cw.name),
       handle: cw.colorwaySku.toLowerCase(),
       vendor: cw.vendor,
       productType: cw.productType,
@@ -201,6 +234,8 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
       sku: v.variantSku,
       barcode: v.barcode,
       size: v.sizeLabel,
+      dim1: v.dim1,
+      dim2: v.dim2,
       price,
     })),
     media,

@@ -185,14 +185,57 @@ export async function pushColorwayToShopify(
     warnings.push("Pushed without a season — price is not season-scoped; verify it's correct.");
   const metafields = await buildMetafields(cw, warnings);
 
-  // One "Size" option; one variant per master variant (deduped size labels).
-  const sizes = [...new Set(preview.variants.map((v) => v.size))];
+  // --- Size options ---
+  //
+  // Shopify identifies a variant by its OPTION VALUES, not by SKU, and
+  // productSet is declarative: any variant whose option values are not in the
+  // input is deleted. So the option scheme we send has to match the one the
+  // product already uses, or every variant is destroyed and recreated — losing
+  // its inventory levels and its GID (which order line items and
+  // VariantChannelRef point at).
+  //
+  // Bottoms are sold as Waist x Length and are live on Shopify with two
+  // options. Sending a single "Size" of "W30/L32" would rebuild 42 FW26
+  // products holding 6,062 units. The master already stores the axes
+  // separately, so use them: two options when the colorway is 2-D, one
+  // otherwise. See docs/shopify-push.md §1.
+  const is2D = preview.variants.some((v) => v.dim2 !== null && v.dim2 !== "");
+  const dedupe = (xs: string[]) => [...new Set(xs)];
+
+  const productOptions = is2D
+    ? [
+        { name: "Waist", position: 1, values: dedupe(preview.variants.map((v) => v.dim1)).map((name) => ({ name })) },
+        { name: "Length", position: 2, values: dedupe(preview.variants.map((v) => v.dim2 as string)).map((name) => ({ name })) },
+      ]
+    : [
+        { name: "Size", position: 1, values: dedupe(preview.variants.map((v) => v.size)).map((name) => ({ name })) },
+      ];
+
   const variants = preview.variants.map((v) => ({
-    optionValues: [{ optionName: "Size", name: v.size }],
+    optionValues: is2D
+      ? [
+          { optionName: "Waist", name: v.dim1 },
+          { optionName: "Length", name: v.dim2 as string },
+        ]
+      : [{ optionName: "Size", name: v.size }],
     ...(v.price ? { price: v.price } : {}),
     inventoryItem: { sku: v.sku },
     ...(v.barcode ? { barcode: v.barcode } : {}),
   }));
+
+  // A 2-D colorway with a variant missing its length would silently collapse
+  // onto another variant's option pair, so refuse rather than push a product
+  // with variants merged or dropped.
+  if (is2D) {
+    const bad = preview.variants.filter((v) => !v.dim2);
+    if (bad.length)
+      throw new Error(
+        `${bad.length} variant(s) have a waist but no length (${bad
+          .map((v) => v.sku)
+          .slice(0, 5)
+          .join(", ")}) — fix the size labels before pushing.`
+      );
+  }
 
   // --- Media (pass 2) ---
   // Only public URLs (Blob / Shopify CDN) can push; Threadflow refs must be
@@ -315,14 +358,7 @@ export async function pushColorwayToShopify(
     ...(productMediaGids.length
       ? { files: productMediaGids.map((gid) => ({ id: gid })) }
       : {}),
-    ...(hasVariants
-      ? {
-          productOptions: [
-            { name: "Size", position: 1, values: sizes.map((name) => ({ name })) },
-          ],
-          variants,
-        }
-      : {}),
+    ...(hasVariants ? { productOptions, variants } : {}),
   };
 
   const res = await shopifyGraphQL<ProductSetResult>(PRODUCT_SET_MUTATION, { input });
