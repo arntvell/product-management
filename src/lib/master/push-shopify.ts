@@ -19,7 +19,12 @@ import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
 // merchant added in Shopify admin, and current publish status.
 const PRODUCT_MERGE_QUERY = `
   query ProductMerge($id: ID!) {
-    product(id: $id) { id status tags }
+    product(id: $id) {
+      id
+      status
+      tags
+      metafields(first: 100) { nodes { namespace key type value } }
+    }
   }
 `;
 
@@ -330,8 +335,55 @@ export async function pushColorwayToShopify(
   let status: string | undefined = preview.product.status;
   if (action === "update" && existing?.externalId) {
     const live = await shopifyGraphQL<{
-      product: { id: string; status: string; tags: string[] } | null;
+      product: {
+        id: string;
+        status: string;
+        tags: string[];
+        metafields: { nodes: Metafield[] };
+      } | null;
     }>(PRODUCT_MERGE_QUERY, { id: existing.externalId });
+
+    // productSet is declarative for metafields exactly as it is for variants and
+    // files: any key NOT in the input is deleted. The master is the authority
+    // for the custom.* fields it manages, but it is not the authority for
+    // everything on the product — descriptions and care pages were merchandised
+    // in Shopify long before this master existed, and apps own keys like
+    // `badge`, `rating` and `google_product_category`.
+    //
+    // So carry every live metafield into the input and let the master's values
+    // overlay the keys it actually has. Without this a push strips the product
+    // down to whatever the master happens to hold: Abby White went from 17
+    // metafields to 3, losing its description, details, care page and model
+    // info. Emptying a field on purpose is what `clearEmptied` is for, and it
+    // runs after this as an explicit delete.
+    const liveMetafields = live.product?.metafields.nodes ?? [];
+    const managed = new Set(metafields.map((m) => `${m.namespace}.${m.key}`));
+    // When the caller asked to clear emptied fields, the keys the master
+    // manages and has deliberately blanked must NOT be carried back — that is
+    // the whole point of the flag. Everything else still is.
+    const clearing = new Set(
+      clearEmptied
+        ? preview.emptyMetafieldKeys.map((k) => `${METAFIELD_NAMESPACE}.${k}`)
+        : []
+    );
+    const carried = liveMetafields.filter(
+      (m) =>
+        !managed.has(`${m.namespace}.${m.key}`) &&
+        !clearing.has(`${m.namespace}.${m.key}`)
+    );
+    if (carried.length) {
+      // `type` is required when writing, and a value we did not author is sent
+      // back verbatim.
+      metafields.push(
+        ...carried.map((m) => ({
+          namespace: m.namespace,
+          key: m.key,
+          type: m.type,
+          value: m.value,
+        }))
+      );
+    }
+
     const liveTags = live.product?.tags ?? [];
     // Additive: union of live tags + master tags (never removes merchant tags).
     tags = [...new Set([...liveTags, ...preview.product.tags])];
@@ -387,14 +439,6 @@ export async function pushColorwayToShopify(
         warnings.push(`Could not clear ${toDelete.length} emptied metafield(s) on Shopify.`);
       }
     }
-  } else if (action === "update" && preview.emptyMetafieldKeys.length) {
-    const setKeys = new Set(metafields.map((m) => m.key));
-    const left = preview.emptyMetafieldKeys.filter((k) => !setKeys.has(k));
-    if (left.length)
-      warnings.push(
-        `Left ${left.length} field(s) untouched on Shopify because the master is blank ` +
-          `(${left.join(", ")}). Tick "clear emptied fields" to delete them instead.`
-      );
   }
 
   await prisma.channelPublication.upsert({

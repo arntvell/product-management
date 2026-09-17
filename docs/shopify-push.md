@@ -1,8 +1,9 @@
 # How the Shopify push works — and what to know before pushing FW26
 
-**As of 2026-09-17.** Two bugs were found while documenting this and **both are
-now fixed and verified live** — §1 and §1b. Neither had ever fired, because the
-push had not been run against the products the linker matched (work deck C1).
+**As of 2026-09-18.** Three bugs were found and **all three are fixed and
+verified live** — §1, §1a, §1b. Two had never fired, because the push had not
+been run against the products the linker matched (work deck C1). **§1a did
+fire**, on the two products pushed while testing.
 
 ---
 
@@ -72,6 +73,41 @@ them, but **every one carries zero stock** — dead sizes the master no longer
 lists, plus three placeholder `28*` / `29*` / `30*` variants with no SKU at all.
 One, `LIV-KR-JPN-GRVL-2534`, is at **-1** (an oversell) and deleting it would
 hide that.
+
+---
+
+## 1a. Fixed: the push stripped every metafield the master did not hold
+
+**This one actually fired**, on the two products pushed while testing.
+
+`productSet` is declarative for metafields exactly as it is for variants and
+files. The push sent only the `custom.*` keys the master had values for, so
+**every other metafield on the product was deleted** — including keys the master
+has no opinion about and keys it does not own at all.
+
+Abby White went from **17 metafields to 3**, losing `full_description`,
+`short_description`, `details`, `care_page`, `model_info`, `same_product`,
+`style_with` and more. Fuller Chino Beige, before the fix, would have lost
+`judgeme.badge` and `judgeme.widget` — the Judge.me review app's keys, which
+carry the product's reviews.
+
+`clearEmptied` was a red herring: it was off, and it correctly reported "left N
+field(s) untouched". They were not untouched. `productSet` had already removed
+them.
+
+**The fix:** on update, read the live product's metafields and carry every key
+the master is not setting into the input, so `productSet` preserves them. The
+master overlays the keys it owns; everything else survives untouched.
+`clearEmptied` still works — the keys it is clearing are deliberately not
+carried back.
+
+**Verified live** on Fuller Chino Beige: 9 metafields before, 14 after, **zero
+lost** — both `judgeme.*` keys intact, 5 added from the master.
+
+> This is the rule for the whole mutation: `productSet` replaces every list it is
+> given and deletes what is missing. Variants (§1), metafields (here) and files
+> all behave the same way. Anything the master is not the authority for has to be
+> read and sent back.
 
 ---
 
