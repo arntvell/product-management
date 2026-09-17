@@ -50,12 +50,17 @@ def main():
     ready, review = [], []
     for r in matched:
         if r["state"] != "confident":
-            review.append({**r, "reason": r["state"]})
+            # Only a hero that cannot be matched is worth reporting; a
+            # supporting garment that does not resolve costs nothing, because
+            # the product it belongs to gets its model info from its own look.
+            if r.get("hero"):
+                review.append({**r, "reason": r["state"]})
             continue
         c = r["candidates"][0]
         size, note = norm_size(r["size"], c["sizes"])
         if size is None:
-            review.append({**r, "reason": note})
+            if r.get("hero"):
+                review.append({**r, "reason": note})
             continue
         m = models.get(r["model"])
         if not m:
@@ -63,7 +68,7 @@ def main():
             continue
         ready.append({
             "model": r["model"], "model_name": m["name"], "height": m["height"],
-            "look": r["look"], "raw": r["raw"],
+            "look": r["look"], "raw": r["raw"], "hero": bool(r.get("hero")),
             "colorway_id": c["id"], "sku": c["sku"],
             "label": f"{c['style']} / {c['name']}",
             "size": size, "size_note": note,

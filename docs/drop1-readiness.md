@@ -10,22 +10,36 @@
 | Short description | 70 | 2 |
 | Details | 68 | 4 |
 | Care guide | 68 | 4 |
-| Model info | 64 | 8 |
+| Model info | **68** | 4 |
 | Fit guide | 62 | 10 |
 | Full description | 60 | 12 |
 | **Status = DRAFT** | **72** | **0** |
 
-**45 of 72 are complete on all seven.** 27 are not, listed below.
+**49 of 72 are complete on all seven.** 23 are not, listed below.
 
 All 72 are now `DRAFT` in the master. Three were `ACTIVE` (Barnes Japan Indigo
 Rinse, Ida White, Tia Japan Rinse) and none of them is on Shopify yet, so setting
 them back cost nothing.
 
-> **One thing the flag does not do.** The push never downgrades a live product:
-> if a Shopify product is ACTIVE and the master says DRAFT, it stays ACTIVE and
-> the push warns. Master status only decides what a **create** lands as. Nothing
-> in Drop 1 is affected today — no Drop 1 colorway is ACTIVE on Shopify — but it
-> is the reason "set them all to draft" is not by itself a guarantee.
+> **The flag does not unpublish anything already live.** The push never
+> downgrades: if a Shopify product is ACTIVE and the master says DRAFT, it stays
+> ACTIVE and the push warns. Master status only decides what a **create** lands
+> as.
+>
+> **63 of the 72 do not exist on Shopify yet**, so they will be created as DRAFT
+> — invisible on the storefront, exactly as intended. Of the 9 that do exist,
+> **5 are ACTIVE and will stay ACTIVE**, receiving their updated content live:
+>
+> | | |
+> |---|---|
+> | Richmond / Black | `LIV-RCHMND-2-PCK-BLCK` |
+> | Ida / White | `LIV-ID-WHT` |
+> | Barnes / Japan Indigo Rinse | `LIV-BRNS-JPN-RNS` |
+> | Nelson / White | `LIV-NLSN-ORGNC-WHT` |
+> | Tia / Japan Indigo | `LIV-T-JPN-INDG` |
+>
+> To hold those five back, unpublish them in Shopify admin first, or leave them
+> out of the push. The other four already on Shopify are DRAFT and stay DRAFT.
 
 ## What is missing, by field
 
@@ -102,16 +116,14 @@ measurement charts have `grading_increment: 0`. They cannot get a fit guide unti
 design fills the increments — `docs/fitguides-fw26-chart-requests.md` is the ask.
 Nothing to do on our side.
 
-**Model info — 8, in three different situations.**
+**Model info — 4 left.** The worn-but-never-hero rule is now in: a garment that
+only ever appears as a supporting piece takes the model and size from the first
+look that wears it, since the shoot knows both. That filled Binou Porcelain,
+Collum Black Check, Richmond Black and APT Blue Needle, and took the master from
+117 colorways with model info to **131**.
 
-- *Never photographed*: Deka Coffee Stripe, Lais Blue Needle, Ida White do not
-  appear in the look list at all.
-- *Worn but never the hero*: Binou ×2, Collum Black Check, Richmond Black. The
-  shoot knows who wore them and in what size; the rule only assigns model info to
-  the bold hero, so they are skipped. Extending it to "first look that wears it"
-  fills these — the same judgement you made by hand for Abby White.
-- *Hero with no size in the list*: APT Blue Needle. Emil is the hero in look #18
-  but no size is written; he wears M in look #9.
+The four remaining are not in the look list at all, in any role — Binou Dachs,
+Deka Coffee Stripe, Ida White, Lais Blue Needle. Nothing to derive from.
 
 **Care guide — 4.** Binou ×2 and Collum ×2 are the scarves. They may genuinely
 need a different care page rather than the garment one.

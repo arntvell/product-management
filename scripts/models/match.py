@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Match the styling list's hero garments to master colorways and variants.
+"""Match the styling list's garments to master colorways and variants.
+
+Every garment in a look is matched, not only the bold hero. The hero is the
+product whose page that shot belongs to and is the first choice for model info,
+but a garment that is only ever worn as a supporting piece is still worn by a
+known model in a known size — so it falls back to the first look that wears it.
+`resolve.py` applies that preference.
 
 Each look names garments as "<style> <colourway> <size>" in the styling team's
 shorthand, which is not the master's wording: sizes are appended, words are
@@ -130,8 +136,6 @@ def main():
     out = []
     for look in looks:
         for item in look["items"]:
-            if not item["hero"]:
-                continue
             name, size = split_size(item["raw"])
             forced = overrides.get(norm(name))
             if forced and forced in by_sku:
@@ -142,6 +146,7 @@ def main():
                     cands, state = fuzzy(name, master, season), "unmatched"
             rec = {
                 "model": look["model"], "look": look["look"], "raw": item["raw"],
+                "hero": item["hero"],
                 "query": name, "size": size, "state": state,
                 "candidates": [{k: c[k] for k in
                                 ("id", "sku", "style", "name", "cat", "sizes", "seasons")}

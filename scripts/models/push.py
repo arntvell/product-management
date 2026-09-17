@@ -108,9 +108,10 @@ def main():
             gids[label] = r["metaobject"]["id"]
             print(f"  {label:22s} created  {gids[label]}")
 
-    # One row per colorway: first look in document order wins.
+    # One row per colorway. A hero shot wins over a garment merely worn in the
+    # look; within each, the first look in document order wins.
     chosen, clashes = OrderedDict(), {}
-    for r in ready:
+    for r in sorted(ready, key=lambda x: (not x.get("hero"), x["look"])):
         key = r["colorway_id"]
         label = f"{r['model_name']} - {r['size']}"
         if key in chosen:
@@ -119,7 +120,8 @@ def main():
                     {"label": label, "look": r["look"], "raw": r["raw"], "sku": r["sku"]})
             continue
         chosen[key] = {"label": label, "look": r["look"], "raw": r["raw"],
-                       "sku": r["sku"], "name": r["label"]}
+                       "sku": r["sku"], "name": r["label"],
+                       "hero": r.get("hero", False)}
 
     print(f"\ncolorways to link: {len(chosen)}   of which contested: {len(clashes)}")
 
