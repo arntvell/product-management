@@ -46,7 +46,7 @@ export interface LoomPushResult {
     variantsUpdated?: number;
     variantsMoved?: number;
     variantsMoveRefused?: number;
-    /** Moved SKUs Loom could not push to Pio; the warehouse keeps the old grouping. */
+    /** Moved SKUs still not reconciled in Pio. Empty is the success case. */
     pioReparentPending?: string[];
     /** Prices actually stored. A list Loom does not know is dropped in silence. */
     pricesCreated?: number;
@@ -55,6 +55,8 @@ export interface LoomPushResult {
     itemErrors?: unknown[];
     fatalError?: string;
     shapeWarnings?: string[];
+    /** Non-fatal by contract — never let these fail a push. */
+    warnings?: string[];
     /** The job never settled inside our polling window. */
     unconfirmed?: boolean;
   };
@@ -285,6 +287,7 @@ export async function pushColorwaysToLoom(
         itemErrors: settled.summary?.itemErrors,
         fatalError: settled.summary?.fatalError,
         shapeWarnings: settled.summary?.shapeWarnings,
+        warnings: settled.summary?.warnings,
         unconfirmed: settled.status === "running" || settled.status === "queued",
       };
       // Only a finished, successful job means published. An errored job clearly

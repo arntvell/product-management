@@ -40,10 +40,15 @@ export interface LoomJob {
     /** Moves Loom refused — the colorway is skipped whole, in preflight. */
     variantsMoveRefused?: number;
     /**
-     * Moved SKUs Loom did NOT push to Pio. Pio's product grouping id is
-     * immutable, so a re-parented size gets 409 there; Loom blocks the push and
-     * lists them rather than failing the job. The warehouse keeps the OLD
-     * grouping and name until someone reconciles it there.
+     * Moved SKUs still NOT reconciled in Pio. Empty is the success case.
+     *
+     * This used to carry a warning that Pio's grouping id was immutable and a
+     * re-parented size got a 409 there. Loom retracted that on 2026-09-17: the
+     * 409 was their own adapter refusing a SKU it found under a different
+     * ext_product_id, not Pio. A Pio product row IS a single SKU — name and
+     * size options are mutable in place — so a move is a PUT, with no delete and
+     * no stock movement. Non-empty now means Pio was unreachable, warehouse
+     * writes were off, or Pio declined the grouping change.
      */
     pioReparentPending?: string[];
     /** Written, not just accepted — the counters that prove identity landed. */
@@ -55,6 +60,14 @@ export interface LoomJob {
     fatalError?: string;
     /** Loom warns when a style looks like a colorway modelled as its own style. */
     shapeWarnings?: string[];
+    /**
+     * Lines that must NOT fail a batch — pending Pio reparents and renames, and
+     * archived-but-kept-in-Pio rows that are retried daily. Loom moved these out
+     * of `itemErrors` on 2026-09-17, because any non-debug entry there flips the
+     * job to `error` and a fully successful re-parent batch was reading as a
+     * failure. Read both; branch on `itemErrors` only.
+     */
+    warnings?: string[];
   };
 }
 
