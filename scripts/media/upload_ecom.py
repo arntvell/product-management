@@ -57,8 +57,11 @@ def q(v):
 def existing_media(db, ids):
     if not ids:
         return {}
-    sql = ('select "colorwayId", count(*) from "MediaAsset" where "colorwayId" in ('
-           + ",".join(q(i) for i in ids) + ') group by 1;')
+    # Only the model shots count. A FLAT uploaded by upload_flats.py is a
+    # different job, and counting it would make this script think the gallery
+    # was already done.
+    sql = ('select "colorwayId", count(*) from "MediaAsset" where role <> \'FLAT\' '
+           'and "colorwayId" in (' + ",".join(q(i) for i in ids) + ') group by 1;')
     p = subprocess.run(["psql", db, "-t", "-A", "-F", "\t", "-c", sql],
                        capture_output=True, text=True)
     return {l.split("\t")[0]: int(l.split("\t")[1])

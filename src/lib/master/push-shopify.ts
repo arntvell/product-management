@@ -261,7 +261,20 @@ export async function pushColorwayToShopify(
   if (nonPublic > 0)
     warnings.push(`${nonPublic} image(s) are Threadflow refs — adopt them into Blob before they can push.`);
 
-  const productMediaUrls = preview.unisex ? flatUrls : galleryUrls;
+  // A unisex product's gallery is the flat-lay, because the gendered model
+  // shots go to custom.men_images / custom.women_images instead. But a style
+  // can be flagged unisex before its flat has been shot, and an empty `files`
+  // list means the product page has no photograph at all — so fall back to the
+  // gallery rather than publish a blank product.
+  const productMediaUrls = preview.unisex
+    ? flatUrls.length
+      ? flatUrls
+      : [...galleryUrls, ...menUrls, ...womenUrls]
+    : galleryUrls;
+  if (preview.unisex && !flatUrls.length && productMediaUrls.length)
+    warnings.push(
+      "Unisex product with no FLAT image — used the gendered/gallery shots for the product media instead."
+    );
 
   // Idempotent media: reuse the Shopify file GID we cached on first upload
   // (MediaAsset.shopifyMediaId / SeasonImage.shopifyFileId) so re-pushing does
