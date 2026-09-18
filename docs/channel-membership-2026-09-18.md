@@ -198,6 +198,70 @@ feed has nothing to say about anyway.
    returns 502 leaves unstamped even when it landed. Rate limit is 240/min shared
    with `/upsert`, and the read-back counts against it.
 
+## 6b. The push — done 2026-09-18, and what it proved
+
+Sent as `mode: "data"` (the stock registry), per season, chunked. **The `sitoo`
+key was the only new byte on the wire**: the reconcile added SITOO publication
+rows and changed no Shopify value, and prices, customs and
+`shopify_inventory_item_id` have all gone out before under this exact code path.
+
+| season | sent | chunks | colorway rows updated | itemErrors | skipped | moveRefused | archived |
+|---|---|---|---|---|---|---|---|
+| CONTINUITY | 4 306 | 18 | 4 306 | 0 | 0 | 0 | **0** |
+| SS27 | 76 | 1 | — | 0 | 0 | 0 | 0 |
+| FW26 | 227 | 1 | — | 0 | 0 | 0 | 0 |
+
+`archived: 0` across every chunk is the one worth keeping: no withdrawal fired,
+so no `retireProduct` and no `DELETE` reached Pio.
+
+**Excluded deliberately, 630 colorway-season rows.** 16 archived — they would go
+out `loom: false`, and a membership push has no business cascading to Pio. 614
+with no barcoded variant (496 of them SS27) — the registry filters variants to
+barcoded ones, so these would arrive as `variants: []` and risk creating empty
+colorway shells, which neither side can withdraw.
+
+**Pre-flight that mattered.** Every colorway goes out `loom: true`, which would
+RESURRECT anything Loom had archived on its own side. Loom holds 25 archived
+colorways; the intersection with our 4 611-row send set was **zero**. (The first
+read of that endpoint returned 0 rows because the response key is `rows` /
+`nextCursor`, not `products` — a false all-clear that would have looked
+identical to the real one.) Season identifiers were confirmed against live data
+rather than assumed: Loom knows `SS27` and `FW26` literally, and only CONTINUITY
+needs translating to `archv`.
+
+### The one refusal
+
+SS27 and FW26 both came back HTTP 502, `ok: false`, `sent: 0` — on a single
+`itemError`, the known `LIV-KR-JPN-BLCK` duplicate. Loom holds two colorway rows
+for that one garment and refuses the rename; it cannot be fixed from our side
+(§7). The job had in fact applied 52 and 81 colorways before erroring, which is
+the documented trap: **one itemError fails the whole job report.** Re-pushed
+without that colorway, both seasons returned `done` with `cwUpd: 0` — Loom had
+nothing left to change, confirming the partial application had already landed.
+
+### Read-back — the actual verification
+
+Walked the whole of `GET /products` (5 047 colorway rows, 51 pages) and diffed
+every declared colorway against the Origio rows captured *before* the push:
+
+| | |
+|---|---|
+| **match** | **4 439** |
+| mismatch | **0** |
+| still `null` | 1 — `LIV-KR-JPN-BLCK`, the blocked duplicate |
+| not found in Loom | 0 |
+
+The 607 Loom rows we did not speak for are fully accounted for, and **not one of
+them carries stock in Loom**:
+
+| rows | what they are |
+|---|---|
+| 505 | not in Origio at all — Loom-only |
+| 76 | excluded: no barcoded variant |
+| 26 | excluded: archived in Origio (names carry `--merged-into-…`) |
+
+Nothing unexplained, and nothing in the residue can affect a stock link.
+
 ## 7. Answers to Loom's open questions
 
 **§6.3 — is "published to Shopify" answerable per colourway?** Yes. Per-colorway
