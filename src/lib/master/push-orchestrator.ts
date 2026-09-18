@@ -23,6 +23,7 @@ import { getLoomJob } from "@/lib/loom/client";
 import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
 import { getSitooCreator, type SitooCreateInput } from "@/lib/sitoo/create";
 import type { Channel } from "@/generated/prisma/enums";
+import { declareChannel } from "./channel-membership";
 
 export type PushChannel = "SHOPIFY" | "LOOM" | "SITOO";
 
@@ -153,6 +154,26 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
       items.push({ colorwayId: cw.id, channel: channel as Channel, state, error });
     }
   }
+
+  // Declare the channels BEFORE any phase runs, because the Loom phase reads
+  // them and the phase order would otherwise lie to it.
+  //
+  // PHASES is SHOPIFY -> LOOM -> SITOO. Shopify writes its own publication and so
+  // reaches Loom correctly by luck of ordering; Sitoo is created AFTER the Loom
+  // push, so a batch that creates a product in both would tell Loom `sitoo:
+  // false` — "deliberately not carried in store" — for a garment it was about to
+  // put in five stores, and Loom would suppress that product's stock errors.
+  //
+  // Declaring intent up front is also the honest reading of these rows: presence
+  // means TARGETED, not "confirmed live". If the Sitoo phase then fails, `sitoo:
+  // true` with no link is precisely the `channel_declared_absent` state Loom
+  // asked to be able to raise — a real gap, correctly reported, rather than a
+  // silence.
+  for (const channel of new Set(items.filter((i) => i.state === "PENDING").map((i) => i.channel)))
+    await declareChannel(
+      items.filter((i) => i.channel === channel && i.state === "PENDING").map((i) => i.colorwayId),
+      channel
+    );
 
   const batch = await prisma.pushBatch.create({
     data: {
@@ -551,6 +572,8 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
       });
 
       if (o.mode === "api" && o.created.length) {
+        // No declareChannel here: createPushBatch already declared SITOO for
+        // every item it queued, precisely so the Loom phase above could see it.
         for (const c of o.created)
           await prisma.variantChannelRef.upsert({
             where: { variantId_channel: { variantId: c.variantId, channel: "SITOO" } },

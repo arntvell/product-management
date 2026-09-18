@@ -9,7 +9,8 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { canonical } from "@/lib/master/barcode";
 import { normalizeSku } from "@/lib/master/sku";
-import { listProducts, type SitooProduct } from "./client";
+import { listProducts, resolveTarget, type SitooProduct, type SitooTarget } from "./client";
+import { syncChannelMembership } from "@/lib/master/channel-membership";
 
 export interface LinkResult {
   linked: number;
@@ -30,16 +31,61 @@ export interface LinkResult {
    * cannot repair that, so it checks the id still resolves.
    */
   repointed: Array<{ variantSku: string; from: string; to: string }>;
+  /**
+   * SKUs of Sitoo products nothing accounts for, capped.
+   *
+   * The count alone cannot tell "genuinely POS-only" from "ours, under a name the
+   * linker could not match" — and the difference decides whether a colorway can
+   * be declared absent from Sitoo. A garment whose Sitoo SKU is a renamed
+   * spelling and whose Origio variant has no barcode matches on neither key, and
+   * would go out as `sitoo: false`, suppressing stock errors for something on a
+   * shelf.
+   */
+  unmatchedSitooSkus: string[];
+  /** Which Sitoo these numbers describe. Sandbox and production are not alike. */
+  target?: SitooTarget;
+  /**
+   * ChannelPublication(SITOO) brought into line with the links above.
+   *
+   * Sitoo membership was knowable from 8 089 VariantChannelRef rows and declared
+   * nowhere, so the Loom feed could not say whether a missing Shopify link was a
+   * gap or a store-only product.
+   */
+  membership?: import("@/lib/master/channel-membership").MembershipSyncResult;
 }
 
 export interface LinkOptions {
   dryRun?: boolean;
   /** Supply products instead of fetching — used by tests and the snapshot path. */
   products?: SitooProduct[];
+  /** Which Sitoo to read. Defaults to SITOO_TARGET, else production. */
+  target?: SitooTarget;
+  /**
+   * Permit writing production links from a SANDBOX read. Almost never right.
+   *
+   * SITOO_TARGET=sandbox in a dev environment and the two Sitoos do not share
+   * product ids, so a sandbox read looks to this linker exactly like production
+   * having lost and recreated its whole catalogue: on 2026-09-18 a dry run
+   * against 565 sandbox products reported 93 links to RE-POINT and 14 704
+   * variants as unmatched, against a database holding 8 089 good production
+   * links. Run live, that would have aimed 93 production garments at sandbox ids
+   * and the damage would have surfaced at a till.
+   */
+  allowSandboxWrites?: boolean;
 }
 
 export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkResult> {
-  const products = opts.products ?? (await listProducts());
+  const target = resolveTarget(opts.target);
+  // A supplied catalogue is the caller's own — tests and the snapshot path — so
+  // it carries no target to disagree about.
+  if (!opts.products && target === "sandbox" && !opts.dryRun && !opts.allowSandboxWrites)
+    throw new Error(
+      "Refusing to write links from the Sitoo SANDBOX. The two Sitoos do not " +
+        "share product ids, so a sandbox read re-points live links at ids that " +
+        "do not exist in production. Pass target:\"production\", or " +
+        "allowSandboxWrites if you really mean the sandbox."
+    );
+  const products = opts.products ?? (await listProducts(target));
 
   const variants = await prisma.variant.findMany({
     select: {
@@ -73,6 +119,7 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
     ambiguous: [],
     aliases: [],
     repointed: [],
+    unmatchedSitooSkus: [],
   };
   const writes: Array<{ variantId: string; externalId: string; externalSku: string | null }> = [];
   const aliasUpdates: Array<{ refId: string; externalSku: string | null }> = [];
@@ -86,11 +133,13 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
       const stillOurs =
         current && normalizeSku(current.sku ?? "") === normalizeSku(v.variantSku);
 
+      if (stillOurs) matchedProductIds.add(Number(ref.externalId));
       if (!stillOurs) {
         // The id is dead or now addresses a different garment. Re-match by SKU
         // and re-point, rather than reporting it as linked and moving on.
         const again = bySitooSku.get(normalizeSku(v.variantSku)) ?? [];
         if (again.length === 1) {
+          matchedProductIds.add(again[0].productid);
           repoint.push({ refId: ref.id, externalId: String(again[0].productid) });
           result.repointed.push({
             variantSku: v.variantSku,
@@ -112,6 +161,7 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
       }
 
       result.alreadyLinked++;
+      matchedProductIds.add(Number(ref.externalId));
       const theirs = current?.sku ?? null;
       const want =
         theirs && normalizeSku(theirs) !== normalizeSku(v.variantSku) ? theirs : null;
@@ -151,7 +201,19 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
     else result.byBarcode++;
   }
 
-  result.unmatchedSitoo = products.filter((p) => !matchedProductIds.has(p.productid)).length;
+  result.target = target;
+  // Sitoo products no Origio variant accounts for — the POS-only catalogue.
+  //
+  // This counted only the products matched FRESH in this run, so every one of
+  // the 8 015 already-linked garments read as unmatched and the figure came back
+  // as 14 713 of 14 714 — "we have almost nothing", when the truth is the
+  // opposite. A number that is only correct on the very first run is worse than
+  // no number: this is the figure that answers whether Sitoo holds products
+  // Origio has never seen, and the first honest reading of it decides how much
+  // of the POS catalogue is outside the master's control.
+  const unmatched = products.filter((p) => !matchedProductIds.has(p.productid));
+  result.unmatchedSitoo = unmatched.length;
+  result.unmatchedSitooSkus = unmatched.map((p) => p.sku ?? "").filter(Boolean);
   result.linked = writes.length;
 
   if (!opts.dryRun && writes.length) {
@@ -176,6 +238,13 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
       `;
     }
   }
+  // A link is the evidence; the publication row is the declaration Loom reads.
+  // Recording it here rather than in a one-off backfill is what stops the two
+  // drifting: every future linker run re-declares whatever it newly matched, so
+  // a garment added to Sitoo tomorrow announces itself to Loom without anyone
+  // remembering to. Additive only — see channel-membership.ts.
+  result.membership = await syncChannelMembership("SITOO", { dryRun: opts.dryRun });
+
   return result;
 }
 

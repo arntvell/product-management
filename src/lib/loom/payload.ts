@@ -52,6 +52,44 @@ export function loomMissingForColorway(cw: LoomColorway): string[] {
 }
 
 /**
+ * The `channels` block, built once so the registry and catalogue payloads cannot
+ * drift apart.
+ *
+ * `loom` is a WITHDRAWAL signal and cascades — false archives the colorway
+ * across every season and retires its Pio SKUs. `shopify` and `sitoo` cascade
+ * into nothing: they tell Loom's stock hub whether a missing channel link is a
+ * real gap or a product that was never meant to be sold there. Before they
+ * existed Loom could not tell those apart, which is what produced 2 049
+ * `no_inventory_item` failures that were mostly not failures.
+ *
+ * Membership is read from ChannelPublication ROW PRESENCE, not from `published`.
+ * `published` means "a push wrote this", which is a different question: it is
+ * true on 72 of 2 408 Shopify rows because most Shopify publications were minted
+ * by the LINKER finding a product that already existed rather than by a push
+ * creating one. Deriving membership from it would report 2 336 colorways that
+ * are live on Shopify as absent from it. Row presence is what the channel editor
+ * writes and what "targeted" has always meant here.
+ *
+ * Loom reads a missing key as "keep what you have" and an explicit `false` as
+ * "deliberately not sold there" — so a key we cannot answer must be OMITTED,
+ * never sent as false. Sending false for unknown silently switches off error
+ * reporting for those products, which is worse than the noise it replaces.
+ */
+function channelsFor(cw: LoomColorway, archive?: Set<string>) {
+  return {
+    // Loom treats loom:false as ARCHIVE — it hides the product across
+    // catalogue, order builder, curation and pricing. It is a withdrawal
+    // signal, not "not published yet", so it must express intent: true for
+    // anything we are deliberately putting on Loom, false only when we mean
+    // to withdraw it. Deriving it from whether a publication row happened to
+    // exist meant every product's FIRST push archived it on arrival.
+    loom: !archive?.has(cw.id),
+    shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
+    sitoo: cw.publications.some((p) => p.channel === "SITOO"),
+  };
+}
+
+/**
  * Registry payload — identity only.
  *
  * The stock registry needs to know *which garment* a movement refers to, and
@@ -104,18 +142,12 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       : null,
     prices,
     // Registry rows are stock-bearing records, not catalogue listings. loom:false
-    // still means withdraw, so the archive signal has to survive.
-    //
-    // `shopify` must report the product's REAL state, exactly as the catalogue
-    // builder does. It was hardcoded false here, which is only true of a product
-    // that happens not to be on Shopify — and a registry push is an upsert, so
-    // for anything Loom already held it overwrote a correct flag with a wrong
-    // one. The first live registry push sent shopify:false for 81 products that
-    // do have a Shopify publication.
-    channels: {
-      loom: !archive?.has(cw.id),
-      shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
-    },
+    // still means withdraw, so the archive signal has to survive. The channel
+    // flags must report the product's REAL state here exactly as they do in the
+    // catalogue: a registry push is an upsert, so a wrong flag overwrites a right
+    // one. This block was hardcoded shopify:false once and sent it for 81
+    // products that do have a Shopify publication.
+    channels: channelsFor(cw, archive),
     registry_only: true,
     // Barcoded variants only. The gate used to be colorway-level — any blank size
     // held back the whole run — which cost LIV-BTH-JPN-BLCK-DSK all 22 of its
@@ -219,16 +251,7 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     ...customs,
     manufacturer_id: manufacturer?.manufacturer_id ?? null,
     manufacturer,
-    channels: {
-      // Loom treats loom:false as ARCHIVE — it hides the product across
-      // catalogue, order builder, curation and pricing. It is a withdrawal
-      // signal, not "not published yet", so it must express intent: true for
-      // anything we are deliberately putting on Loom, false only when we mean
-      // to withdraw it. Deriving it from whether a publication row happened to
-      // exist meant every product's FIRST push archived it on arrival.
-      loom: !archive?.has(cw.id),
-      shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
-    },
+    channels: channelsFor(cw, archive),
     dropped: entry?.cancelled ?? false,
     approved_for_production: entry?.approvedForProduction ?? false,
     prices,

@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { CHANNELS, CHANNEL_LABELS, type ChannelKey } from "@/lib/master/fields";
+import {
+  PUBLISH_CHANNELS as CHANNELS,
+  PUBLISH_CHANNEL_LABELS as CHANNEL_LABELS,
+  type PublishChannelKey as ChannelKey,
+} from "@/lib/master/fields";
 
 interface Publication {
   channel: string;
@@ -57,10 +61,12 @@ export function ChannelsPanel({
   const pubFor = (c: ChannelKey) => pubs.find((p) => p.channel === c);
 
   async function toggle(channel: ChannelKey) {
-    const next: Record<ChannelKey, boolean> = {
-      SHOPIFY: targeted("SHOPIFY"),
-      LOOM: targeted("LOOM"),
-    };
+    // Every channel, read from its current state — not a hand-written pair. The
+    // route treats an absent key as "keep", so omitting one is safe; sending the
+    // whole picture is what keeps this panel honest about what it is changing.
+    const next = Object.fromEntries(
+      CHANNELS.map((c) => [c, targeted(c)])
+    ) as Record<ChannelKey, boolean>;
     next[channel] = !next[channel];
     setSaving(true);
     try {
