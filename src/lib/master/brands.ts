@@ -33,6 +33,14 @@ export interface BrandListItem {
    * 32 colorways, both writing PF.
    */
   possibleDuplicateOf: string[];
+  /**
+   * What each channel calls this brand. Sitoo carries a real manufacturerid;
+   * Shopify's vendor is a free string with no id, so only the spelling joins.
+   * Surfaced here because the Brands page otherwise gives no hint that the link
+   * exists at all — the review screen is /catalog/brands/identity.
+   */
+  sitooManufacturerIds: string[];
+  shopifyVendors: string[];
 }
 
 /**
@@ -87,6 +95,11 @@ export async function listBrandsWithSettings(): Promise<BrandListItem[]> {
       template: {
         select: { id: true, defaultSizeSystem: { select: { id: true, name: true } } },
       },
+      channelRefs: {
+        where: { role: "BRAND" },
+        select: { system: true, externalId: true, externalName: true },
+        orderBy: [{ productCount: "desc" }, { externalKey: "asc" }],
+      },
     },
   });
 
@@ -114,6 +127,19 @@ export async function listBrandsWithSettings(): Promise<BrandListItem[]> {
       styles: b._count.styles,
       colorways: b._count.colorways,
       possibleDuplicateOf: [...dupes].sort(),
+      // Deduped on the id, matching how the Sitoo push decides: two refs naming
+      // the SAME manufacturerid are one answer, not an ambiguity. Without this
+      // the table would show amber for a brand the push resolves happily.
+      sitooManufacturerIds: [
+        ...new Set(
+          b.channelRefs
+            .filter((r) => r.system === "SITOO" && r.externalId)
+            .map((r) => r.externalId!)
+        ),
+      ],
+      shopifyVendors: b.channelRefs
+        .filter((r) => r.system === "SHOPIFY")
+        .map((r) => r.externalName),
     };
   });
 }

@@ -16,11 +16,15 @@ const PRIMARY_LINKS = [
   { href: "/catalog/collections", label: "Collections" },
   { href: "/catalog/drops", label: "Drops" },
   { href: "/catalog/edit", label: "Bulk editor" },
+  // An unfinished new product is ordinary work in progress, not a repair job.
+  // It sits next to Publishing because that is the step it is on the way to.
+  { href: "/catalog/products/drafts", label: "Drafts" },
   { href: "/catalog/publishing", label: "Publishing" },
 ];
 
 const PRODUCT_SETTINGS = [
   { href: "/catalog/brands", label: "Brands" },
+  { href: "/catalog/brands/identity", label: "Brand identity" },
   { href: "/catalog/categories", label: "Categories" },
   { href: "/catalog/size-systems", label: "Size systems" },
 ];

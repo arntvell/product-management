@@ -48,6 +48,39 @@ export function BrandIdentityManager({
     }
   }
 
+  /**
+   * Re-read the brand vocabularies from the channels into the review queue.
+   *
+   * `sitooTarget` is passed EXPLICITLY. The route defaults to SITOO_TARGET,
+   * which is `sandbox` in local development — and the sandbox is a different
+   * account whose manufacturer ids mean nothing here. A sandbox pull would
+   * upsert its rows over the production queue on (system, externalKey) and
+   * restate every productCount. Nothing is linked or unlinked by a pull; only
+   * names, counts and last-seen move.
+   */
+  async function refresh() {
+    setBusy(true);
+    try {
+      const { report } = await post("/api/catalog/references/pull", {
+        sitooTarget: "production",
+      });
+      const bySystem = report.brands.bySystem as Record<string, number>;
+      toast.success(
+        `Re-read ${report.brands.found} brand values (` +
+          Object.entries(bySystem)
+            .filter(([sys]) => sys !== "ORIGIO")
+            .map(([sys, n]) => `${sys} ${n}`)
+            .join(", ") +
+          ")"
+      );
+      start(() => router.refresh());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Pull failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function post(path: string, body: unknown) {
     const res = await fetch(path, {
       method: "POST",
@@ -138,11 +171,22 @@ export function BrandIdentityManager({
           <h2 className="text-sm font-semibold">
             Channel spellings waiting to be linked ({unlinked.length})
           </h2>
-          {unlinked.some((r) => r.suggestions.some((x) => x.confidence === "certain")) ? (
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => void linkExact()}>
-              {busy ? "Linking…" : "Link all exact matches"}
+          <div className="flex items-center gap-2">
+            {unlinked.some((r) => r.suggestions.some((x) => x.confidence === "certain")) ? (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => void linkExact()}>
+                {busy ? "Linking…" : "Link all exact matches"}
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void refresh()}
+              title="Re-read vendors and manufacturers from Shopify and Sitoo production"
+            >
+              {busy ? "Working…" : "Refresh from channels"}
             </Button>
-          ) : null}
+          </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
           Sitoo&apos;s manufacturers carry real ids. Shopify&apos;s vendor is a free string

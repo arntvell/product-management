@@ -511,6 +511,32 @@ async function confirmLoom(batchId: string): Promise<number | undefined> {
   return stillRunning ? 5000 : undefined;
 }
 
+/**
+ * The Sitoo manufacturerid for a brand, or a refusal.
+ *
+ * This used to be `channelRefs[0]`, which was safe only for as long as no brand
+ * held two SITOO refs. Two things break that: linking Livid to the six
+ * manufacturer rows Sitoo splits it into, and `mergeBrands`, which moves the
+ * loser's refs onto the winner. An arbitrary pick is not a cosmetic problem once
+ * creates are live — manufacturerid lands on a real product in the till, and
+ * nothing downstream would flag it as a guess.
+ *
+ * So: one candidate is used, none is null (Sitoo accepts a product without a
+ * manufacturer), and several is an error the operator resolves on
+ * /catalog/brands/identity rather than a coin flip.
+ */
+function sitooManufacturerId(
+  brand: { name: string; channelRefs: { externalId: string | null }[] } | null
+): { id: string | null } | { ambiguous: string } {
+  const ids = [...new Set((brand?.channelRefs ?? []).map((r) => r.externalId).filter((x): x is string => !!x))];
+  if (ids.length <= 1) return { id: ids[0] ?? null };
+  return {
+    ambiguous:
+      `Brand "${brand?.name}" is linked to ${ids.length} Sitoo manufacturers (${ids.join(", ")}). ` +
+      "Pick one on /catalog/brands/identity — refusing to guess which the till should show.",
+  };
+}
+
 async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): Promise<void> {
   const items = await prisma.pushBatchItem.findMany({
     where: { batchId, channel: "SITOO", state: "PENDING" },
@@ -521,30 +547,55 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
     where: { id: { in: items.map((i) => i.colorwayId) } },
     include: {
       style: true,
-      brand: { include: { channelRefs: { where: { system: "SITOO", role: "BRAND" } } } },
+      brand: {
+        include: {
+          channelRefs: {
+            where: { system: "SITOO", role: "BRAND" },
+            // Ordered so the FAILED message below lists candidates the same way
+            // every run. It does not decide anything: sitooManufacturerId()
+            // dedupes and refuses on more than one rather than taking the first.
+            orderBy: [{ productCount: "desc" }, { externalKey: "asc" }],
+          },
+        },
+      },
       categoryRef: true,
       variants: true,
       prices: true,
     },
   });
 
-  const inputs: SitooCreateInput[] = colorways.map((cw) => ({
-    colorwayId: cw.id,
-    title: cw.name,
-    variants: cw.variants.map((v) => ({
-      variantId: v.id,
-      sku: v.variantSku,
-      barcode: v.barcode,
-      sizeLabel: v.sizeLabel,
-    })),
-    priceNok: cw.prices.find((p) => p.priceType === "MSRP" && p.currency === "NOK")?.amount.toString() ?? null,
-    costNok: cw.prices.find((p) => p.priceType === "COST" && p.currency === "NOK")?.amount.toString() ?? null,
-    manufacturerId: cw.brand?.channelRefs[0]?.externalId ?? null,
-    defaultCategoryId: cw.categoryRef?.sitooCategoryId ?? null,
-    vatId: null,
-    active: true,
-    activePos: true,
-  }));
+  // An unresolvable brand fails its OWN items and leaves the rest of the batch
+  // alone — the same posture as a per-item Sitoo error, rather than throwing out
+  // of the step and failing colorways that were fine.
+  const inputs: SitooCreateInput[] = [];
+  for (const cw of colorways) {
+    const manufacturer = sitooManufacturerId(cw.brand);
+    if ("ambiguous" in manufacturer) {
+      await prisma.pushBatchItem.updateMany({
+        where: { batchId, channel: "SITOO", colorwayId: cw.id, state: "PENDING" },
+        data: { state: "FAILED", error: manufacturer.ambiguous.slice(0, 900), finishedAt: new Date() },
+      });
+      continue;
+    }
+    inputs.push({
+      colorwayId: cw.id,
+      title: cw.name,
+      variants: cw.variants.map((v) => ({
+        variantId: v.id,
+        sku: v.variantSku,
+        barcode: v.barcode,
+        sizeLabel: v.sizeLabel,
+      })),
+      priceNok: cw.prices.find((p) => p.priceType === "MSRP" && p.currency === "NOK")?.amount.toString() ?? null,
+      costNok: cw.prices.find((p) => p.priceType === "COST" && p.currency === "NOK")?.amount.toString() ?? null,
+      manufacturerId: manufacturer.id,
+      defaultCategoryId: cw.categoryRef?.sitooCategoryId ?? null,
+      vatId: null,
+      active: true,
+      activePos: true,
+    });
+  }
+  if (!inputs.length) return;
 
   const creator = getSitooCreator();
   try {
