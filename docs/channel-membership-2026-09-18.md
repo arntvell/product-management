@@ -164,17 +164,23 @@ feed has nothing to say about anyway.
 
 ## 6. What still needs a decision — production writes, not yet run
 
-> **Order matters, and getting it wrong is worse than doing nothing.** The feed
-> now emits the key, and until the backfill runs it emits it as `false`. Verified
-> by dry run on three CONTINUITY colorways that all have Sitoo links:
-> `{"loom": true, "shopify": true, "sitoo": false}`. Pushing before step 1 would
-> declare 2 265 stocked, store-carried garments as deliberately not sold in
-> Sitoo — the exact failure mode the handover's §2 warns about, and it would
-> switch off their stock error reporting silently. **Backfill first, push second.**
+> **Resolved 2026-09-18 — recorded because it applies again to any new channel
+> key.** The feed emits a channel key as soon as the code ships, and reads `false`
+> until the declarations exist. The flags ride on EVERY Loom push, not only a
+> deliberate membership one, so a single unrelated push in that window would have
+> declared 2 265 stocked garments as not sold in Sitoo and silently switched off
+> their stock error reporting — the handover's §2 failure mode. Declare first,
+> push second.
 
-1. **Backfill the declarations.** `POST /api/catalog/channels/reconcile` — dry run
-   confirms **2 265 `ChannelPublication(SITOO)` rows to create, 0 for Shopify**
-   (Shopify is already consistent) and 2 Shopify rows declared without a link.
+1. ~~**Backfill the declarations.**~~ **DONE 2026-09-18.**
+   `POST /api/catalog/channels/reconcile` created **2 265
+   `ChannelPublication(SITOO)` rows**, 0 for Shopify (already consistent).
+   ChannelPublication went 7 482 -> 9 747 rows; SHOPIFY (2 408) and LOOM (5 074)
+   untouched, nothing modified or deleted. A second run reports `created: 0`.
+   Verified end to end: the three colorways that read `{"loom": true, "shopify":
+   true, "sitoo": false}` in a dry run before now read `"sitoo": true`.
+   Two Shopify colorways are declared without a link — left alone, they need a
+   person, not a sweep.
 2. **Run the Sitoo linker live against production** to pick up the 1 new match —
    `{"target":"production"}`, never the default.
 3. **Push membership to Loom.** The existing `mode: "data"` registry push already
