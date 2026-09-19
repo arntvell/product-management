@@ -37,6 +37,32 @@ function has(v: string | null | undefined): string | null {
   return v && v.trim() ? v : null;
 }
 
+/**
+ * Shopify ids leave this feed as the plain numeric id, never the GraphQL gid.
+ *
+ * We store the gid (`gid://shopify/InventoryItem/46082782724345`) because every
+ * Admin API call needs it, but Loom's contract specifies the bare number and
+ * their ingest is not the only consumer of the feed. Loom found 5,590 of 5,698
+ * linked variants arriving wrapped (2026-09-19); they normalise on ingest, so
+ * this is a contract fix, not an outage.
+ *
+ * The expected `type` is checked rather than just taking the last segment
+ * (`extractId` in lib/utils does that) because the two Shopify ids we send are
+ * easy to cross: the ProductVariant is the listing, the InventoryItem is what a
+ * stock movement references, and they are different numbers. A value of the
+ * wrong type is passed through UNCHANGED — still recognisably a gid, so Loom
+ * sees the mismatch — rather than being stripped into a plausible-looking
+ * number or nulled, which would drop a linkage we have.
+ */
+function shopifyNumericId(
+  value: string | null | undefined,
+  type: "InventoryItem" | "ProductVariant",
+): string | null {
+  if (!value) return null;
+  const m = new RegExp(`^gid://shopify/${type}/(\\d+)$`).exec(value);
+  return m ? m[1] : value;
+}
+
 /** Required fields missing for THIS colorway's Loom push (empty = ready). */
 export function loomMissingForColorway(cw: LoomColorway): string[] {
   return loomMissing({
@@ -191,8 +217,11 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
         // item is what a stock movement references, and Loom joins on the
         // latter. Null where we have no link; the registry falls back to
         // barcode, which is why barcode coverage gates what we send at all.
-        shopify_inventory_item_id: shopify?.externalInventoryId ?? null,
-        shopify_variant_id: shopify?.externalId ?? null,
+        shopify_inventory_item_id: shopifyNumericId(
+          shopify?.externalInventoryId,
+          "InventoryItem",
+        ),
+        shopify_variant_id: shopifyNumericId(shopify?.externalId, "ProductVariant"),
         sitoo_product_id: sitoo?.externalId ?? null,
       };
       }),
