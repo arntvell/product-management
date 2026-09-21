@@ -22,6 +22,7 @@ import { pushColorwaysToLoom } from "@/lib/loom/push";
 import { getLoomJob } from "@/lib/loom/client";
 import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
 import { getSitooCreator, type SitooCreateInput } from "@/lib/sitoo/create";
+import type { SitooTarget } from "@/lib/sitoo/client";
 import type { Channel } from "@/generated/prisma/enums";
 import { declareChannel } from "./channel-membership";
 
@@ -198,6 +199,11 @@ export interface RunOptions {
   only?: PushChannel[];
   seasonCode?: string;
   dryRun?: boolean;
+  /**
+   * Which Sitoo the SITOO phase creates in. Defaults to `production` and is
+   * NOT inherited from SITOO_TARGET — see the note in stepSitoo.
+   */
+  sitooTarget?: SitooTarget;
 }
 
 export async function runPushBatch(
@@ -538,6 +544,7 @@ function sitooManufacturerId(
 }
 
 async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): Promise<void> {
+  const sitooTarget: SitooTarget = opts.sitooTarget ?? "production";
   const items = await prisma.pushBatchItem.findMany({
     where: { batchId, channel: "SITOO", state: "PENDING" },
   });
@@ -597,9 +604,26 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
   }
   if (!inputs.length) return;
 
+  // NAMED, never inherited.
+  //
+  // resolveTarget() falls back to SITOO_TARGET, which is `sandbox` in every dev
+  // environment — and this phase used to pass no target at all. The two Sitoos
+  // are separate accounts (production 91622, sandbox 91624) with unrelated
+  // product ids, so a live batch would have created the garment in the sandbox
+  // and then written those sandbox productids into production
+  // VariantChannelRef(SITOO) rows: the exact damage linkSitooProducts refuses,
+  // arriving through the door it does not guard. createPushBatch already gates
+  // this phase on the PRODUCTION credentials, so inheriting a sandbox target
+  // also made that check a lie.
+  //
+  // A batch is production work by construction. Rehearsing against the sandbox
+  // stays possible, but only by asking for it.
   const creator = getSitooCreator();
   try {
-    const outcomes = await creator.apply(inputs, { dryRun: opts.dryRun });
+    const outcomes = await creator.apply(inputs, {
+      dryRun: opts.dryRun,
+      target: sitooTarget,
+    });
     for (const item of items) {
       if (Date.now() > deadline) return;
       const o = outcomes.find((x) => x.colorwayId === item.colorwayId);
@@ -622,7 +646,12 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
         },
       });
 
-      if (o.mode === "api" && o.created.length) {
+      // A SANDBOX create writes no link. VariantChannelRef(SITOO).externalId is
+      // a PRODUCTION product id — Pio and the stocktake join on it — and the two
+      // accounts share no ids, so recording a sandbox id here is the same
+      // corruption linkSitooProducts refuses, just arriving one step later. The
+      // rehearsal still reports what it created in `detail`.
+      if (o.mode === "api" && o.created.length && sitooTarget === "production") {
         // No declareChannel here: createPushBatch already declared SITOO for
         // every item it queued, precisely so the Loom phase above could see it.
         for (const c of o.created)

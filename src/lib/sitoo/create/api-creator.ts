@@ -94,12 +94,15 @@ export const apiCreator: SitooCreator = {
 
   async apply(inputs, opts = {}): Promise<SitooCreateOutcome[]> {
     const target = resolveTarget(opts.target);
-    if (target === "production" && process.env.SITOO_CREATE_ALLOW_PRODUCTION !== "yes")
-      throw new SitooCreateError(
-        "Refusing to create in Sitoo production. Rehearse against the sandbox first, " +
-          "then set SITOO_CREATE_ALLOW_PRODUCTION=yes deliberately."
-      );
 
+    // The production guard is checked AFTER the dry run returns, deliberately.
+    //
+    // plan() is GETs only — a count and a SKU lookup — so a dry run writes
+    // nothing whichever account it reads. Refusing it too made the one safe way
+    // to look before leaping unreachable: with SITOO_CREATE_MODE=api set, the
+    // wizard's own Dry run button failed every Sitoo item with this refusal, so
+    // the only way to see the plan was to first grant permission to write it.
+    // Nothing is loosened here — apply() below is still refused.
     const plan = await this.plan(inputs, { target });
     if (opts.dryRun)
       return plan.items.map((i) => ({
@@ -110,6 +113,12 @@ export const apiCreator: SitooCreator = {
         created: [],
         errors: i.blocked ? [i.blocked] : [],
       }));
+
+    if (target === "production" && process.env.SITOO_CREATE_ALLOW_PRODUCTION !== "yes")
+      throw new SitooCreateError(
+        "Refusing to create in Sitoo production. Rehearse against the sandbox first, " +
+          "then set SITOO_CREATE_ALLOW_PRODUCTION=yes deliberately."
+      );
 
     const before = plan.accountProductCount;
     const outcomes: SitooCreateOutcome[] = [];
