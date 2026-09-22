@@ -144,7 +144,40 @@ Typecheck and lint clean. The import page and the resume view were rendered
 against the running dev server. **The create-and-push path itself was not
 exercised** — doing so writes real products to Shopify, Sitoo and Loom.
 
-## Three decisions that are yours
+## Do Loom and Sitoo work off what the import flow captures?
+
+Checked against the 24, field by field. **Yes**, on the branch.
+
+**Loom.** The orchestrator pushes `mode: "data"` — the stock *registry*, which
+bypasses `loomMissing` entirely ("it carries identity, not a sellable listing")
+and excludes nothing on eligibility. What it does require:
+
+| Requirement | State |
+|---|---|
+| Colourway present in the season pushed | FW26 on all 24 — **only with the branch's `seasonCode`**; `main` sends CONTINUITY and skips all 24 |
+| Barcoded variant | 49 of 50. `EXT-HST-RBRT-TFF-11` has none and is invisible to the feed (`payload.ts:198`) |
+| `shopify_inventory_item_id` | Comes from the Shopify push — see the condition below |
+| Customs block | Complete on all 12 styles: HS code, customs description, weight, fibre, and origin on every colourway |
+
+**Sitoo.** `api-creator.plan()` blocks on exactly two things — "no sizes" and
+"every SKU already exists". Neither applies. And what would have arrived thin
+does not:
+
+| Field | State |
+|---|---|
+| `manufacturerid` | Hestra and Pantherella each have exactly one `BrandChannelRef(SITOO, BRAND)` — resolved, and no ambiguity failure |
+| `defaultcategoryid` | All four categories carry one: Gloves Men 43, Gloves Women 44, Socks Men 17, Socks Women 19 |
+| `moneyprice` / `moneypricein` | FW26 NOK MSRP and COST on all 24 |
+| `active` / `activepos` | Both `true` — Sitoo goes live at the till immediately |
+
+**The condition: Shopify still has to be pushed.** Loom's
+`shopify_inventory_item_id` is read from `VariantChannelRef(SHOPIFY)`, which
+only the Shopify push writes. Unticking Shopify does not hold Loom back — it
+sends anyway, with nulls, and the stock link silently does not reconcile. On this
+branch the Shopify leg pushes and lands a **DRAFT** product: in the admin, not on
+the storefront, which is what "not published immediately" means here.
+
+## Four decisions that are yours
 
 **a. Waive the merchandising gaps on import?** Implemented as yes, because the
 template has no column that could fill them and a button that must always be
@@ -156,6 +189,15 @@ instead, or a lighter `shopifyMissing` for non-Livid brands.
 "Automatically published" reads as ACTIVE, but these have no description and no
 photograph, and DRAFT is what makes (a) safe. If you want them live, the honest
 order is: fill the merchandising fields, then activate.
+
+**d. The first Loom push carries `sitoo_product_id: null`.** `PHASES` is
+SHOPIFY → LOOM → SITOO, and the Sitoo ref is written in the last phase, so Loom
+hears about the product before Sitoo has an id for it. `declareChannel` already
+sends `sitoo: true` up front, which is the `channel_declared_absent` state Loom
+asked to be able to raise — so this is reported, not silent, and a second data
+push fills the id. The tidier fix is SHOPIFY → SITOO → LOOM, but that reorders
+every batch path and the declare-up-front comment suggests the current order was
+chosen, not stumbled into. Left alone deliberately; worth its own look.
 
 **c. The Vercel production environment.** Confirm `SITOO_API_ID`,
 `SITOO_API_KEY`, `SITOO_BASE_URL`, `SITOO_CREATE_MODE=api` and
