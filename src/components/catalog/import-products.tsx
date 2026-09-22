@@ -187,6 +187,7 @@ export function ImportProducts({
         result={result}
         report={report}
         channels={PUBLISH_CHANNELS.filter((c) => channels[c])}
+        seasonCode={seasons.find((s) => s.id === seasonId)?.code}
       />
     );
 
@@ -650,12 +651,15 @@ function Result({
   result,
   report,
   channels,
+  seasonCode,
 }: {
   result: CommitResult;
   report: ImportReport | null;
   /** The channels ticked in step 2. Creating is only half of what that tick
    *  asked for — the other half is this screen pushing to them. */
   channels: PublishChannelKey[];
+  /** The season chosen in step 1. Loom sends nothing without it. */
+  seasonCode?: string;
 }) {
   const [busy, setBusy] = useState<null | "check" | "create">(null);
   const [rows, setRows] = useState<
@@ -689,7 +693,9 @@ function Result({
       toast[s.blocked ? "warning" : "success"](
         action === "check"
           ? `${s.passed} of ${s.total} ready to create.`
-          : `Created ${s.created} of ${s.total} — publishing now.`
+          : channels.length
+            ? `Created ${s.created} of ${s.total} — publishing now.`
+            : `Created ${s.created} of ${s.total}.`
       );
       if (action === "create") {
         const ids = (json.rows as Array<{ colorwayIds?: string[] }>).flatMap(
@@ -773,6 +779,7 @@ function Result({
           channels={channels}
           kind="import"
           note={`import of ${result.drafts.length} draft(s)`}
+          seasonCode={seasonCode}
           // The file has seven columns — style, colorway, size, price in, price
           // out, barcode, category — and none of them is a description, a
           // photograph, a swatch, a care page or a fit guide. Holding an import

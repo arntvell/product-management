@@ -29,6 +29,7 @@ export function DraftPushPanel({
   unfinishedBatchId,
   kind = "create",
   note,
+  seasonCode,
   allowIncomplete = false,
   autoStart = false,
   onBatchCreated,
@@ -45,6 +46,14 @@ export function DraftPushPanel({
   unfinishedBatchId?: string | null;
   kind?: string;
   note?: string;
+  /** The season this product was created for.
+   *
+   *  NOT optional in effect, whatever the type says: `submitLoom` falls back to
+   *  "CONTINUITY" when the batch has no season, and `pushColorwaysToLoom` then
+   *  reports every colorway as `not in season CONTINUITY` — SKIPPED, which
+   *  `finish()` counts as neither ok nor failed, so the batch reads "ok" with
+   *  Loom untouched. It also decides which price Shopify is sent. */
+  seasonCode?: string;
   /** Waive the soft merchandising gaps when the batch is created, instead of
    *  making the operator press "Push anyway" on a gap the screen they came from
    *  cannot fill. Never waives no-variants / no-price. */
@@ -161,6 +170,7 @@ export function DraftPushPanel({
           draftId,
           kind,
           note,
+          seasonCode,
           allowIncomplete,
         }),
       }).then((r) => r.json());
@@ -194,8 +204,9 @@ export function DraftPushPanel({
         <div>
           <div className="text-sm font-medium">{title}</div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            {channels.map((c) => PUBLISH_CHANNEL_LABELS[c]).join(", ") || "no channels"} ·
-            Shopify first, so Loom receives its inventory ids
+            {channels.map((c) => PUBLISH_CHANNEL_LABELS[c]).join(", ") || "no channels"}
+            {seasonCode ? ` · ${seasonCode}` : ""} · Shopify first, so Loom receives its
+            inventory ids
           </div>
         </div>
         <div className="flex gap-2">

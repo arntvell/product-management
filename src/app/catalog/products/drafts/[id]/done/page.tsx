@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { parseDraftPayload } from "@/lib/master/draft-payload";
 import { DraftPushPanel } from "@/components/catalog/draft-push-panel";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,14 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
   // polling window and leave items AWAITING_JOB. `PushBatchItem` is the queue and
   // the API can resume it — but only if the operator can find it again, so hand
   // the panel the batch rather than making a refresh strand it.
+  // The season the draft was created for. Without it the batch stores null,
+  // submitLoom falls back to CONTINUITY, and every colorway comes back
+  // `not in season CONTINUITY` — SKIPPED, which reads as a clean batch.
+  const seasonId = parseDraftPayload(draft.payload).seasonId;
+  const season = seasonId
+    ? await prisma.season.findUnique({ where: { id: seasonId }, select: { code: true } })
+    : null;
+
   const unfinished = await prisma.pushBatch.findFirst({
     where: { draftId: id, status: { in: ["pending", "running"] } },
     orderBy: { createdAt: "desc" },
@@ -47,6 +56,7 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
         draftId={id}
         colorwayIds={draft.createdColorwayIds}
         channels={draft.channels as ("SHOPIFY" | "LOOM" | "SITOO")[]}
+        seasonCode={season?.code}
         unfinishedBatchId={unfinished?.id ?? null}
       />
 

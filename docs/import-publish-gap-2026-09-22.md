@@ -31,7 +31,7 @@ Two rows, both yesterday's Sitoo probes from
 `docs/sitoo-live-creates-2026-09-21.md`. **Zero batches for any draft, ever.**
 The push machinery has never run for a product created in the app.
 
-## Why — four layers, in the order they bite
+## Why — five layers, in the order they bite
 
 **1. The import screen ends at "Created 13 of 13".** `Result` in
 `src/components/catalog/import-products.tsx` posts to `/api/catalog/drafts/batch`
@@ -74,6 +74,16 @@ from a deploy rather than this laptop, both the fix and the switches have to
 reach it", and WORK-DECK D2 records `SITOO_*` as absent from the deployed
 environment. **Unverified from here** — no Vercel CLI, no `.vercel` link.
 
+**5. And the Loom leg would have sent nothing anyway.** No caller passes
+`seasonCode` when creating a batch — not the import screen, not `/done`. So
+`PushBatch.seasonCode` is null, `submitLoom` falls back to `"CONTINUITY"`, and
+`pushColorwaysToLoom` reports every colourway as `not in season CONTINUITY`.
+**All 24 are FW26** (`SeasonEntry`, confirmed). Those items become `SKIPPED`,
+and `finish()` counts SKIPPED as neither ok nor failed — so the batch would have
+reported `status: "ok"` with Loom untouched. The same bug as layer 1, one
+channel over. It also costs Shopify its season-scoped price: `push-shopify.ts`
+warns "Pushed without a season — price is not season-scoped".
+
 ## The 24 colourways, still unpublished
 
 ```
@@ -107,11 +117,20 @@ Creating a product now publishes it.
   systems. Held-back items still appear with the existing "Push anyway" waiver;
   nothing goes out unreviewed that did not before.
 - `allowIncomplete` is passed for the import path — see the decision below.
+- `seasonCode` is plumbed from the screen to the batch: the import screen sends
+  the season chosen in step 1, and `/done` reads it off the draft payload. This
+  is the fix for layer 5 and it repairs the pre-existing `/done` path too.
 - The batch id goes into the URL (`/catalog/products/import?batch=…`) and the
   page resumes from it. An import batch has `draftId: null`, so no `/done` page
   can find it, and a Loom job outlives the tab that submitted it.
 - Copy: rows read "created · not published" until a batch exists, and a created
   draft's link goes to its `/done` page.
+- A `?batch=` whose batch has finished is not offered for resume — the page
+  checks `status in (pending, running)`, as `/done` already did.
+
+Known and left: the per-row label stops at "created · publishing" and never
+flips to "published" — the batch's progress lives in the panel, not in the row
+list. The panel's own per-channel counts are the honest readout.
 
 Typecheck and lint clean. The import page and the resume view were rendered
 against the running dev server. **The create-and-push path itself was not
