@@ -32,7 +32,8 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
   // The season the draft was created for. Without it the batch stores null,
   // submitLoom falls back to CONTINUITY, and every colorway comes back
   // `not in season CONTINUITY` — SKIPPED, which reads as a clean batch.
-  const seasonId = parseDraftPayload(draft.payload).seasonId;
+  const payload = parseDraftPayload(draft.payload);
+  const seasonId = payload.seasonId;
   const season = seasonId
     ? await prisma.season.findUnique({ where: { id: seasonId }, select: { code: true } })
     : null;
@@ -57,6 +58,12 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
         colorwayIds={draft.createdColorwayIds}
         channels={draft.channels as ("SHOPIFY" | "LOOM" | "SITOO")[]}
         seasonCode={season?.code}
+        // Same policy as the import screen, for the same reason: a draft that
+        // came from a file has no description, photograph, swatch, care page or
+        // fit guide because its seven columns carry none of them. Deciding that
+        // here as well keeps one product from meeting two different gates
+        // depending on which screen its operator happened to be on.
+        allowIncomplete={payload.origin === "import"}
         unfinishedBatchId={unfinished?.id ?? null}
       />
 

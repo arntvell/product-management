@@ -84,6 +84,11 @@ reported `status: "ok"` with Loom untouched. The same bug as layer 1, one
 channel over. It also costs Shopify its season-scoped price: `push-shopify.ts`
 warns "Pushed without a season — price is not season-scoped".
 
+Checked, and *not* a sixth layer: passing `FW26` also narrows the price lookup
+`createPushBatch` uses for its hard `hasPrice` gate. Both the NOK MSRP and the
+NOK COST of all 24 are on FW26, so naming the season keeps that gate satisfied
+rather than flipping them to non-waivable BLOCKED.
+
 ## The 24 colourways, still unpublished
 
 ```
@@ -125,6 +130,9 @@ Creating a product now publishes it.
   can find it, and a Loom job outlives the tab that submitted it.
 - Copy: rows read "created · not published" until a batch exists, and a created
   draft's link goes to its `/done` page.
+- `/done` waives the same gaps when the draft came from a file
+  (`payload.origin === "import"`), so one product does not meet two different
+  gates depending on which screen its operator was on.
 - A `?batch=` whose batch has finished is not offered for resume — the page
   checks `status in (pending, running)`, as `/done` already did.
 
@@ -158,7 +166,17 @@ ever verified against the sandbox.
 
 ## The 24 waiting products
 
-They can be pushed now, without any of this shipping, from each draft's
-`/done` page — thirteen pages, "Push to channels", then "Push anyway" on the
-waivable gaps. That writes to production Shopify, Sitoo and Loom, so it wants a
-decision first.
+Two ways, and they are not equivalent:
+
+- **Today, on `main`:** thirteen `/done` pages, "Push to channels", then "Push
+  anyway" on each. Shopify and Sitoo would go out — but `seasonCode` is null on
+  `main`, so **Loom silently skips all 24** as `not in season CONTINUITY`. Layer
+  5 is not fixed on `main`.
+- **Once this branch lands:** one push from the import screen, or one `/done`
+  page each with the season attached, and all three channels are reached.
+
+The safe next step either way is a **dry run** of a batch over the 24 from this
+branch: one `PushBatch` row, nothing written outward, and it exercises the season
+plumbing and the deployed Sitoo configuration for real. Everything past that
+writes to production Shopify, Sitoo and Loom — and it would be this codebase's
+first ever production `POST /products` to Sitoo — so it wants a decision first.
