@@ -64,6 +64,7 @@ import {
 import { canonical, rejectionReason } from "./barcode";
 import { categorySlug } from "./reference-pull";
 import { createCategory } from "./categories";
+import { missingBrandDefaults } from "./brands";
 import { createDraft } from "./drafts";
 import { saveDraft } from "./drafts";
 import { emptyDraftPayload, type DraftColorway, type DraftPayloadV1, type DraftVariant } from "./draft-payload";
@@ -76,6 +77,25 @@ export class ImportError extends Error {}
 // Report types — what the review screen renders
 // ---------------------------------------------------------------------------
 
+/**
+ * The brand defaults every imported product inherits.
+ *
+ * The file has seven columns and none of them is customs. These come from the
+ * brand and nowhere else — not from the import screen, which used to ask for
+ * them and so let one batch disagree with the next about what a Paraboot boot
+ * weighs.
+ */
+export interface ImportDefaults {
+  gender: string;
+  unisex: boolean;
+  hsCode: string;
+  customsDescription: string;
+  weightKg: string;
+  fiberComposition: string;
+  countryOfOrigin: string;
+  manufacturerId: string;
+}
+
 export interface ImportContext {
   brandId: string;
   brandName: string;
@@ -85,6 +105,9 @@ export interface ImportContext {
   kind: ProductKind;
   sizeSystemId: string;
   sizeSystemName: string;
+  defaults: ImportDefaults;
+  /** Labels of the required brand fields left blank. Non-empty blocks the import. */
+  missingDefaults: string[];
 }
 
 export interface ImportVariantRow {
@@ -427,6 +450,13 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
         `${missingCategory.length > 5 ? "…" : ""}. Every product needs one — it is what the push maps outward.`
     );
 
+  if (context.missingDefaults.length)
+    errors.push(
+      `${context.brandName} is missing ${context.missingDefaults.join(", ")}. An imported ` +
+        `product inherits all of these from the brand — the file carries none of them — so ` +
+        `they have to be filled in on the brand before anything can be created.`
+    );
+
   const noBarcode = styles.reduce(
     (a, s) => a + s.colorways.reduce((b, c) => b + c.variants.filter((v) => !v.barcode).length, 0),
     0
@@ -469,17 +499,6 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
 export interface CommitOptions {
   channels: PublishChannelKey[];
   decisions: CategoryDecision[];
-  /** Template fields the operator filled in for the whole batch. */
-  template?: Partial<{
-    gender: string;
-    unisex: boolean;
-    hsCode: string;
-    customsDescription: string;
-    weightKg: string;
-    fiberComposition: string;
-    countryOfOrigin: string;
-    manufacturerId: string;
-  }>;
 }
 
 export interface CommitResult {
@@ -494,6 +513,30 @@ export async function commitImport(
   if (!report.ok)
     throw new ImportError("This file still has errors — they have to be fixed before importing.");
   if (!opts.channels.length) throw new ImportError("Select at least one channel.");
+
+  // Re-read rather than trusting the report's copy. A report is parsed bytes
+  // from minutes ago; the brand could have been completed — or emptied — since,
+  // and this is the last refusal before rows exist.
+  const brand = await prisma.brand.findUnique({
+    where: { id: report.context.brandId },
+    select: { template: true },
+  });
+  const t = {
+    gender: brand?.template?.gender ?? "",
+    unisex: brand?.template?.unisex ?? false,
+    hsCode: brand?.template?.hsCode ?? "",
+    customsDescription: brand?.template?.customsDescription ?? "",
+    weightKg: brand?.template?.weightKg?.toString() ?? "",
+    fiberComposition: brand?.template?.fiberComposition ?? "",
+    countryOfOrigin: brand?.template?.countryOfOrigin ?? "",
+    manufacturerId: brand?.template?.manufacturerId ?? "",
+  };
+  const missing = missingBrandDefaults(t);
+  if (missing.length)
+    throw new ImportError(
+      `${report.context.brandName} is missing ${missing.join(", ")}. Fill those in on the ` +
+        `brand first — an imported product has nowhere else to get them from.`
+    );
 
   // Resolve every category value to an id, creating what the reviewer asked for.
   // Creation happens FIRST and outside the draft loop: a half-applied set of
@@ -533,7 +576,6 @@ export async function commitImport(
   });
   const categoryNameById = new Map(names.map((n) => [n.id, n.name]));
 
-  const t = opts.template ?? {};
   const drafts: CommitResult["drafts"] = [];
 
   for (const s of report.styles) {
@@ -552,18 +594,24 @@ export async function commitImport(
       seasonId: report.context.seasonId,
       channels: opts.channels,
       kind: report.context.kind,
+      // Marks the draft as import-born, which is what makes the customs gate in
+      // preflightPayload apply to it and not to a hand-typed draft.
+      origin: "import",
+      // Copied in, not referenced. A draft is a snapshot of an intent: editing
+      // the brand next week must not silently rewrite what a draft created
+      // today was going to be.
       template: {
         ...base.template,
         categoryId: styleCategoryId,
         category: styleCategoryId ? categoryNameById.get(styleCategoryId) ?? "" : "",
-        gender: t.gender ?? "",
-        unisex: t.unisex ?? false,
-        hsCode: t.hsCode ?? "",
-        customsDescription: t.customsDescription ?? "",
-        weightKg: t.weightKg ?? "",
-        fiberComposition: t.fiberComposition ?? "",
-        countryOfOrigin: t.countryOfOrigin ?? "",
-        manufacturerId: t.manufacturerId ?? "",
+        gender: t.gender,
+        unisex: t.unisex,
+        hsCode: t.hsCode,
+        customsDescription: t.customsDescription,
+        weightKg: t.weightKg,
+        fiberComposition: t.fiberComposition,
+        countryOfOrigin: t.countryOfOrigin,
+        manufacturerId: t.manufacturerId,
         defaultSizeSystemId: report.context.sizeSystemId,
       },
       style:
@@ -642,10 +690,11 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
   });
 
   const version = Number(m.get("templateVersion") ?? "0");
-  if (!version || version > TEMPLATE_VERSION)
+  if (version !== TEMPLATE_VERSION)
     throw new ImportError(
       `This file was generated by a different version of the template (v${version || "?"} ` +
-        `against v${TEMPLATE_VERSION}). Download a fresh one and paste the rows across.`
+        `against v${TEMPLATE_VERSION}). The columns have moved since — download a fresh ` +
+        `one and paste the rows across.`
     );
 
   const brandId = m.get("brandId") ?? "";
@@ -658,7 +707,14 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
   const [brand, season, system] = await Promise.all([
     prisma.brand.findUnique({
       where: { id: brandId },
-      select: { id: true, name: true, skuToken: true, isLivid: true, archived: true },
+      select: {
+        id: true,
+        name: true,
+        skuToken: true,
+        isLivid: true,
+        archived: true,
+        template: true,
+      },
     }),
     prisma.season.findUnique({ where: { id: seasonId }, select: { id: true, code: true } }),
     prisma.sizeSystem.findUnique({
@@ -676,6 +732,18 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
   if (!season) throw new ImportError("The season this file was generated for no longer exists.");
   if (!system) throw new ImportError("The size system this file was generated for no longer exists.");
 
+  const t = brand.template;
+  const defaults: ImportDefaults = {
+    gender: t?.gender ?? "",
+    unisex: t?.unisex ?? false,
+    hsCode: t?.hsCode ?? "",
+    customsDescription: t?.customsDescription ?? "",
+    weightKg: t?.weightKg?.toString() ?? "",
+    fiberComposition: t?.fiberComposition ?? "",
+    countryOfOrigin: t?.countryOfOrigin ?? "",
+    manufacturerId: t?.manufacturerId ?? "",
+  };
+
   return {
     brandId: brand.id,
     brandName: brand.name,
@@ -685,6 +753,8 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
     kind,
     sizeSystemId: system.id,
     sizeSystemName: system.name,
+    defaults,
+    missingDefaults: missingBrandDefaults({ ...defaults }),
   };
 }
 

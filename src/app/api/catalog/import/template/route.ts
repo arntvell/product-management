@@ -5,7 +5,7 @@ import { listSizeSystems } from "@/lib/master/size-systems";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/catalog/import/template?brandId=&seasonId=&kind=&sizeSystemId=&categoryId=
+// GET /api/catalog/import/template?brandId=&seasonId=&kind=&sizeSystemId=&categoryIds=a,b,c
 //
 // The generated workbook, with the batch's choices already made. Every id is
 // resolved here rather than trusted from the query string — the file's Meta
@@ -17,12 +17,16 @@ export async function GET(req: Request) {
   const seasonId = q.get("seasonId") ?? "";
   const sizeSystemId = q.get("sizeSystemId") ?? "";
   const kind = q.get("kind") ?? "MERCHANDISE";
-  const categoryId = q.get("categoryId");
+  const categoryIds = (q.get("categoryIds") ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
   const missing = [
     !brandId && "brand",
     !seasonId && "season",
     !sizeSystemId && "size system",
+    !categoryIds.length && "category",
   ].filter(Boolean);
   if (missing.length)
     return NextResponse.json(
@@ -31,16 +35,17 @@ export async function GET(req: Request) {
     );
 
   try {
-    const [brand, season, systems, category] = await Promise.all([
+    const [brand, season, systems, categories] = await Promise.all([
       prisma.brand.findUnique({
         where: { id: brandId },
         select: { id: true, name: true, isLivid: true },
       }),
       prisma.season.findUnique({ where: { id: seasonId }, select: { id: true, code: true } }),
       listSizeSystems(),
-      categoryId
-        ? prisma.category.findUnique({ where: { id: categoryId }, select: { name: true } })
-        : null,
+      prisma.category.findMany({
+        where: { id: { in: categoryIds }, archived: false },
+        select: { id: true, name: true },
+      }),
     ]);
 
     if (!brand) return NextResponse.json({ error: "Brand not found." }, { status: 404 });
@@ -56,6 +61,17 @@ export async function GET(req: Request) {
     const sizeSystem = systems.find((s) => s.id === sizeSystemId);
     if (!sizeSystem)
       return NextResponse.json({ error: "Size system not found." }, { status: 404 });
+    if (categories.length !== categoryIds.length)
+      return NextResponse.json(
+        { error: "One of the chosen categories no longer exists — pick them again." },
+        { status: 404 }
+      );
+
+    // Ordered as the operator picked them, so the dropdown in the file reads the
+    // way the screen did.
+    const ordered = categoryIds
+      .map((id) => categories.find((c) => c.id === id))
+      .filter((c): c is { id: string; name: string } => !!c);
 
     const { filename, body } = await buildImportTemplate({
       brandId: brand.id,
@@ -64,7 +80,7 @@ export async function GET(req: Request) {
       seasonCode: season.code,
       kind,
       sizeSystem,
-      categoryName: category?.name ?? null,
+      categories: ordered,
     });
 
     return new NextResponse(new Uint8Array(body), {

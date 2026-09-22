@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   PUBLISH_CHANNELS,
   PUBLISH_CHANNEL_LABELS,
@@ -35,6 +34,17 @@ interface BrandOption {
   name: string;
   skuToken: string | null;
   defaultSizeSystemId: string | null;
+  defaults: {
+    hsCode: string;
+    countryOfOrigin: string;
+    weightKg: string;
+    fiberComposition: string;
+    customsDescription: string;
+    gender: string;
+    unisex: boolean;
+  };
+  /** Labels of the required fields the brand has left blank. */
+  missingDefaults: string[];
   sitooManufacturerIds: string[];
 }
 interface CategoryOption {
@@ -56,13 +66,11 @@ export function ImportProducts({
   brands,
   seasons,
   sizeSystems,
-  manufacturers,
   categories,
 }: {
   brands: BrandOption[];
   seasons: { id: string; code: string }[];
   sizeSystems: SizeSystemView[];
-  manufacturers: { id: string; name: string }[];
   categories: CategoryOption[];
 }) {
   const router = useRouter();
@@ -72,24 +80,13 @@ export function ImportProducts({
   const [seasonId, setSeasonId] = useState("");
   const [kind, setKind] = useState("MERCHANDISE");
   const [sizeSystemId, setSizeSystemId] = useState("");
-  const [defaultCategoryId, setDefaultCategoryId] = useState("");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
 
   const [channels, setChannels] = useState<Record<PublishChannelKey, boolean>>({
     SHOPIFY: true,
     LOOM: false,
     SITOO: true,
   });
-  const [tpl, setTpl] = useState({
-    gender: "",
-    unisex: false,
-    hsCode: "",
-    customsDescription: "",
-    weightKg: "",
-    fiberComposition: "",
-    countryOfOrigin: "",
-    manufacturerId: "",
-  });
-
   const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [decisions, setDecisions] = useState<Record<string, CategoryDecision>>({});
@@ -98,12 +95,18 @@ export function ImportProducts({
 
   const brand = brands.find((b) => b.id === brandId) ?? null;
   const system = sizeSystems.find((s) => s.id === sizeSystemId) ?? null;
-  const canGenerate = !!brandId && !!seasonId && !!sizeSystemId;
+
+  // The brand's customs block is a precondition for the FILE, not just for the
+  // import. Handing someone a template to fill in over an afternoon, and only
+  // then telling them the brand was incomplete, wastes the afternoon.
+  const brandIncomplete = brand ? brand.missingDefaults : [];
+  const canGenerate =
+    !!brandId && !!seasonId && !!sizeSystemId && categoryIds.length > 0 && !brandIncomplete.length;
 
   const templateHref = canGenerate
     ? `/api/catalog/import/template?brandId=${brandId}&seasonId=${seasonId}` +
       `&sizeSystemId=${sizeSystemId}&kind=${kind}` +
-      (defaultCategoryId ? `&categoryId=${defaultCategoryId}` : "")
+      `&categoryIds=${categoryIds.join(",")}`
     : "";
 
   // Sitoo needs a manufacturer on the brand and a navigation id on the category.
@@ -141,7 +144,6 @@ export function ImportProducts({
           JSON.stringify(PUBLISH_CHANNELS.filter((c) => channels[c]))
         );
         form.set("decisions", JSON.stringify(Object.values(decisions)));
-        form.set("template", JSON.stringify(tpl));
       }
       const res = await fetch("/api/catalog/import/products", { method: "POST", body: form });
       const json = await res.json();
@@ -251,21 +253,13 @@ export function ImportProducts({
           </Field>
         </div>
 
-        <Field label="Default category (optional — pre-fills the column)" className="mt-4">
-          <select
-            className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-            value={defaultCategoryId}
-            onChange={(e) => setDefaultCategoryId(e.target.value)}
-          >
-            <option value="">— none —</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {" ".repeat(c.depth * 2)}
-                {c.name}
-                {c.sitooCategoryId ? "" : " · no Sitoo id"}
-              </option>
-            ))}
-          </select>
+        <Field label="Categories available in this file" className="mt-4">
+          <CategoryPicker all={categories} selected={categoryIds} onChange={setCategoryIds} />
+          <p className="text-xs text-muted-foreground">
+            The Category column becomes a dropdown of exactly these. Pick every category the
+            delivery covers — a brand&apos;s shirts and its bags can share one file. Choose
+            one and the column is pre-filled, so it never has to be touched.
+          </p>
         </Field>
 
         {system ? (
@@ -300,11 +294,11 @@ export function ImportProducts({
         </div>
       </Section>
 
-      {/* ---------------- Step 2 — shared fields + channels ---------------- */}
+      {/* ---------------- Step 2 — channels, and what the brand supplies ------ */}
       <Section
         step={2}
-        title="What the file does not carry"
-        hint="Customs, gender and manufacturer are the same for every row of a batch, so they are set once here rather than in seven more columns."
+        title="Channels, and what the brand supplies"
+        hint="Customs, weight, country, fibre and gender are the same for every garment a brand makes, so they live on the brand. Nothing here is typed per batch."
       >
         <div className="mb-4 flex flex-wrap items-center gap-4">
           {PUBLISH_CHANNELS.map((c) => (
@@ -329,73 +323,50 @@ export function ImportProducts({
           </p>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Gender">
-            <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-              value={tpl.gender}
-              onChange={(e) => setTpl((t) => ({ ...t, gender: e.target.value }))}
-            >
-              <option value="">—</option>
-              <option value="women">Women</option>
-              <option value="men">Men</option>
-            </select>
-          </Field>
-          <Field label="Manufacturer">
-            <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
-              value={tpl.manufacturerId}
-              onChange={(e) => setTpl((t) => ({ ...t, manufacturerId: e.target.value }))}
-            >
-              <option value="">—</option>
-              {manufacturers.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={`HS code${channels.LOOM ? " *" : ""}`}>
-            <Input
-              value={tpl.hsCode}
-              onChange={(e) => setTpl((t) => ({ ...t, hsCode: e.target.value }))}
+        {!brand ? (
+          <p className="text-xs text-muted-foreground">Choose a brand to see its defaults.</p>
+        ) : brandIncomplete.length ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+            <p className="font-medium">
+              {brand.name} is missing {brandIncomplete.join(", ")}.
+            </p>
+            <p className="mt-1">
+              The file carries none of these, so an imported product has nowhere else to get
+              them — and a product pushed with a blank HS code is a customs problem, not a
+              cosmetic one. Nothing can be generated or imported until they are filled in.{" "}
+              <Link
+                href={`/catalog/brands/${brand.id}`}
+                className="font-medium underline underline-offset-2"
+              >
+                Open {brand.name}&apos;s settings
+              </Link>
+            </p>
+          </div>
+        ) : (
+          <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+            <Fact label="HS code" value={brand.defaults.hsCode} />
+            <Fact label="Country of origin" value={brand.defaults.countryOfOrigin} />
+            <Fact label="Weight" value={`${brand.defaults.weightKg} kg`} />
+            <Fact label="Fibre / material" value={brand.defaults.fiberComposition} />
+            <Fact label="Customs description" value={brand.defaults.customsDescription} />
+            <Fact
+              label="Gender"
+              value={
+                (brand.defaults.gender || "—") + (brand.defaults.unisex ? " · unisex" : "")
+              }
             />
-          </Field>
-          <Field label={`Weight (kg)${channels.LOOM ? " *" : ""}`}>
-            <Input
-              placeholder="0.320"
-              value={tpl.weightKg}
-              onChange={(e) => setTpl((t) => ({ ...t, weightKg: e.target.value }))}
-            />
-          </Field>
-          <Field label={`Fibre / material${channels.LOOM ? " *" : ""}`}>
-            <Input
-              value={tpl.fiberComposition}
-              onChange={(e) => setTpl((t) => ({ ...t, fiberComposition: e.target.value }))}
-            />
-          </Field>
-          <Field label={`Country of origin${channels.LOOM ? " *" : ""}`}>
-            <Input
-              value={tpl.countryOfOrigin}
-              onChange={(e) => setTpl((t) => ({ ...t, countryOfOrigin: e.target.value }))}
-            />
-          </Field>
-        </div>
-        <Field label={`Customs description${channels.LOOM ? " *" : ""}`} className="mt-4">
-          <Textarea
-            rows={2}
-            value={tpl.customsDescription}
-            onChange={(e) => setTpl((t) => ({ ...t, customsDescription: e.target.value }))}
-          />
-        </Field>
-        <label className="mt-4 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={tpl.unisex}
-            onChange={(e) => setTpl((t) => ({ ...t, unisex: e.target.checked }))}
-          />
-          Unisex
-        </label>
+            <div className="text-muted-foreground sm:col-span-2">
+              From{" "}
+              <Link
+                href={`/catalog/brands/${brand.id}`}
+                className="underline underline-offset-2"
+              >
+                {brand.name}&apos;s settings
+              </Link>
+              . Every product in this import inherits them.
+            </div>
+          </dl>
+        )}
       </Section>
 
       {/* ---------------- Step 3 — upload ---------------- */}
@@ -443,6 +414,7 @@ export function ImportProducts({
               busy !== null ||
               !report.ok ||
               unresolved.length > 0 ||
+              brandIncomplete.length > 0 ||
               !PUBLISH_CHANNELS.some((c) => channels[c])
             }
           >
@@ -737,6 +709,100 @@ function Result({ result, report }: { result: CommitResult; report: ImportReport
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Pick the categories this file may use.
+ *
+ * A searchable list rather than a native multiple-select: there are ninety of
+ * them, they are hierarchical, and whether one carries a Sitoo navigation id
+ * decides whether the product can be created at all — so that has to be visible
+ * while choosing, not discovered at finalize.
+ */
+function CategoryPicker({
+  all,
+  selected,
+  onChange,
+}: {
+  all: CategoryOption[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [q, setQ] = useState("");
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return all;
+    return all.filter((c) => c.name.toLowerCase().includes(needle));
+  }, [all, q]);
+
+  const chosen = selected
+    .map((id) => all.find((c) => c.id === id))
+    .filter((c): c is CategoryOption => !!c);
+
+  return (
+    <div className="rounded-md border">
+      <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
+        {chosen.length ? (
+          chosen.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => onChange(selected.filter((id) => id !== c.id))}
+              className="rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-muted"
+              title="Remove"
+            >
+              {c.name} ✕
+            </button>
+          ))
+        ) : (
+          <span className="px-1 text-xs text-muted-foreground">None chosen yet</span>
+        )}
+      </div>
+      <Input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search categories…"
+        className="rounded-none border-0 border-b focus-visible:ring-0"
+      />
+      <div className="max-h-48 overflow-y-auto p-1">
+        {shown.map((c) => {
+          const on = selected.includes(c.id);
+          return (
+            <label
+              key={c.id}
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted"
+            >
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={() =>
+                  onChange(on ? selected.filter((id) => id !== c.id) : [...selected, c.id])
+                }
+              />
+              <span style={{ paddingLeft: c.depth * 12 }}>{c.name}</span>
+              {c.sitooCategoryId ? null : (
+                <span className="ml-auto text-[10px] text-amber-700 dark:text-amber-400">
+                  no Sitoo id
+                </span>
+              )}
+            </label>
+          );
+        })}
+        {shown.length === 0 ? (
+          <p className="px-2 py-3 text-xs text-muted-foreground">Nothing matches.</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="truncate">{value || "—"}</dd>
+    </div>
+  );
+}
 
 function Section({
   step,

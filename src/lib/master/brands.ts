@@ -176,6 +176,43 @@ export interface BrandSettings {
   };
 }
 
+/**
+ * The brand defaults a product cannot be created without.
+ *
+ * These five ride out to Loom and Shopify on every product and are the same for
+ * every garment a brand makes, so they belong to the brand rather than being
+ * retyped per batch. The importer carries none of them — the file has seven
+ * columns and customs is not among them — which is exactly why their absence
+ * has to block rather than quietly produce product with an empty HS code.
+ *
+ * Manufacturer is deliberately NOT here. It is a factory, it differs between a
+ * brand's lines, and Sitoo's own "manufacturer" field is filled from the BRAND
+ * link instead (see channelLinkErrors in finalize.ts).
+ */
+export const REQUIRED_BRAND_DEFAULTS = [
+  ["hsCode", "HS code"],
+  ["countryOfOrigin", "Country of origin"],
+  ["weightKg", "Weight (kg)"],
+  ["fiberComposition", "Fibre composition"],
+  ["customsDescription", "Customs description"],
+] as const;
+
+/**
+ * Which of the five a brand has not filled in. Labels, ready to show.
+ *
+ * Takes anything object-shaped so the same check serves a BrandTemplate row, a
+ * draft's template block and the import screen's copy, rather than three
+ * near-identical lists that can drift apart.
+ */
+export function missingBrandDefaults(
+  template: Record<string, unknown> | null | undefined
+): string[] {
+  if (!template) return REQUIRED_BRAND_DEFAULTS.map(([, label]) => label);
+  return REQUIRED_BRAND_DEFAULTS.filter(
+    ([key]) => !String(template[key] ?? "").trim()
+  ).map(([, label]) => label);
+}
+
 export async function getBrandSettings(id: string): Promise<BrandSettings | null> {
   const b = await prisma.brand.findUnique({
     where: { id },

@@ -84,8 +84,20 @@ export interface DraftTemplate {
   defaultSizeSystemId: string;
 }
 
+/**
+ * Where a draft came from.
+ *
+ * Load-bearing, not provenance decoration: an imported draft inherits its
+ * customs block from the brand and has no screen on which to type one, so the
+ * brand's five required fields are a refusal for it. A hand-typed draft has
+ * those fields on the wizard's own template step, and gating it on the brand
+ * would block work the operator can perfectly well finish.
+ */
+export type DraftOrigin = "wizard" | "import";
+
 export interface DraftPayloadV1 {
   version: 1;
+  origin: DraftOrigin;
   brand: { id: string | null; name: string; skuToken: string | null; isLivid: boolean };
   seasonId: string | null;
   channels: PublishChannelKey[];
@@ -100,6 +112,7 @@ export class DraftPayloadError extends Error {}
 export function emptyDraftPayload(): DraftPayloadV1 {
   return {
     version: 1,
+    origin: "wizard",
     brand: { id: null, name: "", skuToken: null, isLivid: false },
     seasonId: null,
     // All three preselected — the user unticks what they do not want.
@@ -156,6 +169,9 @@ export function parseDraftPayload(raw: unknown): DraftPayloadV1 {
 
   return {
     version: 1,
+    // A draft saved before the field existed is a wizard draft — the importer
+    // did not exist either.
+    origin: str(raw.origin) === "import" ? "import" : "wizard",
     brand: {
       id: str(brand.id) || null,
       name: str(brand.name),

@@ -62,7 +62,10 @@ async function fill(body: Buffer, rows: Row[]): Promise<Buffer> {
     // a cell whose format was lost, and it is the case String(cell.value) gets
     // wrong — so the parser is tested against the hostile shape, not the easy one.
     if (r[5]) ws.getCell(n, COL.barcode).value = Number(r[5]);
-    if (r[6]) ws.getCell(n, COL.category).value = r[6];
+    // Always written, never skipped: a single-category template pre-fills this
+    // column, so "no category" has to mean a CLEARED cell rather than an
+    // untouched one.
+    ws.getCell(n, COL.category).value = r[6] || null;
   });
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -84,9 +87,33 @@ async function main() {
   );
 
   let system = reusable ?? null;
+  // The happy path needs a brand whose five required defaults are filled in —
+  // the parser now refuses an incomplete one before it looks at a single row.
   let brand = reusable
-    ? await prisma.brand.findFirstOrThrow({ where: { isLivid: false, archived: false } })
+    ? await prisma.brand.findFirst({
+        where: {
+          isLivid: false,
+          archived: false,
+          template: {
+            hsCode: { not: null },
+            countryOfOrigin: { not: null },
+            weightKg: { not: null },
+            fiberComposition: { not: null },
+            customsDescription: { not: null },
+          },
+        },
+      })
     : null;
+  if (reusable && !brand)
+    console.log(
+      "No external brand has all five required defaults, so the parse assertions cannot " +
+        "run read-only. Fill one in on /catalog/brands, or use --commit."
+    );
+  // A brand that is NOT complete, to assert the refusal against.
+  const incompleteBrand = await prisma.brand.findFirst({
+    where: { isLivid: false, archived: false, template: null },
+    select: { id: true, name: true, skuToken: true },
+  });
   let madeSystemId: string | null = null;
 
   if (COMMIT || !system) {
@@ -147,6 +174,7 @@ async function main() {
       seasonCode: season.code,
       kind: "MERCHANDISE",
       sizeSystem: templateSystem,
+      categories: category ? [{ id: category.id, name: category.name }] : [{ id: "x", name: "Fixture" }],
     });
     check("template built", body.length > 4000, `${filename}, ${body.length} bytes`);
 
@@ -164,6 +192,17 @@ async function main() {
     check(
       "barcode column is text-formatted",
       probe.getWorksheet(SHEET_PRODUCTS)!.getCell(HEADER_ROW + 1, COL.barcode).numFmt === "@"
+    );
+    const catCell = probe.getWorksheet(SHEET_PRODUCTS)!.getCell(HEADER_ROW + 1, COL.category);
+    check(
+      "category validation points at a range too",
+      /^Categories!\$A\$1:\$A\$\d+$/.test(String(catCell.dataValidation?.formulae?.[0] ?? "")),
+      String(catCell.dataValidation?.formulae?.[0] ?? "none")
+    );
+    check(
+      "a single category is pre-filled into the rows",
+      String(catCell.value ?? "") === (category?.name ?? "Fixture"),
+      String(catCell.value ?? "(blank)")
     );
 
     if (!system || !brand) {
@@ -186,6 +225,8 @@ async function main() {
     const ok = await parseImportWorkbook(good);
     check("context recovered from the file", ok.context.brandId === brand.id && ok.context.seasonId === season.id);
     check("no errors on a clean file", ok.ok, ok.errors.join(" | "));
+    check("brand defaults read off the brand", !ok.context.missingDefaults.length,
+      ok.context.missingDefaults.join(", "));
     check("two styles", ok.counts.styles === 2, String(ok.counts.styles));
     check("three colourways", ok.counts.colorways === 3, String(ok.counts.colorways));
     check("four sizes", ok.counts.variants === 4, String(ok.counts.variants));
@@ -247,6 +288,26 @@ async function main() {
     const r6 = await parseImportWorkbook(noCategory);
     check("a colourway with no category is refused", !r6.ok && r6.errors.some((e) => /No category/.test(e)));
 
+    if (incompleteBrand) {
+      const bare = await buildImportTemplate({
+        brandId: incompleteBrand.id,
+        brandName: incompleteBrand.name,
+        seasonId: season.id,
+        seasonCode: season.code,
+        kind: "MERCHANDISE",
+        sizeSystem: templateSystem,
+        categories: [{ id: category?.id ?? "x", name: catName }],
+      });
+      const r0 = await parseImportWorkbook(
+        await fill(bare.body, [["Test Boot", "Dark Brown", s0, "", "1999", "", catName]])
+      );
+      check(
+        `an incomplete brand (${incompleteBrand.name}) blocks the import`,
+        !r0.ok && r0.errors.some((e) => e.includes("inherits all of these from the brand")),
+        r0.context.missingDefaults.join(", ")
+      );
+    }
+
     const unknownCategory = await fill(body, [
       ["Test Boot", "Dark Brown", s0, "", "1999", "", `ZZ Nonexistent ${TAG}`],
     ]);
@@ -276,6 +337,11 @@ async function main() {
       check("payload has both colourways", p.colorways.length === 2);
       check("payload carries the category", p.template.categoryId === category.id, p.template.categoryId);
       check("payload carries the size system", p.template.defaultSizeSystemId === system.id);
+      check("payload carries the brand's customs block",
+        (p.template as unknown as Record<string, string>).hsCode === "6403.99" &&
+          (p.template as unknown as Record<string, string>).countryOfOrigin === "Italy");
+      check("payload is marked import-born",
+        (bootDraft!.payload as unknown as Record<string, string>).origin === "import");
       check("prices landed as COST/MSRP", p.colorways[0].prices.MSRP === "1999" && p.colorways[0].prices.COST === "400");
 
       await prisma.productDraft.deleteMany({ where: { id: { in: res.drafts.map((d) => d.id) } } });

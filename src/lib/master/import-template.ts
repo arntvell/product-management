@@ -32,7 +32,10 @@
 import ExcelJS from "exceljs";
 import type { SizeSystemView } from "./size-systems";
 
-export const TEMPLATE_VERSION = 1;
+// 2 — the Category column became a dropdown and the header row moved down one,
+// so a v1 file read with these offsets would report a header mismatch rather
+// than the real problem. readContext refuses anything but the current version.
+export const TEMPLATE_VERSION = 2;
 
 /** The seven columns a person fills in. Order is part of the contract — the
  *  parser matches on header text, but a reordered file still reads correctly
@@ -50,6 +53,7 @@ export type ImportColumn = (typeof IMPORT_COLUMNS)[number];
 
 export const SHEET_PRODUCTS = "Products";
 export const SHEET_SIZES = "Sizes";
+export const SHEET_CATEGORIES = "Categories";
 export const SHEET_META = "Meta";
 
 export interface TemplateContext {
@@ -60,8 +64,17 @@ export interface TemplateContext {
   /** ProductKind — "MERCHANDISE" for ordinary goods. */
   kind: string;
   sizeSystem: SizeSystemView;
-  /** Optional default, pre-filled into the Category column of every blank row. */
-  categoryName?: string | null;
+  /**
+   * The categories this batch may use, chosen before the file is generated.
+   *
+   * They become a dropdown on the Category column, for the same reason sizes
+   * are one: a category typed by hand is a new category three screens later,
+   * and the whole point of the controlled vocabulary is that Shopify's product
+   * type, Loom's vocabulary and Sitoo's navigation all key off it. One category
+   * is also pre-filled into every row, because a single-category batch should
+   * not need the column touched at all.
+   */
+  categories: Array<{ id: string; name: string }>;
   /** How many empty rows to lay out. Rows beyond these still import — the
    *  validation and formatting are what run out, not the parser. */
   rows?: number;
@@ -72,6 +85,11 @@ export async function buildImportTemplate(
   ctx: TemplateContext
 ): Promise<{ filename: string; body: Buffer }> {
   const rowCount = Math.max(50, ctx.rows ?? 200);
+  const categories = ctx.categories.filter((c) => c.name.trim());
+  if (!categories.length)
+    throw new Error(
+      "Choose at least one category — the file's Category column is a dropdown built from them."
+    );
   const sizes = ctx.sizeSystem.entries.filter((e) => !e.archived);
   if (!sizes.length)
     throw new Error(
@@ -92,6 +110,15 @@ export async function buildImportTemplate(
   });
   const sizeRange = `${SHEET_SIZES}!$A$1:$A$${sizes.length}`;
 
+  // --- Categories (hidden) — the Category column's source range -------------
+  const catSheet = wb.addWorksheet(SHEET_CATEGORIES);
+  catSheet.state = "veryHidden";
+  catSheet.getColumn(1).width = 30;
+  categories.forEach((c, i) => {
+    catSheet.getCell(i + 1, 1).value = c.name;
+  });
+  const categoryRange = `${SHEET_CATEGORIES}!$A$1:$A$${categories.length}`;
+
   // --- Meta (hidden) — the batch's identity, read back on upload ------------
   const meta = wb.addWorksheet(SHEET_META);
   meta.state = "veryHidden";
@@ -105,6 +132,7 @@ export async function buildImportTemplate(
     ["sizeSystemId", ctx.sizeSystem.id],
     ["sizeSystemName", ctx.sizeSystem.name],
     ["sizeSystemKind", ctx.sizeSystem.kind],
+    ["categoryIds", categories.map((c) => c.id).join(",")],
     ["generatedAt", new Date().toISOString()],
   ];
   metaRows.forEach(([k, v], i) => {
@@ -124,11 +152,13 @@ export async function buildImportTemplate(
   banner(ws, 2, "Season", ctx.seasonCode);
   banner(ws, 3, "Type", ctx.kind);
   banner(ws, 4, "Sizes", `${ctx.sizeSystem.name} — ${sizes.map((s) => s.sizeLabel).join(", ")}`);
-  ws.getCell("A5").value =
+  banner(ws, 5, "Categories", categories.map((c) => c.name).join(", "));
+  ws.getCell("A6").value =
     "One row per size. Repeat the style and colourway on every row of that colourway; " +
-    "prices are per colourway, so they must agree across its rows.";
-  ws.getCell("A5").font = { italic: true, size: 9, color: { argb: "FF6B6B6B" } };
-  ws.mergeCells("A5:G5");
+    "prices and category are per colourway, so they must agree across its rows. " +
+    "Customs, weight and country come from the brand's settings, not from this file.";
+  ws.getCell("A6").font = { italic: true, size: 9, color: { argb: "FF6B6B6B" } };
+  ws.mergeCells("A6:G6");
 
   const header = ws.getRow(HEADER_ROW);
   IMPORT_COLUMNS.forEach((name, i) => {
@@ -181,14 +211,28 @@ export async function buildImportTemplate(
       };
     }
 
-    if (ctx.categoryName) ws.getCell(r, COL.category).value = ctx.categoryName;
+    ws.getCell(r, COL.category).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      formulae: [categoryRange],
+      showErrorMessage: true,
+      errorStyle: "stop",
+      errorTitle: "Not a category in this batch",
+      error:
+        `This file was generated for: ${categories.map((c) => c.name).join(", ")}. ` +
+        `Pick one of those — a category typed by hand is a new category to review, ` +
+        `and it reaches Shopify, Loom and the till.`,
+    };
+
+    // One category means the column never has to be touched.
+    if (categories.length === 1) ws.getCell(r, COL.category).value = categories[0].name;
   }
 
   const body = Buffer.from(await wb.xlsx.writeBuffer());
   return { filename: filenameFor(ctx), body };
 }
 
-export const HEADER_ROW = 7;
+export const HEADER_ROW = 8;
 
 /** 1-based column numbers, so the parser and the writer cannot drift. */
 export const COL = {

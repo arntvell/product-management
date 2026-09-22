@@ -30,6 +30,7 @@ import { normalizeSku, findNearDuplicates, isOneOfOne, type SkuMatch } from "./s
 import { loadSkuCorpus, findExactSkuHolders } from "./sku-corpus";
 import { canonical, rejectionReason } from "./barcode";
 import { recordDecisions } from "./provenance";
+import { missingBrandDefaults } from "./brands";
 
 export class FinalizeError extends Error {}
 
@@ -221,6 +222,7 @@ export async function preflightPayload(
 
   // --- the outbound links a push needs, checked BEFORE the product exists ---
   errors.push(...(await channelLinkErrors(p)));
+  errors.push(...brandDefaultErrors(p));
 
   // --- warnings worth seeing before you press create ---
   const noBarcode = p.colorways.reduce(
@@ -691,6 +693,41 @@ async function channelLinkErrors(p: DraftPayloadV1): Promise<string[]> {
   }
 
   return errs;
+}
+
+/**
+ * The customs block an imported product has nowhere else to get.
+ *
+ * The import file has seven columns and customs is not among them — by design,
+ * because HS code, weight, fibre, country and the customs description are the
+ * same for every garment a brand makes and retyping them per batch is how two
+ * batches of the same boot end up disagreeing. They are copied onto the draft
+ * from the brand at import, so an empty one here means the brand was
+ * incomplete, and the product would go out to Loom and Shopify with a blank
+ * where its customs data belongs.
+ *
+ * Scoped to import-born drafts. The wizard has these fields on its own template
+ * step; gating a hand-typed draft on the brand would refuse work the operator
+ * is in the middle of doing correctly.
+ *
+ * Manufacturer is not checked — it is a factory, not a customs fact.
+ */
+function brandDefaultErrors(p: DraftPayloadV1): string[] {
+  if (p.origin !== "import") return [];
+  const missing = missingBrandDefaults({
+    hsCode: p.template.hsCode,
+    countryOfOrigin: p.template.countryOfOrigin,
+    weightKg: p.template.weightKg,
+    fiberComposition: p.template.fiberComposition,
+    customsDescription: p.template.customsDescription,
+  });
+  if (!missing.length) return [];
+  return [
+    `${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} missing. An imported ` +
+      `product inherits these from the brand, so fill them in on ` +
+      `${p.brand.name ? `"${p.brand.name}"` : "the brand"} and import the file again — ` +
+      `this draft holds the values as they were when it was created.`,
+  ];
 }
 
 function blank(v: string | null | undefined): string | null {

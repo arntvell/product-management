@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { listSeasons, listManufacturers } from "@/lib/master/queries";
+import { listSeasons } from "@/lib/master/queries";
+import { missingBrandDefaults } from "@/lib/master/brands";
 import { listSizeSystems } from "@/lib/master/size-systems";
 import { listCategoryTree } from "@/lib/master/categories";
 import { ImportProducts } from "@/components/catalog/import-products";
@@ -8,7 +9,7 @@ import { ImportProducts } from "@/components/catalog/import-products";
 export const dynamic = "force-dynamic";
 
 export default async function ImportProductsPage() {
-  const [brandRows, seasons, sizeSystems, manufacturers, categoryTree] = await Promise.all([
+  const [brandRows, seasons, sizeSystems, categoryTree] = await Promise.all([
     prisma.brand.findMany({
       where: { isLivid: false, archived: false },
       orderBy: { name: "asc" },
@@ -23,24 +24,39 @@ export default async function ImportProductsPage() {
           where: { system: "SITOO", role: "BRAND" },
           select: { externalId: true },
         },
-        template: { select: { defaultSizeSystemId: true } },
+        // The defaults an imported product inherits. Shown read-only on the
+        // screen and checked before anything can be generated or imported —
+        // the file carries none of them.
+        template: true,
       },
     }),
     listSeasons(),
     listSizeSystems(),
-    listManufacturers(),
     listCategoryTree(),
   ]);
 
-  const brands = brandRows.map((b) => ({
-    id: b.id,
-    name: b.name,
-    skuToken: b.skuToken,
-    defaultSizeSystemId: b.template?.defaultSizeSystemId ?? null,
-    sitooManufacturerIds: [
-      ...new Set(b.channelRefs.map((r) => r.externalId).filter((x): x is string => !!x)),
-    ],
-  }));
+  const brands = brandRows.map((b) => {
+    const defaults = {
+      hsCode: b.template?.hsCode ?? "",
+      countryOfOrigin: b.template?.countryOfOrigin ?? "",
+      weightKg: b.template?.weightKg?.toString() ?? "",
+      fiberComposition: b.template?.fiberComposition ?? "",
+      customsDescription: b.template?.customsDescription ?? "",
+      gender: b.template?.gender ?? "",
+      unisex: b.template?.unisex ?? false,
+    };
+    return {
+      id: b.id,
+      name: b.name,
+      skuToken: b.skuToken,
+      defaultSizeSystemId: b.template?.defaultSizeSystemId ?? null,
+      defaults,
+      missingDefaults: missingBrandDefaults({ ...defaults }),
+      sitooManufacturerIds: [
+        ...new Set(b.channelRefs.map((r) => r.externalId).filter((x): x is string => !!x)),
+      ],
+    };
+  });
 
   const categories = categoryTree
     .filter((c) => c.active && !c.archived)
@@ -64,9 +80,10 @@ export default async function ImportProductsPage() {
           </Link>
           <h1 className="mt-1 text-2xl font-semibold">Import products</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            The file is generated for one brand, season, type and size system, and carries
-            those choices inside it — so a sheet filled in for one batch cannot be imported
-            against another.
+            The file is generated for one brand, season, type and size system, with the
+            categories you choose as a dropdown, and carries those choices inside it — so a
+            sheet filled in for one batch cannot be imported against another. Customs,
+            weight and country come from the brand, not from the file.
           </p>
         </div>
         <Link
@@ -81,7 +98,6 @@ export default async function ImportProductsPage() {
         brands={brands}
         seasons={seasons}
         sizeSystems={sizeSystems.filter((s) => !s.archived)}
-        manufacturers={manufacturers}
         categories={categories}
       />
     </main>

@@ -19,7 +19,10 @@ export const maxDuration = 120;
 //              this first and nothing is written)
 //   channels   JSON array, e.g. ["SHOPIFY","SITOO"]
 //   decisions  JSON array of category decisions
-//   template   JSON object of the batch's shared fields
+//
+// There is no `template` field. Customs, gender and manufacturer come from the
+// brand and only from the brand — accepting them here is what let one batch
+// disagree with the next about what a brand's garment weighs.
 //
 // The file is uploaded again on commit rather than parked server-side. A parsed
 // report cached between the two calls would be a second copy of the truth that
@@ -61,7 +64,6 @@ export async function POST(req: Request) {
     const opts: CommitOptions = {
       channels: json(form.get("channels"), []) as CommitOptions["channels"],
       decisions: json(form.get("decisions"), []) as CategoryDecision[],
-      template: json(form.get("template"), {}) as CommitOptions["template"],
     };
 
     const result = await commitImport(report, opts);
