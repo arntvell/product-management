@@ -12,6 +12,10 @@ interface Row {
   error: string | null;
   report: PreflightReport | null;
   counts: { colorways: number; variants: number } | null;
+  /** What "create" actually made. The import screen pushes these to the
+   *  channels, so a created draft that cannot name its colorways is a created
+   *  draft nothing can publish. */
+  colorwayIds: string[];
 }
 
 // POST /api/catalog/drafts/batch — { ids: string[], action: "check" | "create" }
@@ -56,6 +60,7 @@ export async function POST(req: Request) {
           error: null,
           report,
           counts: { colorways: report.counts.colorways, variants: report.counts.variants },
+          colorwayIds: [],
         });
         continue;
       }
@@ -69,6 +74,7 @@ export async function POST(req: Request) {
           error: null,
           report: result,
           counts: { colorways: result.counts.colorways, variants: result.counts.variants },
+          colorwayIds: [],
         });
       } else {
         rows.push({
@@ -78,6 +84,7 @@ export async function POST(req: Request) {
           error: null,
           report: null,
           counts: { colorways: result.colorwayIds.length, variants: result.variantCount },
+          colorwayIds: result.colorwayIds,
         });
       }
     } catch (err) {
@@ -91,6 +98,7 @@ export async function POST(req: Request) {
             : "Failed",
         report: null,
         counts: null,
+        colorwayIds: [],
       });
     }
   }

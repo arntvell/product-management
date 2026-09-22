@@ -1,0 +1,145 @@
+# The import flow creates products and never publishes them
+
+2026-09-22. Twenty-four external colourways were imported through
+`/catalog/products/import` on the deployed app and appeared in none of Shopify,
+Sitoo or Loom. They were created correctly. **No push was ever attempted** — the
+import screen has no publish step, and never had one.
+
+## Evidence from the production database
+
+Thirteen `ProductDraft` rows reached `COMPLETED` today (10:37 and 11:30), all
+with `channels = {SHOPIFY, LOOM, SITOO}`, together creating 24 colourways and 50
+variants (49 barcoded).
+
+```
+ChannelPublication for those 24 colourways
+  SHOPIFY   published=false   lastPushStatus=null   24
+  LOOM      published=false   lastPushStatus=null   24
+  SITOO     published=false   lastPushStatus=null   24
+```
+
+`published=false, lastPushStatus=null` on every row means *targeted, never
+pushed* — not *pushed and failed*.
+
+```
+PushBatch, entire table
+  cmubptd5w08erfw72brpmncua  draftId=null  kind=probe  ok      2026-09-21 18:46
+  cmubpx1n80001v572opqxhlyn  draftId=null  kind=probe  failed  2026-09-21 18:49
+```
+
+Two rows, both yesterday's Sitoo probes from
+`docs/sitoo-live-creates-2026-09-21.md`. **Zero batches for any draft, ever.**
+The push machinery has never run for a product created in the app.
+
+## Why — four layers, in the order they bite
+
+**1. The import screen ends at "Created 13 of 13".** `Result` in
+`src/components/catalog/import-products.tsx` posts to `/api/catalog/drafts/batch`
+with `action: "create"`, toasts a count, and stops. There is no publish button,
+no progress, and no link onward. The only push UI in the app is `DraftPushPanel`
+on `/catalog/products/drafts/[id]/done`, which the *single-product wizard*
+redirects to and the import path never reaches. Ticking Shopify/Loom/Sitoo in
+step 2 records intent on the draft; nothing acts on it.
+
+`src/app/api/catalog/drafts/[id]/finalize/route.ts` says so in its own comment:
+"Writes the master only. Channel pushes are a separate, retryable step." That is
+a deliberate design — a slow Shopify must not half-create a product — but the
+import path never offers the second step.
+
+**2. Had the push run, all 24 would have been held back.** `createPushBatch`
+gates Shopify on `shopifyMissing`, which wants description, image, tags, swatch,
+care page and fit guide on top of variants and price. All 24 have variants and a
+NOK MSRP; **all 24 are missing all six merchandising fields.** They would each
+come back `BLOCKED` (waivable), and the Loom leg blocks behind Shopify
+("waiting on the Shopify push for its inventory ids"), so nothing would go out
+until someone pressed "Push anyway".
+
+This is structural, not an operator omission: `IMPORT_COLUMNS` is exactly
+`Style, Colorway, Size, Price in, Price out, Barcode, Category`. The template
+cannot carry a description or a photograph, so an imported product can never
+satisfy the gate from its own file.
+
+**3. Shopify would receive a DRAFT product.** `finalize.ts:428,491` hardcodes
+`status: "DRAFT"` on every colourway it creates, and `push-shopify.ts` forwards
+that status. All 24 read `ProductStatus.DRAFT` today. A pushed product would show
+in the Shopify admin but not on the storefront.
+
+**4. Sitoo is probably skipped on the deploy.** `createPushBatch` marks Sitoo
+`SKIPPED` when `SITOO_API_ID` / `SITOO_API_KEY` / `SITOO_BASE_URL` are absent, and
+a live create additionally needs `SITOO_CREATE_MODE=api` and
+`SITOO_CREATE_ALLOW_PRODUCTION=yes`. All five are set in
+`product-management-builder/.env.local` only;
+`docs/sitoo-live-creates-2026-09-21.md` closes with "if the wizard is ever run
+from a deploy rather than this laptop, both the fix and the switches have to
+reach it", and WORK-DECK D2 records `SITOO_*` as absent from the deployed
+environment. **Unverified from here** — no Vercel CLI, no `.vercel` link.
+
+## The 24 colourways, still unpublished
+
+```
+EXT-HST-BRGVK-ESPRS   EXT-HST-ELS-BLCK    EXT-HST-JHN-BLCK    EXT-HST-OTR-LGHT-PNK
+EXT-HST-RBRT-TFF      EXT-HST-TR-MTT-BLCK EXT-PNT-AGTH-CRM    EXT-PNT-AGTH-DRK-CML
+EXT-PNT-AGTH-OLD-RS   EXT-PNT-BCK-ANTHR   EXT-PNT-BCK-DRK-BRWN EXT-PNT-BCK-NTRL
+EXT-PNT-BCK-RCNG-GRN  EXT-PNT-CL-LGHT-BG  EXT-PNT-CL-MRN      EXT-PNT-CL-TL
+EXT-PNT-CRMFR-DRK-BRWN EXT-PNT-CRMFR-DRK-CML EXT-PNT-RS-CHCLT EXT-PNT-RS-TRTN
+EXT-PNT-THRNH-ANTHR-FLCK EXT-PNT-THRNH-DRK-BRWN-FLCK
+EXT-PNT-THRNH-NTRL-FLCK  EXT-PNT-THRNH-NVY-FLCK
+```
+
+All external brands (`Brand.isLivid = false`). The Loom leg pushes with
+`mode: "data"`, which is the stock *registry* — externals are eligible there, so
+Loom is not the problem for these; the wholesale catalogue would have refused
+them, and the orchestrator does not use it.
+
+## What was changed — branch `import-auto-publish`
+
+Creating a product now publishes it.
+
+- `api/catalog/drafts/batch` returns each created draft's `colorwayIds`. Without
+  them the import screen knows it created something and not what.
+- `DraftPushPanel` generalised: `draftId` may be null (an import batch spans many
+  drafts), plus `kind`, `note`, `allowIncomplete`, `autoStart` and
+  `onBatchCreated`. The `autoStart` guard is a ref, because a second render
+  minting a second batch is a duplicate product in Shopify.
+- The import result screen renders that panel and starts a **live** push the
+  moment "Create and publish all that pass" finishes creating. The button was
+  renamed because its blast radius changed from the database to three outside
+  systems. Held-back items still appear with the existing "Push anyway" waiver;
+  nothing goes out unreviewed that did not before.
+- `allowIncomplete` is passed for the import path — see the decision below.
+- The batch id goes into the URL (`/catalog/products/import?batch=…`) and the
+  page resumes from it. An import batch has `draftId: null`, so no `/done` page
+  can find it, and a Loom job outlives the tab that submitted it.
+- Copy: rows read "created · not published" until a batch exists, and a created
+  draft's link goes to its `/done` page.
+
+Typecheck and lint clean. The import page and the resume view were rendered
+against the running dev server. **The create-and-push path itself was not
+exercised** — doing so writes real products to Shopify, Sitoo and Loom.
+
+## Three decisions that are yours
+
+**a. Waive the merchandising gaps on import?** Implemented as yes, because the
+template has no column that could fill them and a button that must always be
+pressed is not a decision. It is safe as long as (b) stays DRAFT: a Shopify draft
+product is not on the storefront. Say the word and it becomes a visible checkbox
+instead, or a lighter `shopifyMissing` for non-Livid brands.
+
+**b. Should imported products be Shopify DRAFT or ACTIVE?** Left at DRAFT.
+"Automatically published" reads as ACTIVE, but these have no description and no
+photograph, and DRAFT is what makes (a) safe. If you want them live, the honest
+order is: fill the merchandising fields, then activate.
+
+**c. The Vercel production environment.** Confirm `SITOO_API_ID`,
+`SITOO_API_KEY`, `SITOO_BASE_URL`, `SITOO_CREATE_MODE=api` and
+`SITOO_CREATE_ALLOW_PRODUCTION=yes` are all set there. Without them every deploy
+push skips Sitoo, honestly and silently. Note also that the first production
+`POST /products` this codebase makes is still unproven — write scope was only
+ever verified against the sandbox.
+
+## The 24 waiting products
+
+They can be pushed now, without any of this shipping, from each draft's
+`/done` page — thirteen pages, "Push to channels", then "Push anyway" on the
+waivable gaps. That writes to production Shopify, Sitoo and Loom, so it wants a
+decision first.

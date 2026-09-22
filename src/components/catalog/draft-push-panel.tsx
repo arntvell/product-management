@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,14 +27,36 @@ export function DraftPushPanel({
   colorwayIds,
   channels,
   unfinishedBatchId,
+  kind = "create",
+  note,
+  allowIncomplete = false,
+  autoStart = false,
+  onBatchCreated,
+  title = "Publish",
 }: {
-  draftId: string;
+  /** Null when the batch is not one draft's — an import publishes the colorways
+   *  of many drafts as one batch, and `PushBatch.draftId` is single-valued. */
+  draftId: string | null;
   colorwayIds: string[];
   channels: Channel[];
   /** A batch for this draft that is still running — typically Loom items left
    *  AWAITING_JOB when the client stopped polling. Without this the batch is
    *  only reachable through the API, and a refresh strands it. */
   unfinishedBatchId?: string | null;
+  kind?: string;
+  note?: string;
+  /** Waive the soft merchandising gaps when the batch is created, instead of
+   *  making the operator press "Push anyway" on a gap the screen they came from
+   *  cannot fill. Never waives no-variants / no-price. */
+  allowIncomplete?: boolean;
+  /** Start the live push as soon as the panel mounts. This is what makes
+   *  creating a product publish it, rather than leaving it in the master for
+   *  someone to remember. Fires once. */
+  autoStart?: boolean;
+  /** Told the batch id as soon as there is one, so the caller can put it
+   *  somewhere a refresh survives. */
+  onBatchCreated?: (batchId: string) => void;
+  title?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -51,6 +73,19 @@ export function DraftPushPanel({
   // external product — but "no variants" and "no price" are not on this list and
   // no button reaches them.
   const waivable = blocked.filter((b) => b.waivable);
+
+  // Publish without being asked to. React runs effects twice in development and
+  // a re-render must not mint a second batch, so the guard is a ref rather than
+  // state — a duplicate here is a duplicate product in Shopify.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoStart || started.current || !channels.length || !colorwayIds.length) return;
+    started.current = true;
+    void push(false);
+    // Mount-only on purpose: `push` closes over props that do not change for the
+    // life of this panel, and re-running it would be a second push.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Drive a batch to completion in bounded calls. The server never blocks on a
    *  channel, so the client keeps asking until it says done — that is how a 600s
@@ -120,12 +155,20 @@ export function DraftPushPanel({
       const created = await fetch("/api/catalog/push/batch", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ colorwayIds, channels, draftId, kind: "create" }),
+        body: JSON.stringify({
+          colorwayIds,
+          channels,
+          draftId,
+          kind,
+          note,
+          allowIncomplete,
+        }),
       }).then((r) => r.json());
       if (created.error) throw new Error(created.error);
       setBlocked(created.blocked ?? []);
       setBatchId(created.batchId);
       setLastDryRun(dryRun);
+      onBatchCreated?.(created.batchId);
 
       const p = await drive(created.batchId, dryRun, "run");
       // A batch that has not finished is not a failure — Loom jobs outlive the
@@ -149,7 +192,7 @@ export function DraftPushPanel({
     <div className="mt-6 rounded-md border p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-medium">Publish</div>
+          <div className="text-sm font-medium">{title}</div>
           <div className="mt-0.5 text-xs text-muted-foreground">
             {channels.map((c) => PUBLISH_CHANNEL_LABELS[c]).join(", ") || "no channels"} ·
             Shopify first, so Loom receives its inventory ids
@@ -161,10 +204,19 @@ export function DraftPushPanel({
               Resume last push
             </Button>
           ) : null}
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => push(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !colorwayIds.length}
+            onClick={() => push(true)}
+          >
             Dry run
           </Button>
-          <Button size="sm" disabled={busy || !channels.length} onClick={() => push(false)}>
+          <Button
+            size="sm"
+            disabled={busy || !channels.length || !colorwayIds.length}
+            onClick={() => push(false)}
+          >
             {busy ? "Pushing…" : "Push to channels"}
           </Button>
         </div>

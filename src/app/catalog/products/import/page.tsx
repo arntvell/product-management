@@ -8,7 +8,12 @@ import { ImportProducts } from "@/components/catalog/import-products";
 
 export const dynamic = "force-dynamic";
 
-export default async function ImportProductsPage() {
+export default async function ImportProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ batch?: string }>;
+}) {
+  const { batch } = await searchParams;
   const [brandRows, seasons, sizeSystems, categoryTree] = await Promise.all([
     prisma.brand.findMany({
       where: { isLivid: false, archived: false },
@@ -99,6 +104,7 @@ export default async function ImportProductsPage() {
         seasons={seasons}
         sizeSystems={sizeSystems.filter((s) => !s.archived)}
         categories={categories}
+        resumeBatchId={batch ?? null}
       />
     </main>
   );
