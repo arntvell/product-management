@@ -43,7 +43,10 @@ async function main() {
     ...emptyDraftPayload(),
     brand: { id: brand.id, name: brand.name, skuToken: TAG, isLivid: false },
     seasonId: season.id,
-    channels: ["SHOPIFY", "LOOM", "SITOO"],
+    // SHOPIFY and LOOM only. A SITOO draft is refused unless the brand is linked
+    // to a Sitoo manufacturer and the category has a navigation id — checked on
+    // its own below, rather than made a precondition of every assertion here.
+    channels: ["SHOPIFY", "LOOM"],
     template: { ...emptyDraftPayload().template, category: "Footwear", countryOfOrigin: "Italy" },
     style: { mode: "new", styleName: "Test Style", styleSku, manualSku: false },
     colorways: ["Dark Brown", "Black"].map((name, ci) => {
@@ -55,6 +58,8 @@ async function main() {
         swatchHex: null,
         colorwaySku: cwSku,
         manualSku: false,
+        categoryId: null,
+        category: null,
         kind: null,
         sizeSystemId: null,
         variants: ["41", "42", "9.5"].map((size, vi) => ({
@@ -84,6 +89,12 @@ async function main() {
     JSON.stringify(report.counts));
   check("warns about missing barcodes for Loom",
     report.warnings.some((w) => w.includes("no barcode")));
+
+  // --- 1b. the Sitoo links are a pre-flight refusal, not a push-time surprise ---
+  const sitooReport = await preflightPayload(draft.id, { ...payload, channels: ["SITOO"] });
+  check("Sitoo without a linked brand is refused",
+    !sitooReport.ok && sitooReport.errors.some((e) => e.includes("Sitoo manufacturer")),
+    sitooReport.errors.join("; "));
 
   // --- 2. dry run writes nothing ---
   const before = await prisma.colorway.count();

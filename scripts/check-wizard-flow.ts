@@ -136,6 +136,8 @@ async function main() {
         swatchHex: null,
         colorwaySku: cwSku,
         manualSku: false,
+        categoryId: null,
+        category: null,
         kind: null,
         sizeSystemId: sizeSystem.id,
         variants: sizeSystem.entries.map((e, i) => ({

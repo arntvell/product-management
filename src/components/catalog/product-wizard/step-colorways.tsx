@@ -60,6 +60,10 @@ export function StepColorways({ payload, update }: StepProps) {
               colorwaySku: "",
               manualSku: false,
               kind: null,
+              // Inherits the batch's category. Only the importer sets a
+              // per-colourway one, from the file's Category column.
+              categoryId: null,
+              category: null,
               // The brand's default size system, so the sizes step opens with a
               // run already chosen rather than an empty picker per colourway.
               sizeSystemId: payload.template.defaultSizeSystemId || null,

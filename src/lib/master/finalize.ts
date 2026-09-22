@@ -219,6 +219,9 @@ export async function preflightPayload(
     }
   }
 
+  // --- the outbound links a push needs, checked BEFORE the product exists ---
+  errors.push(...(await channelLinkErrors(p)));
+
   // --- warnings worth seeing before you press create ---
   const noBarcode = p.colorways.reduce(
     (a, c) => a + c.variants.filter((v) => !v.barcode).length,
@@ -404,8 +407,12 @@ async function writeProduct(
       brandId,
       manufacturerId: blank(t.manufacturerId),
       countryOfOrigin: blank(t.countryOfOrigin),
-      productType: blank(t.category),
-      categoryId: blank(t.categoryId),
+      // The colourway's own category when it has one, else the batch's. An
+      // imported file carries a category per line, so a mixed workbook —
+      // a brand's shirts and its bags — lands with each colourway under its own
+      // rather than all of them under whichever one the style happened to take.
+      productType: blank(cw.category) ?? blank(t.category),
+      categoryId: blank(cw.categoryId) ?? blank(t.categoryId),
       vendor: p.brand.name,
       // Explicit, never inferred from the SKU. classifyKind reads EXT-VN-* as
       // AGGREGATE (the store-vintage buckets), which is wrong for an individual
@@ -604,6 +611,86 @@ function mintReservedIds(p: DraftPayloadV1): ReservedIds {
       c.variants.map((v) => ({ key: v.key, id: randomUUID() }))
     ),
   };
+}
+
+
+/**
+ * The links a Sitoo push needs, checked at create time rather than at push time.
+ *
+ * Sitoo takes `manufacturerid` (which it uses for brands) and
+ * `defaultcategoryid` (its navigation) on the product itself. Both come from
+ * OUR side — the brand's SITOO BrandChannelRef and the category's
+ * sitooCategoryId — and neither is inferable from the product. stepSitoo
+ * already refuses without them, but by then the garment exists in the master,
+ * has been through a push batch, and someone is reading a failed item error to
+ * find out that a reference table was never filled in.
+ *
+ * So the same refusal is made here, where it costs one screen instead of a
+ * batch. Only when SITOO is a target: a Shopify- or Loom-only product has no use
+ * for either id, and demanding them would block product that is fine.
+ *
+ * The ambiguous case is an error for the same reason it is one in
+ * push-orchestrator: manufacturerid lands on a real product in the till, and
+ * nothing downstream would flag a coin flip as a guess.
+ */
+async function channelLinkErrors(p: DraftPayloadV1): Promise<string[]> {
+  if (!p.channels.includes("SITOO") || !p.brand.id) return [];
+  const errs: string[] = [];
+
+  const brand = await prisma.brand.findUnique({
+    where: { id: p.brand.id },
+    select: {
+      name: true,
+      channelRefs: {
+        where: { system: "SITOO", role: "BRAND" },
+        select: { externalId: true, externalName: true },
+      },
+    },
+  });
+  const ids = [
+    ...new Set((brand?.channelRefs ?? []).map((r) => r.externalId).filter((x): x is string => !!x)),
+  ];
+  if (ids.length === 0)
+    errs.push(
+      `"${brand?.name ?? p.brand.name}" is not linked to a Sitoo manufacturer, so a product ` +
+        `created for Sitoo would carry no brand in the till. Link it on /catalog/brands/identity, ` +
+        `or untick Sitoo.`
+    );
+  else if (ids.length > 1)
+    errs.push(
+      `"${brand?.name ?? p.brand.name}" is linked to ${ids.length} Sitoo manufacturers ` +
+        `(${ids.join(", ")}). Pick one on /catalog/brands/identity — the push refuses to guess ` +
+        `which the till should show, and it would refuse this product too.`
+    );
+
+  // Every category the batch actually uses: the template's, plus any colourway
+  // that overrides it.
+  const categoryIds = [
+    ...new Set(
+      [p.template.categoryId, ...p.colorways.map((c) => c.categoryId)].filter(
+        (x): x is string => !!x
+      )
+    ),
+  ];
+  if (!categoryIds.length) {
+    errs.push("Choose a category — Sitoo needs one to file the product under.");
+  } else {
+    const cats = await prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+      select: { id: true, name: true, sitooCategoryId: true },
+    });
+    const found = new Set(cats.map((c) => c.id));
+    for (const id of categoryIds)
+      if (!found.has(id)) errs.push("A category on this draft no longer exists — pick it again.");
+    for (const c of cats)
+      if (!c.sitooCategoryId)
+        errs.push(
+          `Category "${c.name}" has no Sitoo navigation id, so the product would land ` +
+            `uncategorised in the till. Set it on /catalog/categories, or untick Sitoo.`
+        );
+  }
+
+  return errs;
 }
 
 function blank(v: string | null | undefined): string | null {

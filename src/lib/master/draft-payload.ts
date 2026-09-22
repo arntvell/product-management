@@ -47,6 +47,18 @@ export interface DraftColorway {
   manualSku: boolean;
   /** Null inherits the batch default. */
   kind: ProductKind | null;
+  /**
+   * Per-colourway category override. Null inherits the template's.
+   *
+   * The wizard sets one category for the batch, which is right when a person is
+   * typing one style. An imported file carries a Category column per LINE, and a
+   * batch of externals is routinely mixed — a brand's shirts and its bags arrive
+   * in one workbook. Storing the override here rather than forcing the file into
+   * one category per draft is what lets those stay one import.
+   */
+  categoryId: string | null;
+  /** The override's name, carried so the review screen can show it without a lookup. */
+  category: string | null;
   sizeSystemId: string | null;
   variants: DraftVariant[];
   prices: { COST?: string; MSRP?: string };
@@ -203,6 +215,8 @@ function parseColorway(raw: unknown): DraftColorway {
     colorwaySku: str(raw.colorwaySku),
     manualSku: bool(raw.manualSku),
     kind: KINDS.includes(str(raw.kind) as ProductKind) ? (str(raw.kind) as ProductKind) : null,
+    categoryId: str(raw.categoryId) || null,
+    category: str(raw.category) || null,
     sizeSystemId: str(raw.sizeSystemId) || null,
     variants: arr(raw.variants).map(parseVariant),
     prices: parsePrices(raw.prices),

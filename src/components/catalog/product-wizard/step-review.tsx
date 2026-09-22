@@ -29,13 +29,22 @@ export function StepReview({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-4">
+      <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-5">
         <Stat label="Brand" value={payload.brand.name || "—"} />
         <Stat label="Season" value={season?.code ?? "—"} />
         <Stat
           label="Style"
           value={payload.style ? payload.style.styleName : "—"}
           sub={payload.style?.mode === "existing" ? "existing" : "new"}
+        />
+        <Stat
+          label="Category"
+          value={payload.template.category || "—"}
+          sub={
+            payload.colorways.some((c) => c.categoryId)
+              ? "some colourways override it"
+              : undefined
+          }
         />
         <Stat label="Will create" value={`${payload.colorways.length} × ${variants}`} sub="colourways × sizes" />
       </div>
@@ -147,6 +156,14 @@ export function StepReview({
                     <span className="ml-2 text-xs text-muted-foreground">
                       {cw.prices.COST ? `${cw.prices.COST} / ` : ""}
                       {cw.prices.MSRP} NOK
+                    </span>
+                  ) : null}
+                  {cw.category ? (
+                    <span
+                      className="ml-2 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground"
+                      title="This colourway's own category, not the batch's"
+                    >
+                      {cw.category}
                     </span>
                   ) : null}
                 </div>
