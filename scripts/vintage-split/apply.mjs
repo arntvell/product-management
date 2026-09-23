@@ -29,7 +29,12 @@ const ONLY = parentArg ? parentArg.slice("--parent=".length) : null;
 const chunkArg = args.find((a) => a.startsWith("--chunk="));
 const CHUNK = chunkArg ? Math.max(1, parseInt(chunkArg.slice("--chunk=".length), 10)) : 25;
 
-const PLAN = "snapshots/vintage-split-plan.json";
+// The applier is not vintage-specific: it moves variants out of a parent
+// colourway into one style+colourway each, per a plan file. --plan lets another
+// split (the Red Wing care products) reuse it rather than fork it.
+const planArg = args.find((a) => a.startsWith("--plan="));
+const PLAN = planArg ? planArg.slice("--plan=".length) : "snapshots/vintage-split-plan.json";
+const outArg = args.find((a) => a.startsWith("--out="));
 const plan = JSON.parse(readFileSync(PLAN, "utf8"));
 
 // VPACK25-* is brand "VINTAGE PACK", not Vintage: legacy 25-unit lots ("25X-
@@ -72,6 +77,8 @@ const result = {
     entriesCreated: 0,
     seasonLinksMoved: 0,
     pricesCreated: 0,
+    stylesRenamed: 0,
+    channelsDeclared: 0,
     colorwaysArchived: 0,
     skipped: 0,
   },
@@ -115,15 +122,29 @@ for (const [fromColorwayId, items] of byParent) {
       // --- style -------------------------------------------------------------
       let styleId;
       const sFound = await client.query(`SELECT id FROM "Style" WHERE "styleSku" = $1`, [it.newStyleSku]);
+      // Optional plan fields (Saphir): `styleName` when the style is not named
+      // like the colourway, `renameStyle` to correct a reused style's name, and
+      // `styleWeightKg` so a new style keeps its customs weight. Absent, the
+      // vintage behaviour is unchanged.
+      const styleName = it.styleName ?? it.name;
       if (sFound.rowCount > 0) {
         styleId = sFound.rows[0].id;
+        if (it.renameStyle) {
+          const ren = await client.query(
+            `UPDATE "Style" SET "styleName" = $1, "updatedAt" = now()
+             WHERE id = $2 AND "styleName" IS DISTINCT FROM $1`,
+            [styleName, styleId]
+          );
+          T.stylesRenamed += ren.rowCount;
+        }
       } else {
         styleId = randomUUID();
         {
           await client.query(
-            `INSERT INTO "Style" (id, source, "styleSku", "styleName", category, "categoryId", "brandId", "createdAt", "updatedAt")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())`,
-            [styleId, it.source, it.newStyleSku, it.name, it.category ?? "Uncategorized", it.categoryId, it.brandId]
+            `INSERT INTO "Style" (id, source, "styleSku", "styleName", category, "categoryId", "brandId", "weightKg", "createdAt", "updatedAt")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`,
+            [styleId, it.source, it.newStyleSku, styleName, it.category ?? "Uncategorized", it.categoryId, it.brandId,
+             it.styleWeightKg ?? null]
           );
         }
         T.stylesCreated++;
@@ -147,10 +168,12 @@ for (const [fromColorwayId, items] of byParent) {
           await client.query(
             `INSERT INTO "Colorway"
                (id, source, "colorwaySku", name, "productType", "categoryId", "styleId",
-                "brandId", "countryOfOrigin", status, vendor, kind, tags, "createdAt", "updatedAt")
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'{}', now(), now())`,
+                "brandId", "countryOfOrigin", status, vendor, kind, tags, color, "fullDescription",
+                "createdAt", "updatedAt")
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now(), now())`,
             [colorwayId, it.source, it.newColorwaySku, it.name, productType, it.categoryId,
-             styleId, it.brandId, it.countryOfOrigin, it.status, vendor, it.kind]
+             styleId, it.brandId, it.countryOfOrigin, it.status, vendor, it.kind,
+             it.tags ?? [], it.color ?? null, it.fullDescription ?? null]
           );
         }
         T.colorwaysCreated++;
@@ -205,6 +228,22 @@ for (const [fromColorwayId, items] of byParent) {
       p.moved++;
       T.moved++;
 
+      // --- channel declaration -----------------------------------------------
+      // A minted colourway has no ChannelPublication, so the Loom payload would
+      // declare it absent from channels it is live in — and Loom suppresses
+      // stock errors for a channel declared false. The plan names the channels
+      // the variant's own refs prove; declare them in the same transaction.
+      // Additive, and a re-run is a no-op on the (colorwayId, channel) unique.
+      for (const ch of it.declareChannels ?? []) {
+        const dec = await client.query(
+          `INSERT INTO "ChannelPublication" (id, "colorwayId", channel, published)
+           VALUES ($1, $2, $3::"Channel", false)
+           ON CONFLICT ("colorwayId", channel) DO NOTHING`,
+          [randomUUID(), colorwayId, ch]
+        );
+        T.channelsDeclared += dec.rowCount;
+      }
+
       // --- price -------------------------------------------------------------
       if (it.priceNok != null) {
         {
@@ -258,7 +297,12 @@ for (const [fromColorwayId, items] of byParent) {
 await client.end();
 
 result.finishedAt = new Date().toISOString();
-const out = ONLY ? `snapshots/vintage-split-result-${ONLY}.json` : "snapshots/vintage-split-result.json";
+const base = PLAN.replace(/-plan\.json$/, "").replace(/^.*\//, "");
+const out = outArg
+  ? outArg.slice("--out=".length)
+  : ONLY
+    ? `snapshots/${base}-result-${ONLY}.json`
+    : `snapshots/${base}-result.json`;
 writeFileSync(out, JSON.stringify(result, null, 2));
 
 console.log(`\n${APPLY ? "APPLIED" : "DRY RUN (nothing written)"}${ONLY ? ` — parent ${ONLY}` : ""}`);

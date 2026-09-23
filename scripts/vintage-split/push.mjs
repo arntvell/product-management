@@ -46,7 +46,10 @@ if (!parentArg) {
 const PARENT = parentArg.slice("--parent=".length);
 const BASE = process.env.ORIGIO_BASE_URL ?? "http://localhost:3000";
 
-const plan = JSON.parse(readFileSync("snapshots/vintage-split-plan.json", "utf8"));
+// --plan lets another split (the Red Wing care products) reuse this pusher.
+const planArg = args.find((a) => a.startsWith("--plan="));
+const PLAN = planArg ? planArg.slice("--plan=".length) : "snapshots/vintage-split-plan.json";
+const plan = JSON.parse(readFileSync(PLAN, "utf8"));
 const rows = plan.plan.filter((p) => p.fromColorwaySku === PARENT);
 if (!rows.length) {
   console.error(`No planned rows for parent ${PARENT}.`);
@@ -61,9 +64,18 @@ const client = new pg.Client({
 await client.connect();
 
 const found = await client.query(
-  `SELECT id, "colorwaySku" FROM "Colorway" WHERE "colorwaySku" = ANY($1::text[])`,
+  `SELECT id, "colorwaySku", "styleId" FROM "Colorway" WHERE "colorwaySku" = ANY($1::text[])`,
   [newSkus]
 );
+// The withdrawal must be the LAST thing in the batch: archiving cascades to
+// Pio deletes for any zero-stock SKU still under the parent, so every move has
+// to land first. The payload groups by style in first-seen order, so a new
+// colourway that stays in the parent's style (Saphir's Spreading brush) would
+// pull the parent's style block — withdrawal included — ahead of the styles
+// after it. Send those colourways last so the parent's style is the last block.
+const parentStyle = await client.query(`SELECT "styleId" FROM "Colorway" WHERE id = $1`, [oldColorwayId]);
+const parentStyleId = parentStyle.rows[0]?.styleId;
+found.rows.sort((a, b) => (a.styleId === parentStyleId) - (b.styleId === parentStyleId));
 const missing = newSkus.filter((s) => !found.rows.some((r) => r.colorwaySku === s));
 
 // Check the move actually happened before telling Loom about it.
@@ -89,7 +101,7 @@ const body = {
   allowVariantReparent: true,
   // A repeated event_id returns 200 {deduped:true} and applies nothing, so a
   // retry after a half-failure needs a fresh one — date granularity is not enough.
-  eventId: `vintage-split-${PARENT}-${Date.now()}`,
+  eventId: `${PLAN.replace(/-plan\.json$/, "").replace(/^.*\//, "")}-${PARENT}-${Date.now()}`,
   dryRun: DRY,
   // Take the job id back immediately and poll it here. The route's built-in wait
   // prints nothing for up to ten minutes and discards the job id if it times
