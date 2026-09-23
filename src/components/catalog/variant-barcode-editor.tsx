@@ -113,8 +113,32 @@ export function VariantBarcodeEditor({
   const accepted = (report?.rows ?? []).filter((r) =>
     ["fill", "change", "unchanged"].includes(r.master)
   );
+  // Asked in the page, not with window.confirm: a browser that has been told to
+  // stop showing this page's dialogs returns false without showing anything,
+  // and Apply then did nothing at all.
+  const [confirming, setConfirming] = useState(false);
+  const canApply = !!previewCurrent && accepted.length > 0;
+  const showConfirm = confirming && canApply && !busy;
+  const applyBlocked = !pending
+    ? null
+    : !previewCurrent
+      ? "Preview before applying."
+      : !accepted.length
+        ? "Nothing to apply — every row was refused; see the Master column."
+        : null;
+
+  function writeSummary(r: VariantBarcodeReport): string {
+    const count = (ch: "shopify" | "sitoo" | "loom") => r.rows.filter((x) => x[ch].state === "write").length;
+    const masterWrites = r.rows.filter((x) => x.master === "fill" || x.master === "change").length;
+    const loom = r.loomGroups.reduce((n, g) => n + g.colorwayIds.length, 0);
+    return (
+      `Write ${masterWrites} barcode${masterWrites === 1 ? "" : "s"} to the master, ` +
+      `${count("shopify")} to Shopify, ${count("sitoo")} to Sitoo, and re-send ${loom} colourway(s) to Loom?`
+    );
+  }
 
   function setEdit(sku: string, value: string, current: string | null) {
+    setConfirming(false);
     setEdits((prev) => {
       const next = { ...prev };
       if (value.trim() === "" || value.trim() === (current ?? "")) delete next[sku];
@@ -170,15 +194,24 @@ export function VariantBarcodeEditor({
         edits: Object.entries(edits).map(([variantSku, barcode]) => ({ variantSku, barcode })),
       }),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      toast.error(data.error ?? "Request failed");
+    // A platform timeout or an auth redirect answers in text or HTML, and an
+    // unguarded res.json() threw past every toast — the button just went quiet.
+    const text = await res.text();
+    let data: { error?: string } & Partial<VariantBarcodeReport>;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: `HTTP ${res.status}${text ? `: ${text.slice(0, 160)}` : ""}` };
+    }
+    if (!res.ok || data.error) {
+      toast.error(data.error ?? `Request failed (HTTP ${res.status})`);
       return null;
     }
     return data as VariantBarcodeReport;
   }
 
   async function preview() {
+    setConfirming(false);
     setBusy("Reading Shopify, Sitoo and Loom…");
     try {
       const r = await post(true);
@@ -186,6 +219,8 @@ export function VariantBarcodeEditor({
         setReport(r);
         setReportKey(key);
       }
+    } catch (e) {
+      toast.error(`Preview failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -193,17 +228,7 @@ export function VariantBarcodeEditor({
 
   async function apply() {
     if (!report) return;
-    const count = (ch: "shopify" | "sitoo" | "loom") =>
-      report.rows.filter((r) => r[ch].state === "write").length;
-    const masterWrites = report.rows.filter((r) => r.master === "fill" || r.master === "change").length;
-    const ok = window.confirm(
-      `Write ${masterWrites} barcode${masterWrites === 1 ? "" : "s"} to the master, ` +
-        `${count("shopify")} to Shopify, ${count("sitoo")} to Sitoo, and re-send ` +
-        `${report.loomGroups.reduce((n, g) => n + g.colorwayIds.length, 0)} colourway(s) to Loom?\n\n` +
-        `These are live systems.`
-    );
-    if (!ok) return;
-
+    setConfirming(false);
     setBusy("Writing master, Shopify and Sitoo…");
     try {
       const r = await post(false);
@@ -276,6 +301,9 @@ export function VariantBarcodeEditor({
       ).length;
       if (failed) toast.error(`${failed} row(s) did not reach every channel — see the report`);
       else toast.success(`Applied ${r.master.applied} barcode change(s)`);
+    } catch (e) {
+      // The master may already be written; a fresh preview shows where it stands.
+      toast.error(`Apply stopped: ${(e as Error).message} — preview again to see what landed`);
     } finally {
       setBusy(null);
     }
@@ -442,7 +470,7 @@ export function VariantBarcodeEditor({
         <Button variant="outline" onClick={preview} disabled={!!busy || !pending}>
           Preview
         </Button>
-        <Button onClick={apply} disabled={!!busy || !previewCurrent || !accepted.length}>
+        <Button onClick={() => setConfirming(true)} disabled={!!busy || !canApply || showConfirm}>
           Apply to master and channels
         </Button>
         {pending ? (
@@ -451,6 +479,7 @@ export function VariantBarcodeEditor({
             onClick={() => {
               setEdits({});
               setReport(null);
+              setConfirming(false);
             }}
             disabled={!!busy}
           >
@@ -458,8 +487,21 @@ export function VariantBarcodeEditor({
           </Button>
         ) : null}
         {busy ? <span className="text-sm text-muted-foreground">{busy}</span> : null}
-        {pending && !previewCurrent && !busy ? (
-          <span className="text-xs text-muted-foreground">Preview before applying.</span>
+        {applyBlocked && !busy ? (
+          <span className="text-xs text-muted-foreground">{applyBlocked}</span>
+        ) : null}
+        {showConfirm && report ? (
+          <div className="flex basis-full flex-wrap items-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+            <span>
+              {writeSummary(report)} <span className="font-medium">These are live systems.</span>
+            </span>
+            <Button size="sm" onClick={apply}>
+              Confirm and write
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
         ) : null}
       </div>
     </div>
