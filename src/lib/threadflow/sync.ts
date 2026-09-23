@@ -1354,6 +1354,7 @@ export async function syncSeason(
         variantBySku: plan.variantBySku,
         entryIdByColorway: plan.entryIdByColorway,
         entrySeen,
+        warnings,
       });
       counts.colorways++;
       counts.variants += p.tf.variants.length;
@@ -1520,6 +1521,7 @@ interface ColorwayCtx {
   variantBySku: Map<string, { id: string; barcode: string | null; barcodeManual?: boolean }>;
   entryIdByColorway: Map<string, string>;
   entrySeen: Set<string>;
+  warnings: string[];
 }
 
 function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
@@ -1578,6 +1580,14 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
     const { sizeLabel, dim1, dim2 } = deriveSize(v.dimensions);
     const existing = ctx.variantBySku.get(v.sku);
     if (existing) {
+      const tfBarcode = canonicalBarcode(v.barcode);
+      if (existing.barcodeManual && tfBarcode && tfBarcode !== canonicalBarcode(existing.barcode)) {
+        // Kept, but said out loud: Threadflow still holds the old value, and
+        // until it is corrected there every new season re-sends it.
+        ctx.warnings.push(
+          `${v.sku}: kept barcode ${existing.barcode} (set by hand); Threadflow has ${tfBarcode}`
+        );
+      }
       ctx.variantUpdates.push(
         op(`variant ${v.sku}`, colorwayId, () =>
           prisma.variant.update({
@@ -1587,9 +1597,7 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
               sizeLabel,
               dim1,
               dim2,
-              ...(!existing.barcodeManual && canonicalBarcode(v.barcode)
-                ? { barcode: canonicalBarcode(v.barcode) }
-                : {}),
+              ...(!existing.barcodeManual && tfBarcode ? { barcode: tfBarcode } : {}),
             },
           })
         )

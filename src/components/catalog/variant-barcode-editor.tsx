@@ -211,7 +211,10 @@ export function VariantBarcodeEditor({
       setReport(r);
       setReportKey(key);
 
-      // Loom last, one push per season; see variant-barcodes.ts.
+      // Loom last, one push per season; see variant-barcodes.ts. A fresh
+      // delivery id per apply: the content-derived default makes Loom dedupe a
+      // re-apply after a failed job into that job, returning its stale failure.
+      const applyId = Date.now().toString(36);
       const rowsOut = r.rows.map((row) => ({ ...row }));
       for (const g of r.loomGroups) {
         setBusy(`Sending ${g.colorwayIds.length} colourway(s) to Loom (${g.seasonCode})…`);
@@ -220,7 +223,12 @@ export function VariantBarcodeEditor({
           const res = await fetch("/api/catalog/push/loom", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ colorwayIds: g.colorwayIds, seasonCode: g.seasonCode, mode: "data" }),
+            body: JSON.stringify({
+              colorwayIds: g.colorwayIds,
+              seasonCode: g.seasonCode,
+              mode: "data",
+              eventId: `origio-variant-editor-${g.seasonCode.toLowerCase()}-${applyId}`,
+            }),
           });
           const data = await res.json();
           const skipped = new Map<string, string>(

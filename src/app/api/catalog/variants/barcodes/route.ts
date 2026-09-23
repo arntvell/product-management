@@ -25,8 +25,10 @@ export async function POST(req: Request) {
   if (!Array.isArray(body.edits) || !body.edits.length) {
     return NextResponse.json({ error: "edits is required" }, { status: 400 });
   }
-  if (body.edits.length > 2000) {
-    return NextResponse.json({ error: "At most 2000 edits per request" }, { status: 400 });
+  // Sitoo is written one product at a time; a few hundred fit inside
+  // maxDuration, a few thousand do not.
+  if (body.edits.length > 300) {
+    return NextResponse.json({ error: "At most 300 edits per request — split the paste" }, { status: 400 });
   }
   try {
     const report = body.dryRun
