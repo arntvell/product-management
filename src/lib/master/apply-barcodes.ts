@@ -93,12 +93,43 @@ export async function planBarcodeCorrections(
   });
   const holder = new Map(held.map((v) => [v.barcode!, v.variantSku]));
 
+  // A holder can only give its code up if its OWN correction is written. The
+  // first version counted every SKU in the batch, so a holder whose correction
+  // was rejected (a mistyped check digit, say) still "released" its code: the
+  // unwind cleared it, its neighbour took it, and the holder was left with no
+  // barcode at all. Plan against the SKUs that would move, and repeat until
+  // that set stops shrinking — dropping one mover can strand another.
+  let movers = new Set(corrections.map((c) => c.variantSku));
+  for (;;) {
+    const next = planOnce(corrections, bySku, holder, movers, opts);
+    const moved = new Set([...next.fill, ...next.change].map((w) => w.variantSku));
+    if (moved.size === movers.size) {
+      Object.assign(plan, next);
+      return plan;
+    }
+    movers = moved;
+  }
+}
+
+function planOnce(
+  corrections: BarcodeCorrection[],
+  bySku: Map<string, { variantSku: string; barcode: string | null }>,
+  holder: Map<string, string>,
+  movers: Set<string>,
+  opts: Pick<ApplyBarcodesOptions, "overwrite">
+): BarcodeApplyPlan {
+  const plan: BarcodeApplyPlan = {
+    fill: [],
+    change: [],
+    unwind: [],
+    unchanged: 0,
+    rejected: [],
+    collisions: [],
+    unknownSku: [],
+  };
   // Targets claimed within this batch itself.
   const claimed = new Map<string, string>();
-  // SKUs this batch touches, so a contested target can be told apart from a
-  // rotation that resolves once the holder gives its code up.
-  const batchSkus = new Set(corrections.map((c) => c.variantSku));
-  const rotations = new Map<string, string | null>();
+  const unwinding = new Map<string, string>();
 
   for (const c of corrections) {
     const target = canonical(c.barcode);
@@ -120,39 +151,44 @@ export async function planBarcodeCorrections(
       plan.unchanged++;
       continue;
     }
+    if (current && !opts.overwrite) {
+      plan.rejected.push({
+        variantSku: c.variantSku,
+        barcode: target,
+        reason: `already holds ${current} — pass overwrite to change a barcode that exists`,
+      });
+      continue;
+    }
+    if (!movers.has(c.variantSku)) {
+      // Dropped in an earlier pass: the code it needed is not being released.
+      const heldBy = holder.get(target) ?? claimed.get(target) ?? "another variant";
+      plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy });
+      continue;
+    }
 
-    const heldBy = holder.get(target) ?? claimed.get(target);
+    // Two corrections in one batch asking for the same code is always a clash.
+    const rival = claimed.get(target);
+    if (rival && rival !== c.variantSku) {
+      plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy: rival });
+      continue;
+    }
+    // A code held by a variant this batch is also moving is a rotation: the
+    // holder gives it up first. Held by anything else, it is a collision.
+    const heldBy = holder.get(target);
     if (heldBy && heldBy !== c.variantSku) {
-      // A target held by a variant this batch is *also* rewriting is a rotation,
-      // not a clash: the holder is about to give the code up. Anything else is a
-      // genuine collision and is refused.
-      if (batchSkus.has(heldBy)) {
-        rotations.set(heldBy, holder.get(target) === heldBy ? target : null);
-      } else {
+      if (!movers.has(heldBy)) {
         plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy });
         continue;
       }
+      unwinding.set(heldBy, target);
     }
     claimed.set(target, c.variantSku);
 
-    if (current) {
-      if (!opts.overwrite) {
-        plan.rejected.push({
-          variantSku: c.variantSku,
-          barcode: target,
-          reason: `already holds ${current} — pass overwrite to change a barcode that exists`,
-        });
-        continue;
-      }
-      plan.change.push({ variantSku: c.variantSku, from: current, to: target });
-    } else {
-      plan.fill.push({ variantSku: c.variantSku, to: target });
-    }
+    if (current) plan.change.push({ variantSku: c.variantSku, from: current, to: target });
+    else plan.fill.push({ variantSku: c.variantSku, to: target });
   }
 
-  for (const [sku, releasing] of rotations) {
-    if (releasing) plan.unwind.push({ variantSku: sku, releasing });
-  }
+  for (const [sku, releasing] of unwinding) plan.unwind.push({ variantSku: sku, releasing });
   return plan;
 }
 

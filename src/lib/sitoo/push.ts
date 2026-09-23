@@ -39,6 +39,12 @@ export interface SitooPushOptions {
    * worst on the very first run — when the master has no push history at all.
    */
   products?: SitooProduct[];
+  /**
+   * The barcode the master is ABOUT to hold, by variant id. Lets a preview plan
+   * the channel write before the master changes; the stored value is used for
+   * any variant not in the map.
+   */
+  targets?: Map<string, string>;
 }
 
 export interface SitooPushPlan {
@@ -83,7 +89,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
   const variants = await prisma.variant.findMany({
     where: {
       ...(opts.variantIds?.length ? { id: { in: opts.variantIds } } : {}),
-      barcode: { not: null },
+      ...(opts.targets ? {} : { barcode: { not: null } }),
     },
     select: {
       id: true,
@@ -119,7 +125,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
       unlinked++;
       continue;
     }
-    const target = canonical(v.barcode);
+    const target = canonical(opts.targets?.get(v.id) ?? v.barcode);
     if (!target) continue;
     const productId = Number(ref.externalId);
 

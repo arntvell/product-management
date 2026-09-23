@@ -764,7 +764,7 @@ interface SeasonPlan {
   styles: PlannedStyle[];
   planned: PlannedColorway[];
   skuPlan: SkuPlan;
-  variantBySku: Map<string, { id: string; barcode: string | null }>;
+  variantBySku: Map<string, { id: string; barcode: string | null; barcodeManual?: boolean }>;
   entryIdByColorway: Map<string, string>;
   ownedByColorway: Map<string, Set<string>>;
   warnings: string[];
@@ -958,10 +958,27 @@ async function planSeason(
       select: { id: true, variantSku: true, barcode: true },
     })
   );
+  // A barcode somebody corrected by hand is theirs, not Threadflow's. The update
+  // branch below used to rewrite it on every sync, so a fix made in the variant
+  // editor lasted exactly until the next pull. Not `lockedAt`: in the barcode
+  // pushes a lock means "disputed, do not send", which would stop the very
+  // correction this protects from reaching Shopify and Sitoo.
+  const manualBarcode = new Set(
+    (
+      await chunkedFind(
+        existingVariants.map((v) => v.id),
+        (ids) =>
+          prisma.fieldOwner.findMany({
+            where: { entityType: "variant", field: "barcode", owner: "MANUAL", entityId: { in: ids } },
+            select: { entityId: true },
+          })
+      )
+    ).map((r) => r.entityId)
+  );
   const variantBySku = new Map(
     existingVariants.map((v) => [
       v.variantSku,
-      { id: v.id, barcode: v.barcode },
+      { id: v.id, barcode: v.barcode, barcodeManual: manualBarcode.has(v.id) },
     ])
   );
 
@@ -1239,8 +1256,9 @@ export async function syncSeason(
     // size that just moved looks new, `variantCreates` asserts the SKU the
     // rename has already taken, and the whole size run is skipped for a run.
     for (const c of reconciled.carried) {
+      const barcodeManual = plan.variantBySku.get(c.from)?.barcodeManual;
       plan.variantBySku.delete(c.from);
-      plan.variantBySku.set(c.to, { id: c.id, barcode: c.barcode });
+      plan.variantBySku.set(c.to, { id: c.id, barcode: c.barcode, barcodeManual });
     }
 
     // 5. Build write ops for everything that survived the plan.
@@ -1499,7 +1517,7 @@ interface ColorwayCtx {
     amount: number;
   }>;
   imageRows: Array<{ colorwayId: string; url: string }>;
-  variantBySku: Map<string, { id: string; barcode: string | null }>;
+  variantBySku: Map<string, { id: string; barcode: string | null; barcodeManual?: boolean }>;
   entryIdByColorway: Map<string, string>;
   entrySeen: Set<string>;
 }
@@ -1554,7 +1572,8 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
     );
   }
 
-  // Variants (barcode set-once).
+  // Variants. Threadflow's barcode wins unless one was set by hand (see
+  // manualBarcode where variantBySku is built).
   for (const v of c.variants) {
     const { sizeLabel, dim1, dim2 } = deriveSize(v.dimensions);
     const existing = ctx.variantBySku.get(v.sku);
@@ -1568,7 +1587,9 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
               sizeLabel,
               dim1,
               dim2,
-              ...(canonicalBarcode(v.barcode) ? { barcode: canonicalBarcode(v.barcode) } : {}),
+              ...(!existing.barcodeManual && canonicalBarcode(v.barcode)
+                ? { barcode: canonicalBarcode(v.barcode) }
+                : {}),
             },
           })
         )

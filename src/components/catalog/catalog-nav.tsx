@@ -16,6 +16,7 @@ const PRIMARY_LINKS = [
   { href: "/catalog/collections", label: "Collections" },
   { href: "/catalog/drops", label: "Drops" },
   { href: "/catalog/edit", label: "Bulk editor" },
+  { href: "/catalog/variants", label: "Variant editor" },
   // An unfinished new product is ordinary work in progress, not a repair job.
   // It sits next to Publishing because that is the step it is on the way to.
   { href: "/catalog/products/drafts", label: "Drafts" },
