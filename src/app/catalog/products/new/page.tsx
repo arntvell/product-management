@@ -2,15 +2,18 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-// Two ways in, and the choice is about VOLUME, not about which is the real one.
-// Both land in the same place: a ProductDraft, reviewed and finalized through
-// preflightDraft/finalizeDraft. The importer is not a second creation path —
-// it fills in the same drafts the wizard does, which is what keeps the SKU
-// collision checks, the barcode ledger and the resume-after-crash claim
-// identical for a product typed and a product imported.
+// Two ways to make a new product, and the choice is about VOLUME, not about
+// which is the real one. Both land in the same place: a ProductDraft, reviewed
+// and finalized through preflightDraft/finalizeDraft. The importer is not a
+// second creation path — it fills in the same drafts the wizard does, which is
+// what keeps the SKU collision checks, the barcode ledger and the
+// resume-after-crash claim identical for a product typed and a product imported.
+//
+// The third card is different in kind: a new size on a product that already
+// exists, and usually already sells. No draft — see lib/master/add-size.ts.
 export default function NewProductPage() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-4xl px-6 py-10">
       <Link
         href="/catalog/products/drafts"
         className="text-xs text-muted-foreground underline underline-offset-4"
@@ -22,7 +25,7 @@ export default function NewProductPage() {
         External brands only — Livid product arrives through the Threadflow feed.
       </p>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <div className="mt-6 grid gap-4 sm:grid-cols-3">
         <Choice
           href="/catalog/products/new/wizard"
           title="Build one by hand"
@@ -36,6 +39,13 @@ export default function NewProductPage() {
           lead="A whole delivery in one spreadsheet."
           body="Pick the brand, season, type and size system, download a template with those filled in, and paste the rows. Sizes are a dropdown, so nothing arrives that no size system knows about."
           cta="Start an import"
+        />
+        <Choice
+          href="/catalog/products/new/size"
+          title="Add a size"
+          lead="A new size on a product that already exists."
+          body="Find the product by brand, category or search, pick the size from its size system, add the barcode. The size is pushed to Shopify, Sitoo and Loom wherever the product already is."
+          cta="Add a size"
         />
       </div>
     </main>

@@ -339,7 +339,7 @@ async function getSitooProduct(id: number): Promise<SitooProduct | null> {
  * Archived colourways are left out: the registry push sends loom:true unless
  * told to archive, so re-sending one would un-archive it in Loom.
  */
-async function loomScope(colorwayIds: string[]): Promise<{
+export async function loomScope(colorwayIds: string[]): Promise<{
   groups: LoomGroup[];
   live: Set<string>;
   archived: Set<string>;
