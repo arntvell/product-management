@@ -83,7 +83,7 @@ export interface SitooAddSizeInput {
 }
 
 export interface SitooAddSizePlan {
-  state: "write" | "not-live" | "refused" | "exists" | "skipped";
+  state: "write" | "not-live" | "refused" | "exists" | "skipped" | "failed";
   note?: string;
   /** "family" appends to the parent's variant group; "standalone" mirrors siblings that have none. */
   shape?: "family" | "standalone";
@@ -91,8 +91,15 @@ export interface SitooAddSizePlan {
   title?: string;
   price?: string;
   copiedFrom?: string;
+  /**
+   * Set when Sitoo already holds the SKU. With shape "family" it is a product
+   * created by an earlier run whose family join failed: the retry joins it
+   * instead of creating it again.
+   */
   existingProductId?: number;
   sizes?: string[];
+  /** The fields copied from the sibling, so the check shows what a missing one would drop. */
+  copied?: { vatid: unknown; manufacturerid: unknown; defaultcategoryid: unknown };
 }
 
 export interface SitooAddSizeResult extends SitooAddSizePlan {
@@ -135,15 +142,17 @@ async function resolve(input: SitooAddSizeInput): Promise<Resolved> {
   if (!input.siblings.length)
     return { plan: { state: "not-live", note: "not linked to Sitoo — the size goes out with the product's first publish" } };
 
-  const [mine] = await findProductsBySku([input.size.sku], TARGET);
-  if (mine && normalizeSku(mine.sku) === normalizeSku(input.size.sku))
-    return {
-      plan: {
-        state: "exists",
-        existingProductId: mine.productid,
-        note: `Sitoo already has ${mine.sku} as product ${mine.productid}`,
-      },
-    };
+  const [hit] = await findProductsBySku([input.size.sku], TARGET);
+  const mine = hit && normalizeSku(hit.sku) === normalizeSku(input.size.sku) ? hit : null;
+  const existsAlready: Resolved = {
+    plan: {
+      state: "exists",
+      existingProductId: mine?.productid,
+      note: `Sitoo already has ${mine?.sku} as product ${mine?.productid}`,
+    },
+  };
+  // Already in a family: nothing left to do but link it.
+  if (mine?.variantparentid) return existsAlready;
 
   const found = await findProductsBySku(input.siblings.map((s) => s.sku), TARGET);
   const bySku = new Map(found.map((f) => [normalizeSku(f.sku), f]));
@@ -172,6 +181,11 @@ async function resolve(input: SitooAddSizeInput): Promise<Resolved> {
   const modelSibling = linked[0];
   const model = (await getProduct(modelSibling.hit!.productid, TARGET)) as unknown as Record<string, unknown>;
 
+  const copied = { vatid: model.vatid, manufacturerid: model.manufacturerid, defaultcategoryid: model.defaultcategoryid };
+
+  // Standalone like its siblings: an existing product is simply the answer.
+  if (parents.length === 0 && mine) return existsAlready;
+
   if (parents.length === 0) {
     const title = titleFor(model.title as string, modelSibling.s.sizeLabel, input);
     return {
@@ -182,6 +196,7 @@ async function resolve(input: SitooAddSizeInput): Promise<Resolved> {
         title,
         price: money(model.moneyprice),
         copiedFrom: modelSibling.s.sku,
+        copied,
         note: "the existing sizes are separate products in Sitoo, so this one will be too",
       },
     };
@@ -215,7 +230,16 @@ async function resolve(input: SitooAddSizeInput): Promise<Resolved> {
       title,
       price: money(familyRow.moneyprice),
       copiedFrom: modelSibling.s.sku,
+      copied,
       sizes: groups[0].options,
+      // Created by an earlier run and left standalone when the family PUT
+      // failed (the Rototo 21947/21948 shape): join it, do not create it twice.
+      ...(mine
+        ? {
+            existingProductId: mine.productid,
+            note: `Sitoo already has ${mine.sku} as product ${mine.productid}, outside the family — it will be joined`,
+          }
+        : {}),
     },
   };
 }
@@ -233,71 +257,59 @@ export async function applySitooAddSize(input: SitooAddSizeInput): Promise<Sitoo
   const gate = sitooWriteGate();
   const r = await resolve(input);
   if (r.plan.state === "exists")
-    return { ...r.plan, written: false, productId: String(r.plan.existingProductId) };
+    return {
+      ...r.plan,
+      written: false,
+      productId: r.plan.existingProductId ? String(r.plan.existingProductId) : undefined,
+    };
   if (r.plan.state !== "write") return { ...r.plan, written: false };
   if (gate) return { ...r.plan, state: "skipped", note: gate, written: false };
 
   const model = r.model!;
   const before = await productCount(TARGET);
 
-  const created = await createProducts(
-    [
-      {
-        sku: input.size.sku,
-        title: r.plan.title,
-        moneyprice: money(model.moneyprice),
-        ...(model.moneypricein != null ? { moneypricein: money(model.moneypricein) } : {}),
-        vatid: Number(model.vatid) || DEFAULT_VAT_ID,
-        ...(model.defaultcategoryid ? { defaultcategoryid: Number(model.defaultcategoryid) } : {}),
-        ...(model.manufacturerid ? { manufacturerid: Number(model.manufacturerid) } : {}),
-        ...(input.size.barcode ? { barcode: input.size.barcode } : {}),
-        activepos: model.activepos !== false,
-        stockcountenable: true,
-      },
-    ],
-    TARGET
-  );
-  const c = created[0];
-  if (!c || c.statuscode !== 200 || c.return == null)
-    throw new Error(`Sitoo create ${input.size.sku}: ${c?.errortext ?? `statuscode ${c?.statuscode}`}`);
-
-  let productId = c.return;
-
-  if (r.plan.shape === "family") {
-    const parentId = r.plan.parentProductId!;
-    // Re-read, never reuse the plan's copy: the PUT replaces the family, and
-    // whatever changed in Sitoo since the plan would otherwise be deleted.
-    const family = await getProductVariants(parentId, TARGET);
-    if (!family || family.groups.length !== 1)
-      throw new Error(
-        `Created ${input.size.sku} as Sitoo product ${productId}, but family ${parentId} could not be re-read — ` +
-          `it stands alone until it is added in Sitoo`
-      );
-    const row = r.familyRow!;
-    const newRow: SitooVariantRow = {
-      productid: productId,
-      sku: input.size.sku,
-      active: row.active,
-      activepos: row.activepos,
-      deliverystatus: row.deliverystatus ?? "1",
-      title: r.plan.title!,
-      attributes: [input.size.sizeLabel],
-      moneyprice: money(row.moneyprice),
-      moneypriceorg: money(row.moneypriceorg ?? row.moneyprice),
-      moneyofferprice: money(row.moneyofferprice),
-      // Required on this endpoint; an external brand's sibling may carry none.
-      moneypricein: money(row.moneypricein ?? model.moneypricein),
-      barcode: input.size.barcode ?? "",
-      friendly: input.size.sku.toLowerCase(),
-    };
-    const options = orderSizes([...new Set([...family.groups[0].options, input.size.sizeLabel])]);
-    await setProductVariants(
-      parentId,
-      { groups: [{ name: family.groups[0].name, options }], variants: [...family.variants, newRow] },
+  let productId = r.plan.existingProductId ?? 0;
+  if (!productId) {
+    const created = await createProducts(
+      [
+        {
+          sku: input.size.sku,
+          title: r.plan.title,
+          moneyprice: money(model.moneyprice),
+          ...(model.moneypricein != null ? { moneypricein: money(model.moneypricein) } : {}),
+          vatid: Number(model.vatid) || DEFAULT_VAT_ID,
+          ...(model.defaultcategoryid ? { defaultcategoryid: Number(model.defaultcategoryid) } : {}),
+          ...(model.manufacturerid ? { manufacturerid: Number(model.manufacturerid) } : {}),
+          ...(input.size.barcode ? { barcode: input.size.barcode } : {}),
+          activepos: model.activepos !== false,
+          stockcountenable: true,
+        },
+      ],
       TARGET
     );
-    const [after] = await findProductsBySku([input.size.sku], TARGET);
-    if (after) productId = after.productid;
+    const c = created[0];
+    if (!c || c.statuscode !== 200 || c.return == null)
+      throw new Error(`Sitoo create ${input.size.sku}: ${c?.errortext ?? `statuscode ${c?.statuscode}`}`);
+    productId = c.return;
+  }
+
+  // From here the product EXISTS in Sitoo, so nothing may throw past this
+  // point: the caller has to learn the productid to record the link, or a retry
+  // would find an unlinked orphan. A failed join comes back written AND failed.
+  if (r.plan.shape === "family") {
+    try {
+      productId = await joinFamily(input, r, productId);
+    } catch (err) {
+      return {
+        ...r.plan,
+        state: "failed",
+        written: true,
+        productId: String(productId),
+        note:
+          `created as Sitoo product ${productId} but not joined to family ${r.plan.parentProductId}: ` +
+          `${err instanceof Error ? err.message : String(err)} — "Retry what failed" joins it`,
+      };
+    }
   }
 
   const after = await productCount(TARGET);
@@ -308,4 +320,39 @@ export async function applySitooAddSize(input: SitooAddSizeInput): Promise<Sitoo
     );
 
   return { ...r.plan, written: true, productId: String(productId) };
+}
+
+/** Append the new product to its siblings' family. Returns its productid as Sitoo now reports it. */
+async function joinFamily(input: SitooAddSizeInput, r: Resolved, productId: number): Promise<number> {
+  const model = r.model!;
+  const parentId = r.plan.parentProductId!;
+  // Re-read, never reuse the plan's copy: the PUT replaces the family, and
+  // whatever changed in Sitoo since the plan would otherwise be deleted.
+  const family = await getProductVariants(parentId, TARGET);
+  if (!family || family.groups.length !== 1) throw new Error(`family ${parentId} could not be re-read`);
+  const row = r.familyRow!;
+  const newRow: SitooVariantRow = {
+    productid: productId,
+    sku: input.size.sku,
+    active: row.active,
+    activepos: row.activepos,
+    deliverystatus: row.deliverystatus ?? "1",
+    title: r.plan.title!,
+    attributes: [input.size.sizeLabel],
+    moneyprice: money(row.moneyprice),
+    moneypriceorg: money(row.moneypriceorg ?? row.moneyprice),
+    moneyofferprice: money(row.moneyofferprice),
+    // Required on this endpoint; an external brand's sibling may carry none.
+    moneypricein: money(row.moneypricein ?? model.moneypricein),
+    barcode: input.size.barcode ?? "",
+    friendly: input.size.sku.toLowerCase(),
+  };
+  const options = orderSizes([...new Set([...family.groups[0].options, input.size.sizeLabel])]);
+  await setProductVariants(
+    parentId,
+    { groups: [{ name: family.groups[0].name, options }], variants: [...family.variants, newRow] },
+    TARGET
+  );
+  const [after] = await findProductsBySku([input.size.sku], TARGET);
+  return after?.productid ?? productId;
 }

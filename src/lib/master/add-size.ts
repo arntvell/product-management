@@ -631,8 +631,15 @@ function describeShopify(p: Awaited<ReturnType<typeof planShopifyAddSize>>): str
 function describeSitoo(p: Awaited<ReturnType<typeof planSitooAddSize>>): string[] {
   if (p.state !== "write" && p.state !== "skipped") return [];
   if (!p.shape) return [];
+  const c = p.copied;
   return [
     `"${p.title}" at ${p.price}, copied from ${p.copiedFrom}`,
+    ...(c && !p.existingProductId
+      ? [
+          `VAT group ${c.vatid ?? "default (2)"} · manufacturer ${c.manufacturerid ?? "none"} · ` +
+            `category ${c.defaultcategoryid ?? "none"}`,
+        ]
+      : []),
     p.shape === "family"
       ? `joins family ${p.parentProductId}: ${p.sizes?.join(" · ")}`
       : "a separate product, like its siblings",
@@ -798,7 +805,13 @@ async function run(req: AddSizeRequest, dryRun: boolean): Promise<AddSizeReport>
           row.sitoo = { state: p.state, note: p.note, detail: describeSitoo(p) };
         } else {
           const res = await applySitooAddSize(input);
-          row.sitoo = { state: res.written ? "written" : res.state, note: res.note, detail: describeSitoo(res) };
+          row.sitoo = {
+            // A product created but not joined to its family is written AND
+            // failed; the link below is still recorded so the retry can join it.
+            state: res.state === "failed" ? "failed" : res.written ? "written" : res.state,
+            note: res.note,
+            detail: describeSitoo(res),
+          };
           if ((res.written || res.state === "exists") && res.productId && row.variantId) {
             await prisma.variantChannelRef.upsert({
               where: { variantId_channel: { variantId: row.variantId, channel: "SITOO" } },
