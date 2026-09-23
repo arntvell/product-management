@@ -34,7 +34,7 @@
 
 import { prisma } from "@/lib/db";
 import { buildVariantSku, normalizeSku, sizeSkuToken } from "./sku";
-import { canonical, rejectionReason, recordIssued } from "./barcode";
+import { barcodeKey, barcodeSpellings, rejectionReason, recordIssued, storedForm } from "./barcode";
 import { recordDecisions } from "./provenance";
 import { parseDraftPayload } from "./draft-payload";
 import { channelProductTitle } from "./channel-title";
@@ -527,21 +527,23 @@ async function resolveRequest(req: AddSizeRequest): Promise<Resolved | { fatal: 
     const raw = (s.barcode ?? "").trim();
     let barcode: string | null = null;
     if (raw) {
-      barcode = canonical(raw);
-      if (!barcode) {
+      // A UPC-A is stored as its 12 digits; the zero-padded form does not scan.
+      barcode = storedForm(raw);
+      const key = barcodeKey(raw);
+      if (!barcode || !key) {
         errors.push(`${entry.sizeLabel}: barcode ${raw} ${rejectionReason(raw) ?? "is not a barcode"}.`);
         continue;
       }
-      const prior = seenCodes.get(barcode);
+      const prior = seenCodes.get(key);
       if (prior) errors.push(`Barcode ${barcode} is on both ${prior} and ${entry.sizeLabel}.`);
-      seenCodes.set(barcode, entry.sizeLabel);
+      seenCodes.set(key, entry.sizeLabel);
     } else if (!existing) {
       warnings.push(
         `${entry.sizeLabel} has no barcode. It will be created, but it cannot be scanned at the till ` +
           "and Loom links it by SKU until one is added in the variant editor."
       );
     }
-    if (existing && barcode && existing.barcode && existing.barcode !== barcode)
+    if (existing && barcode && existing.barcode && barcodeKey(existing.barcode) !== barcodeKey(barcode))
       errors.push(
         `${sku} already exists with barcode ${existing.barcode}. Change it in the variant editor, not here.`
       );
@@ -558,16 +560,17 @@ async function resolveRequest(req: AddSizeRequest): Promise<Resolved | { fatal: 
     for (const t of takenSku)
       errors.push(`${t.variantSku} already exists, on ${t.colorway.colorwaySku}.`);
 
-    const codes = fresh.map((s) => s.barcode).filter((b): b is string => !!b);
+    // Both spellings: `in` compares strings, and the master holds UPC-As both ways.
+    const codes = fresh.flatMap((s) => barcodeSpellings(s.barcode));
     if (codes.length) {
       const [takenCode, ledger] = await Promise.all([
         prisma.variant.findMany({ where: { barcode: { in: codes } }, select: { barcode: true, variantSku: true } }),
         prisma.barcodeAllocation.findMany({ where: { barcode: { in: codes } }, select: { barcode: true, sku: true } }),
       ]);
       for (const t of takenCode) errors.push(`Barcode ${t.barcode} already belongs to ${t.variantSku}.`);
-      const held = new Set(takenCode.map((t) => t.barcode));
+      const held = new Set(takenCode.map((t) => barcodeKey(t.barcode)));
       for (const l of ledger)
-        if (!held.has(l.barcode) && l.sku && !fresh.some((s) => normalizeSku(s.sku) === normalizeSku(l.sku!)))
+        if (!held.has(barcodeKey(l.barcode)) && l.sku && !fresh.some((s) => normalizeSku(s.sku) === normalizeSku(l.sku!)))
           warnings.push(`Barcode ${l.barcode} is in the ledger as issued for ${l.sku}, but on no variant.`);
     }
   }

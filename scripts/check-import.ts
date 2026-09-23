@@ -239,6 +239,15 @@ async function main() {
       String(brown.variants[0].barcode)
     );
     check("price out read", brown.priceOut === "1999", String(brown.priceOut));
+
+    // A UPC-A keeps its 12 digits. Padding it to 0+12 is what stopped the
+    // Pantherella import scanning at the till (2026-09-23). Number system 4 is
+    // in-store use, so no manufacturer holds this code.
+    const upc = await parseImportWorkbook(
+      await fill(body, [["Test Boot", "Dark Brown", s0, "400", "1999", "400000000091", catName]])
+    );
+    const upcCode = upc.styles[0]?.colorways[0]?.variants[0]?.barcode;
+    check("a UPC-A is stored as 12 digits, not zero-padded", upcCode === "400000000091", String(upcCode));
     check(
       "variant SKU is colourway + size token",
       brown.variants[0].variantSku === `${brown.colorwaySku}-${sizes[0].skuToken}`.toUpperCase(),

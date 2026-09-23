@@ -19,7 +19,7 @@ import { prisma } from "@/lib/db";
 import { lockedFields } from "@/lib/master/provenance";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { PRODUCT_VARIANTS_BULK_UPDATE_MUTATION } from "@/lib/shopify/mutations";
-import { canonical } from "@/lib/master/barcode";
+import { barcodeKey, channelNeedsBarcode, cleanBarcode } from "@/lib/master/barcode";
 import { fetchShopifyVariants, type ShopifyVariantRow } from "./link";
 
 export interface ShopifyBarcodePushOptions {
@@ -119,7 +119,9 @@ export async function planShopifyBarcodePush(
       plan.locked.push(v.variantSku);
       continue;
     }
-    const target = canonical(opts.targets?.get(v.id) ?? v.barcode);
+    // The master's own spelling, validated but never re-spelled: a legacy
+    // `0…` row goes out as Shopify already has it (see master/barcode.ts).
+    const target = cleanBarcode(opts.targets?.get(v.id) ?? v.barcode);
     if (!target) continue;
 
     const row = byGid.get(ref.externalId);
@@ -128,8 +130,8 @@ export async function planShopifyBarcodePush(
       plan.missingProductLink.push(v.variantSku);
       continue;
     }
-    const from = canonical(row?.barcode ?? null);
-    if (from === target) {
+    const from = cleanBarcode(row?.barcode ?? null);
+    if (!channelNeedsBarcode(row?.barcode ?? null, target)) {
       plan.unchanged++;
       continue;
     }
@@ -148,11 +150,11 @@ export async function planShopifyBarcodePush(
   const rewriting = new Set(candidates.map((c) => c.variantGid));
   const holders = new Map<string, ShopifyVariantRow>();
   for (const r of live) {
-    const bc = canonical(r.barcode);
+    const bc = barcodeKey(r.barcode);
     if (bc && !rewriting.has(r.variantGid)) holders.set(bc, r);
   }
   for (const c of candidates) {
-    const held = holders.get(c.to);
+    const held = holders.get(barcodeKey(c.to)!);
     if (held) {
       plan.blocked.push({
         variantSku: c.variantSku,

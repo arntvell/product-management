@@ -11,7 +11,7 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { canonical } from "./barcode";
+import { storedForm } from "./barcode";
 import { normalizeSku } from "./sku";
 
 export interface GapRow {
@@ -118,7 +118,7 @@ export async function findImportGaps(
       name: st?.title || sh?.p.title || sku,
       brand: sh?.p.vendor ?? null,
       productType: sh?.p.productType ?? null,
-      barcode: canonical(st?.barcode ?? null) ?? canonical(sh?.v.barcode ?? null),
+      barcode: storedForm(st?.barcode ?? null) ?? storedForm(sh?.v.barcode ?? null),
       priceNok: st?.moneyprice ?? sh?.v.price ?? null,
       inSitoo: Boolean(st),
       inShopify: Boolean(sh),

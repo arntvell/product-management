@@ -26,7 +26,7 @@ import {
   type BarcodeApplyPlan,
   type BarcodeCorrection,
 } from "./apply-barcodes";
-import { canonical } from "./barcode";
+import { barcodeSpellings, storedForm } from "./barcode";
 import { fetchShopifyVariants, type ShopifyVariantRow } from "@/lib/shopify/link";
 import {
   planShopifyBarcodePush,
@@ -284,7 +284,8 @@ async function fetchShopifyRowsFor(scoped: Scoped[], targets: string[]): Promise
     terms.add(numeric ? `id:${numeric}` : `sku:${JSON.stringify(s.variantSku)}`);
   }
   if (!terms.size) return [];
-  for (const t of targets) terms.add(`barcode:${t}`);
+  // Both spellings: Shopify's search matches the string it holds.
+  for (const t of targets) for (const sp of barcodeSpellings(t)) terms.add(`barcode:${sp}`);
 
   const list = [...terms];
   const byGid = new Map<string, ShopifyVariantRow>();
@@ -401,7 +402,7 @@ function masterOutcomes(
   }
   for (const e of edits) {
     if (!out.has(e.variantSku)) {
-      out.set(e.variantSku, { outcome: "unchanged", to: canonical(e.barcode) });
+      out.set(e.variantSku, { outcome: "unchanged", to: storedForm(e.barcode) });
     }
   }
   return out;
@@ -492,15 +493,18 @@ async function run(
 
   // 1. Master. The editor exists to change codes that are already set, so
   //    overwrite is always on; attribution is what makes that defensible.
+  //    So is reformat: 12 digits typed over `0…` is a person dropping the zero
+  //    that stops it scanning, not a no-op.
   let masterPlan: BarcodeApplyPlan;
   if (opts.dryRun) {
-    masterPlan = await planBarcodeCorrections(corrections, { overwrite: true });
+    masterPlan = await planBarcodeCorrections(corrections, { overwrite: true, reformat: true });
   } else {
     const res = await applyBarcodeCorrections(corrections, {
       authority: EDITOR_AUTHORITY,
       evidence: opts.evidence,
       owner: "MANUAL",
       overwrite: true,
+      reformat: true,
     });
     masterPlan = res;
     report.master = { applied: res.applied, ledgerRecorded: res.ledgerRecorded };
@@ -649,7 +653,7 @@ async function run(
       variantId: s?.id ?? null,
       variantSku: e.variantSku,
       colorwayId: s?.colorwayId ?? null,
-      from: s ? (opts.dryRun ? canonical(s.barcode) : null) : null,
+      from: s ? (opts.dryRun ? s.barcode : null) : null,
       to: m.to,
       master: m.outcome,
       note: m.note,

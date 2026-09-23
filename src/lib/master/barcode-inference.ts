@@ -16,7 +16,7 @@
 // to confirm against the box or the brand.
 
 import { prisma } from "@/lib/db";
-import { canonical, checkDigit } from "./barcode";
+import { barcodeKey, checkDigit } from "./barcode";
 
 export type InferenceConfidence = "forced" | "likely";
 
@@ -110,7 +110,7 @@ export function outOfSequenceForRun(
   // EXT-NOV-GAT-BLK-41 — sitting at …0441 among …0199 to …0250 — and leaves
   // every legitimately-ordered run alone.
   const rows = variants
-    .map((v) => ({ ...v, canon: canonical(v.barcode) }))
+    .map((v) => ({ ...v, canon: barcodeKey(v.barcode) }))
     .filter((v) => v.canon);
   if (rows.length < 4) return [];
 
@@ -162,7 +162,7 @@ export function outOfSequenceForRun(
 
 export function inferForRun(colorwaySku: string, variants: RunVariant[]): BarcodeCandidate[] {
   const rows = variants
-    .map((v) => ({ ...v, rank: sizeRank(v.sizeLabel), canon: canonical(v.barcode) }))
+    .map((v) => ({ ...v, rank: sizeRank(v.sizeLabel), canon: barcodeKey(v.barcode) }))
     .filter((v) => v.rank !== null)
     .sort((a, b) => (a.rank as number) - (b.rank as number));
 

@@ -9,7 +9,7 @@
 
 import { prisma } from "@/lib/db";
 import { toCsv, parseCsvRecords, UTF8_BOM } from "@/lib/csv";
-import { canonical, rejectionReason } from "./barcode";
+import { barcodeKey, rejectionReason, storedForm } from "./barcode";
 import { normalizeSku } from "./sku";
 import { parseDraftPayload, type DraftPayloadV1 } from "./draft-payload";
 
@@ -106,8 +106,9 @@ export function applyBarcodeCsv(
       updates.set(hit.vKey, null);
       continue;
     }
-    const code = canonical(raw);
-    if (!code) {
+    const code = storedForm(raw);
+    const key = barcodeKey(raw);
+    if (!code || !key) {
       report.rejected.push({
         variantSku: sku,
         value: raw,
@@ -115,7 +116,7 @@ export function applyBarcodeCsv(
       });
       continue;
     }
-    const prior = seenCodes.get(code);
+    const prior = seenCodes.get(key);
     if (prior) {
       report.rejected.push({
         variantSku: sku,
@@ -124,7 +125,7 @@ export function applyBarcodeCsv(
       });
       continue;
     }
-    seenCodes.set(code, sku);
+    seenCodes.set(key, sku);
     updates.set(hit.vKey, code);
   }
 

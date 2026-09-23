@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { fetchAllProducts, fetchAllAvailability } from "./client";
 import type { Cin7Product } from "./types";
-import { canonical } from "@/lib/master/barcode";
+import { barcodeKey, storedForm } from "@/lib/master/barcode";
 import { styleSkuFor } from "@/lib/master/sku";
 
 // The physical locations whose in-stock items we import (exact Cin7 names).
@@ -371,7 +371,11 @@ async function loadExisting(): Promise<{
     variantSkus: new Set(variants.map((v) => v.variantSku)),
     colorwayIdBySku: new Map(colorways.map((c) => [c.colorwaySku, c.id])),
     // Barcode is uniquely indexed, so a colliding insert fails the whole batch.
-    barcodes: new Set(variants.map((v) => v.barcode).filter((b): b is string => Boolean(b))),
+    // By identity (barcodeKey): the index compares strings, so `884…` and
+    // `0884…` would both insert and put one code on two garments.
+    barcodes: new Set(
+      variants.map((v) => barcodeKey(v.barcode)).filter((b): b is string => Boolean(b))
+    ),
   };
 }
 
@@ -619,13 +623,14 @@ export async function runCin7Import(
         const missing = g.variants.filter((v) => !usedSkus.has(v.SKU));
         if (parentId && missing.length) {
           for (const v of missing) {
-            const bc = canonical(v.Barcode);
+            const bc = storedForm(v.Barcode);
+            const key = barcodeKey(v.Barcode);
             // Variant.barcode is uniquely indexed, so one collision would fail
             // the whole batch. Report it and carry on without the barcode.
-            const clash = bc ? existing.barcodes.has(bc) : false;
+            const clash = key ? existing.barcodes.has(key) : false;
             if (bc && clash) barcodeConflicts.push({ variantSku: v.SKU, barcode: bc });
             usedSkus.add(v.SKU);
-            if (bc && !clash) existing.barcodes.add(bc);
+            if (key && !clash) existing.barcodes.add(key);
             const { size } = splitSku(v.SKU, v.Brand);
             const { sizeLabel, dim1, dim2 } = deriveSize(size);
             const variantId = randomUUID();
@@ -758,10 +763,13 @@ export async function runCin7Import(
         //
         // First SKU keeps the code; the rest are created without one and
         // reported, so no product is lost to a data defect upstream.
-        const incoming = canonical(v.Barcode);
-        const clash = incoming ? existing.barcodes.has(incoming) : false;
+        // Stored as 12 digits for a UPC-A (Cin7 holds them zero-padded, e.g.
+        // 0195208040573); compared by identity.
+        const incoming = storedForm(v.Barcode);
+        const incomingKey = barcodeKey(v.Barcode);
+        const clash = incomingKey ? existing.barcodes.has(incomingKey) : false;
         if (incoming && clash) barcodeConflicts.push({ variantSku: v.SKU, barcode: incoming });
-        if (incoming && !clash) existing.barcodes.add(incoming);
+        if (incomingKey && !clash) existing.barcodes.add(incomingKey);
         variantCreates.push({
           id: variantId,
           colorwayId,

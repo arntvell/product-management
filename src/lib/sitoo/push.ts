@@ -20,7 +20,12 @@
 
 import { prisma } from "@/lib/db";
 import { lockedFields } from "@/lib/master/provenance";
-import { canonical, isInternalRange } from "@/lib/master/barcode";
+import {
+  barcodeKey,
+  channelNeedsBarcode,
+  cleanBarcode,
+  isInternalRange,
+} from "@/lib/master/barcode";
 import { normalizeSku } from "@/lib/master/sku";
 import { listProducts, updateBarcode, type SitooProduct } from "./client";
 
@@ -116,7 +121,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
     variants.map((v) => v.id)
   );
   const currentById = new Map<number, string | null>(
-    live.map((p) => [p.productid, canonical(p.barcode)])
+    live.map((p) => [p.productid, cleanBarcode(p.barcode)])
   );
 
   for (const v of variants) {
@@ -125,7 +130,8 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
       unlinked++;
       continue;
     }
-    const target = canonical(opts.targets?.get(v.id) ?? v.barcode);
+    // The master's own spelling, never re-spelled — see master/barcode.ts.
+    const target = cleanBarcode(opts.targets?.get(v.id) ?? v.barcode);
     if (!target) continue;
     const productId = Number(ref.externalId);
 
@@ -141,7 +147,7 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
     }
 
     const have = currentById.get(productId) ?? null;
-    if (have === target) {
+    if (!channelNeedsBarcode(have, target)) {
       unchanged++;
       continue;
     }
@@ -164,11 +170,13 @@ export async function planSitooPush(opts: SitooPushOptions = {}): Promise<SitooP
 
   // A product must be unwound when the code it currently holds is the target of
   // some *other* product in this batch. Nulling it first frees the value.
-  const targets = new Set(writes.map((w) => w.to));
+  // By identity: `0884…` on one product blocks `884…` on another all the same.
+  const targets = new Set(writes.map((w) => barcodeKey(w.to)));
   const unwind: SitooPushPlan["unwind"] = [];
   for (const w of writes) {
-    if (w.from && targets.has(w.from) && w.from !== w.to) {
-      unwind.push({ productId: w.productId, variantSku: w.variantSku, current: w.from });
+    const fromKey = barcodeKey(w.from);
+    if (fromKey && targets.has(fromKey) && fromKey !== barcodeKey(w.to)) {
+      unwind.push({ productId: w.productId, variantSku: w.variantSku, current: w.from! });
     }
   }
   return { unwind, writes, unchanged, unlinked, storeLabel, locked, wrongProduct };

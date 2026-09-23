@@ -61,7 +61,7 @@ import {
   buildVariantSku,
   normalizeSku,
 } from "./sku";
-import { canonical, rejectionReason } from "./barcode";
+import { barcodeKey, rejectionReason, storedForm } from "./barcode";
 import { categorySlug } from "./reference-pull";
 import { createCategory } from "./categories";
 import { missingBrandDefaults } from "./brands";
@@ -278,7 +278,7 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
 
   // --- build the tree ------------------------------------------------------
   const styles: ImportStyle[] = [];
-  const barcodeOwner = new Map<string, string>(); // canonical -> "row N (SKU)"
+  const barcodeOwner = new Map<string, string>(); // barcodeKey -> "row N (SKU)"
   const skuOwner = new Map<string, string>(); // normalised SKU -> where it came from
   // Keyed by SLUG, not by the raw spelling. "Shirts" and "shirts" are one
   // category — offering them as two decisions would let a reviewer press
@@ -367,13 +367,16 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
 
         let barcode: string | null = null;
         if (r.barcode) {
-          barcode = canonical(r.barcode);
-          if (!barcode) {
+          // Stored as given for an EAN-13, as 12 digits for a UPC-A — padding
+          // it with a zero is what stopped Pantherella scanning (2026-09-23).
+          barcode = storedForm(r.barcode);
+          const key = barcodeKey(r.barcode);
+          if (!barcode || !key) {
             errors.push(`Row ${r.row}: ${rejectionReason(r.barcode) ?? "not a barcode"}.`);
           } else {
-            const owner = barcodeOwner.get(barcode);
+            const owner = barcodeOwner.get(key);
             if (owner) errors.push(`Barcode ${barcode} is on row ${owner} and row ${r.row}.`);
-            else barcodeOwner.set(barcode, String(r.row));
+            else barcodeOwner.set(key, String(r.row));
           }
         }
 

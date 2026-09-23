@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { canonical, rejectionReason } from "@/lib/master/barcode";
+import { barcodeKey, rejectionReason } from "@/lib/master/barcode";
 import type { StepProps } from "./types";
 
 export function StepBarcodes({
@@ -133,7 +133,7 @@ export function StepBarcodes({
             </div>
             {cw.variants.map((v) => {
               const value = v.barcode ?? "";
-              const bad = value ? !canonical(value) : false;
+              const bad = value ? !barcodeKey(value) : false;
               return (
                 <div
                   key={v.key}

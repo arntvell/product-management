@@ -20,7 +20,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { DUPLICATE_SKUS } from "@/lib/master/regroup-styles";
 import { getManufacturers, getSeasonProducts } from "./client";
 import type { TFColorway, TFStyle, TFVariant } from "./types";
-import { canonical as canonicalBarcode } from "@/lib/master/barcode";
+import { barcodeKey, storedForm } from "@/lib/master/barcode";
 
 export type SyncMode = "full" | "no-images";
 
@@ -1580,8 +1580,12 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
     const { sizeLabel, dim1, dim2 } = deriveSize(v.dimensions);
     const existing = ctx.variantBySku.get(v.sku);
     if (existing) {
-      const tfBarcode = canonicalBarcode(v.barcode);
-      if (existing.barcodeManual && tfBarcode && tfBarcode !== canonicalBarcode(existing.barcode)) {
+      const tfBarcode = storedForm(v.barcode);
+      // The same barcode already held, in either spelling, is left as it is:
+      // rewriting `884…` to `0884…` (or back) on every pull is a migration
+      // nobody decided, and the channels would follow it.
+      const sameCode = !!tfBarcode && barcodeKey(tfBarcode) === barcodeKey(existing.barcode);
+      if (existing.barcodeManual && tfBarcode && !sameCode) {
         // Kept, but said out loud: Threadflow still holds the old value, and
         // until it is corrected there every new season re-sends it.
         ctx.warnings.push(
@@ -1597,7 +1601,7 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
               sizeLabel,
               dim1,
               dim2,
-              ...(!existing.barcodeManual && tfBarcode ? { barcode: tfBarcode } : {}),
+              ...(!existing.barcodeManual && tfBarcode && !sameCode ? { barcode: tfBarcode } : {}),
             },
           })
         )
@@ -1613,6 +1617,9 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
         id,
         colorwayId,
         variantSku: v.sku,
+        // As Threadflow spells it. Not re-spelled with storedForm: this path has
+        // no identity check, so the unique index is its only guard, and it only
+        // catches a collision spelled the same way.
         barcode: hasValue(v.barcode) ? v.barcode : null,
         sizeLabel,
         dim1,

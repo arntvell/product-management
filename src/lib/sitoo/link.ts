@@ -7,7 +7,7 @@
 
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
-import { canonical } from "@/lib/master/barcode";
+import { barcodeKey } from "@/lib/master/barcode";
 import { normalizeSku } from "@/lib/master/sku";
 import { listProducts, resolveTarget, type SitooProduct, type SitooTarget } from "./client";
 import { syncChannelMembership } from "@/lib/master/channel-membership";
@@ -105,7 +105,7 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
   for (const p of products) {
     const sku = p.sku ? normalizeSku(p.sku) : null;
     if (sku) (bySitooSku.get(sku) ?? bySitooSku.set(sku, []).get(sku)!).push(p);
-    const bc = canonical(p.barcode);
+    const bc = barcodeKey(p.barcode);
     if (bc) (bySitooBarcode.get(bc) ?? bySitooBarcode.set(bc, []).get(bc)!).push(p);
   }
 
@@ -174,7 +174,7 @@ export async function linkSitooProducts(opts: LinkOptions = {}): Promise<LinkRes
     let hits = bySitooSku.get(normalizeSku(v.variantSku)) ?? [];
     let how: "sku" | "barcode" = "sku";
     if (!hits.length) {
-      const bc = canonical(v.barcode);
+      const bc = barcodeKey(v.barcode);
       if (bc) {
         hits = bySitooBarcode.get(bc) ?? [];
         how = "barcode";

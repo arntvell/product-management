@@ -11,7 +11,7 @@
 
 import { prisma } from "@/lib/db";
 import { bulkUpdateByKey } from "@/lib/db-bulk";
-import { canonical, parseAllocation, rejectionReason } from "./barcode";
+import { barcodeKey, parseAllocation, rejectionReason, storedForm } from "./barcode";
 import { recordDecisions } from "./provenance";
 import type { Source } from "@/generated/prisma/client";
 
@@ -36,6 +36,17 @@ export interface ApplyBarcodesOptions {
    * may carry the old code, so it should be a deliberate act.
    */
   overwrite?: boolean;
+  /**
+   * Re-spell a barcode the variant already holds: `0884597234150` ->
+   * `884597234150`. The same code either way, so without this a correction
+   * that differs only by the leading zero is "unchanged".
+   *
+   * Off by default, because it is a migration when a bulk list does it: a feed
+   * that spells a legacy row with its zero would strip it here and then in
+   * every channel on the next push. The variant editor turns it on — a person
+   * typing 12 digits over 13 means it.
+   */
+  reformat?: boolean;
 }
 
 export interface BarcodeApplyPlan {
@@ -65,7 +76,7 @@ export interface BarcodeApplyResult extends BarcodeApplyPlan {
 
 export async function planBarcodeCorrections(
   corrections: BarcodeCorrection[],
-  opts: Pick<ApplyBarcodesOptions, "overwrite">= {}
+  opts: Pick<ApplyBarcodesOptions, "overwrite" | "reformat"> = {}
 ): Promise<BarcodeApplyPlan> {
   const plan: BarcodeApplyPlan = {
     fill: [],
@@ -91,7 +102,12 @@ export async function planBarcodeCorrections(
     where: { NOT: { barcode: null } },
     select: { variantSku: true, barcode: true },
   });
-  const holder = new Map(held.map((v) => [v.barcode!, v.variantSku]));
+  // Keyed by identity: `884…` and `0884…` are one code on one garment.
+  const holder = new Map<string, string>();
+  for (const v of held) {
+    const key = barcodeKey(v.barcode);
+    if (key) holder.set(key, v.variantSku);
+  }
 
   // A holder can only give its code up if its OWN correction is written. The
   // first version counted every SKU in the batch, so a holder whose correction
@@ -111,12 +127,14 @@ export async function planBarcodeCorrections(
   }
 }
 
-function planOnce(
+// Exported for scripts/check-barcode.ts: it is pure given the lookups, and it is
+// where spelling vs identity is decided.
+export function planOnce(
   corrections: BarcodeCorrection[],
   bySku: Map<string, { variantSku: string; barcode: string | null }>,
   holder: Map<string, string>,
   movers: Set<string>,
-  opts: Pick<ApplyBarcodesOptions, "overwrite">
+  opts: Pick<ApplyBarcodesOptions, "overwrite" | "reformat">
 ): BarcodeApplyPlan {
   const plan: BarcodeApplyPlan = {
     fill: [],
@@ -132,8 +150,10 @@ function planOnce(
   const unwinding = new Map<string, string>();
 
   for (const c of corrections) {
-    const target = canonical(c.barcode);
-    if (!target) {
+    // `key` answers "who holds it"; `target` is what gets written.
+    const key = barcodeKey(c.barcode);
+    const target = storedForm(c.barcode);
+    if (!key || !target) {
       plan.rejected.push({
         variantSku: c.variantSku,
         barcode: c.barcode,
@@ -146,12 +166,19 @@ function planOnce(
       plan.unknownSku.push(c.variantSku);
       continue;
     }
-    const current = canonical(v.barcode);
+    const current = v.barcode;
     if (current === target) {
       plan.unchanged++;
       continue;
     }
-    if (current && !opts.overwrite) {
+    // Same barcode, another spelling. Only a re-spell when asked for; the
+    // collision checks below would pass it anyway, since it holds its own code.
+    const respell = current !== null && barcodeKey(current) === key;
+    if (respell && !opts.reformat) {
+      plan.unchanged++;
+      continue;
+    }
+    if (current && !respell && !opts.overwrite) {
       plan.rejected.push({
         variantSku: c.variantSku,
         barcode: target,
@@ -161,20 +188,20 @@ function planOnce(
     }
     if (!movers.has(c.variantSku)) {
       // Dropped in an earlier pass: the code it needed is not being released.
-      const heldBy = holder.get(target) ?? claimed.get(target) ?? "another variant";
+      const heldBy = holder.get(key) ?? claimed.get(key) ?? "another variant";
       plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy });
       continue;
     }
 
     // Two corrections in one batch asking for the same code is always a clash.
-    const rival = claimed.get(target);
+    const rival = claimed.get(key);
     if (rival && rival !== c.variantSku) {
       plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy: rival });
       continue;
     }
     // A code held by a variant this batch is also moving is a rotation: the
     // holder gives it up first. Held by anything else, it is a collision.
-    const heldBy = holder.get(target);
+    const heldBy = holder.get(key);
     if (heldBy && heldBy !== c.variantSku) {
       if (!movers.has(heldBy)) {
         plan.collisions.push({ variantSku: c.variantSku, barcode: target, heldBy });
@@ -182,7 +209,7 @@ function planOnce(
       }
       unwinding.set(heldBy, target);
     }
-    claimed.set(target, c.variantSku);
+    claimed.set(key, c.variantSku);
 
     if (current) plan.change.push({ variantSku: c.variantSku, from: current, to: target });
     else plan.fill.push({ variantSku: c.variantSku, to: target });
@@ -196,7 +223,10 @@ export async function applyBarcodeCorrections(
   corrections: BarcodeCorrection[],
   opts: ApplyBarcodesOptions
 ): Promise<BarcodeApplyResult> {
-  const plan = await planBarcodeCorrections(corrections, { overwrite: opts.overwrite });
+  const plan = await planBarcodeCorrections(corrections, {
+    overwrite: opts.overwrite,
+    reformat: opts.reformat,
+  });
   if (opts.dryRun) {
     return { ...plan, applied: 0, ledgerRecorded: 0, dryRun: true };
   }

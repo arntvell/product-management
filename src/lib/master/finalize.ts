@@ -28,7 +28,7 @@ import type { Prisma as PrismaTypes } from "@/generated/prisma/client";
 import { parseDraftPayload, type DraftPayloadV1 } from "./draft-payload";
 import { normalizeSku, findNearDuplicates, isOneOfOne, type SkuMatch } from "./sku";
 import { loadSkuCorpus, findExactSkuHolders } from "./sku-corpus";
-import { canonical, rejectionReason } from "./barcode";
+import { barcodeKey, barcodeSpellings, rejectionReason, storedForm } from "./barcode";
 import { recordDecisions } from "./provenance";
 import { missingBrandDefaults } from "./brands";
 
@@ -175,11 +175,12 @@ export async function preflightPayload(
   }
 
   // --- barcodes ---
+  // Keyed by identity, so `884…` and `0884…` in one batch are one code twice.
   const proposedBarcodes = new Map<string, string>();
   for (const cw of p.colorways) {
     for (const v of cw.variants) {
       if (!v.barcode) continue;
-      const c = canonical(v.barcode);
+      const c = barcodeKey(v.barcode);
       if (!c) {
         errors.push(`${v.variantSku}: ${rejectionReason(v.barcode) ?? "not a barcode"}.`);
         continue;
@@ -191,9 +192,11 @@ export async function preflightPayload(
   }
   if (proposedBarcodes.size) {
     const codes = [...proposedBarcodes.keys()];
+    // Both spellings: the master holds 12- and 13-digit forms of UPC-As, and
+    // `in` compares strings.
     const [taken, issued] = await Promise.all([
       prisma.variant.findMany({
-        where: { barcode: { in: codes } },
+        where: { barcode: { in: codes.flatMap((c) => barcodeSpellings(c)) } },
         select: { barcode: true, variantSku: true },
       }),
       prisma.barcodeAllocation.findMany({
@@ -211,9 +214,9 @@ export async function preflightPayload(
         ],
         kind: "taken",
       });
-    const takenSet = new Set(taken.map((t) => t.barcode));
+    const takenSet = new Set(taken.map((t) => barcodeKey(t.barcode)));
     for (const i of issued) {
-      if (takenSet.has(i.barcode)) continue;
+      if (takenSet.has(barcodeKey(i.barcode))) continue;
       warnings.push(
         `Barcode ${i.barcode} is in the ledger${i.sku ? `, issued for ${i.sku}` : ""} but on no variant.`
       );
@@ -441,7 +444,9 @@ async function writeProduct(
         id: variantId,
         colorwayId: ids.id,
         variantSku: normalizeSku(v.variantSku),
-        barcode: v.barcode ? canonical(v.barcode) : null,
+        // A UPC-A is stored as its 12 digits — the zero-padded form does not
+        // scan at the till (2026-09-23).
+        barcode: v.barcode ? storedForm(v.barcode) : null,
         sizeLabel: v.sizeLabel,
         dim1: v.dim1,
         dim2: v.dim2,
@@ -579,8 +584,7 @@ async function describeWriteFailure(err: unknown, p: DraftPayloadV1): Promise<Er
 
   if (fields.some((f) => f.includes("barcode"))) {
     const codes = p.colorways
-      .flatMap((c) => c.variants.map((v) => (v.barcode ? canonical(v.barcode) : null)))
-      .filter(Boolean) as string[];
+      .flatMap((c) => c.variants.flatMap((v) => barcodeSpellings(v.barcode)));
     const taken = await prisma.variant.findMany({
       where: { barcode: { in: codes } },
       select: { barcode: true, variantSku: true },
