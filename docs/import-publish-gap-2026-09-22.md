@@ -74,20 +74,32 @@ from a deploy rather than this laptop, both the fix and the switches have to
 reach it", and WORK-DECK D2 records `SITOO_*` as absent from the deployed
 environment. **Unverified from here** — no Vercel CLI, no `.vercel` link.
 
-**5. And the Loom leg would have sent nothing anyway.** No caller passes
-`seasonCode` when creating a batch — not the import screen, not `/done`. So
-`PushBatch.seasonCode` is null, `submitLoom` falls back to `"CONTINUITY"`, and
-`pushColorwaysToLoom` reports every colourway as `not in season CONTINUITY`.
-**All 24 are FW26** (`SeasonEntry`, confirmed). Those items become `SKIPPED`,
-and `finish()` counts SKIPPED as neither ok nor failed — so the batch would have
-reported `status: "ok"` with Loom untouched. The same bug as layer 1, one
-channel over. It also costs Shopify its season-scoped price: `push-shopify.ts`
-warns "Pushed without a season — price is not season-scoped".
+**5. And the Loom leg would have filed all 24 in the wrong season, priceless.**
+No caller passes `seasonCode` when creating a batch — not the import screen, not
+`/done`. So `PushBatch.seasonCode` is null and `submitLoom` falls back to
+`"CONTINUITY"`. All 24 are FW26. What follows is **not** a skip:
 
-Checked, and *not* a sixth layer: passing `FW26` also narrows the price lookup
-`createPushBatch` uses for its hard `hasPrice` gate. Both the NOK MSRP and the
-NOK COST of all 24 are on FW26, so naming the season keeps that gate satisfied
-rather than flipping them to non-waivable BLOCKED.
+- `loadColorwaysForLoom(ids, "CONTINUITY")` filters its *includes* by season, but
+  its `where` is only `id: { in: colorwayIds }` (`payload.ts:8-31`). Every
+  colourway loads regardless of season. `buildLoomPayloadFromColorways` adds no
+  season filter either — so all 24 are built and sent.
+- Their season-scoped data comes back **empty**: `prices` (theirs are on FW26),
+  `entries`, `seasonImages`.
+- `seasonCode` does double duty — it selects rows here and **names the season on
+  Loom**. `loomSeasonName("CONTINUITY")` is `"archv"`, Loom's **Archive**
+  (`payload.ts:353-363`).
+
+So a Loom push from `main` puts twenty-four new FW26 products on Loom's Archive
+shelf with `prices: {}` — and returns a completed job. Worse than silence: it
+looks like it worked.
+
+**A related gap, not fixed here.** `push.ts:141` says "only READY colorways
+present in this season get sent" and `push.ts:148` skips with `not in season
+${seasonCode}` — but that branch only fires when `loadedById.get(id)` is
+undefined, which for an existing colourway never happens. The season guard the
+code advertises is not implemented; a colourway pushed under a season it has no
+`SeasonEntry` for is sent anyway, empty-priced, and filed under that season on
+Loom. Naming the right season (below) avoids it; it does not close it.
 
 ## The 24 colourways, still unpublished
 
@@ -154,7 +166,7 @@ and excludes nothing on eligibility. What it does require:
 
 | Requirement | State |
 |---|---|
-| Colourway present in the season pushed | FW26 on all 24 — **only with the branch's `seasonCode`**; `main` sends CONTINUITY and skips all 24 |
+| The season named on the delivery | Must be FW26. `main` names CONTINUITY → `archv`, Loom's Archive, and the prices arrive empty |
 | Barcoded variant | 49 of 50. `EXT-HST-RBRT-TFF-11` has none and is invisible to the feed (`payload.ts:198`) |
 | `shopify_inventory_item_id` | Comes from the Shopify push — see the condition below |
 | Customs block | Complete on all 12 styles: HS code, customs description, weight, fibre, and origin on every colourway |
@@ -212,8 +224,9 @@ Two ways, and they are not equivalent:
 
 - **Today, on `main`:** twelve `/done` pages, "Push to channels", then "Push
   anyway" on each. Shopify and Sitoo would go out — but `seasonCode` is null on
-  `main`, so **Loom silently skips all 24** as `not in season CONTINUITY`. Layer
-  5 is not fixed on `main`.
+  `main`, so **Loom would file all 24 on its Archive shelf with no prices** and
+  report a completed job. Layer 5 is not fixed on `main`, and this is the one
+  outcome that is harder to undo than doing nothing.
 - **Once this branch lands:** one push from the import screen, or one `/done`
   page each with the season attached, and all three channels are reached.
 
