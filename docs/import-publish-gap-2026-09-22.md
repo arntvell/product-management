@@ -234,6 +234,18 @@ has run). `gender` is null on all twelve styles and `manufacturer_id` is null on
 all 24; both are null on every external already in Loom, and neither is used by
 the registry.
 
+**Barcode-less externals now travel (2026-09-23).** External stock sometimes
+arrives before its barcode and is created in every system at once, so
+`buildRegistryColorway` no longer drops an external's variant for lacking one —
+Livid production keeps the rule. Loom already holds barcode-less variants (the
+CONSUMABLE exemption sent them) and links those to Sitoo on the SKU
+(`sitoo_sku_source: "sku"`, read back on `LIV-REPS`), which matches because the
+Sitoo create uses the variant SKU. A missing barcode is sent as `null`, never
+`""`, so blanks cannot collide in Loom's ownership registry. Dry run: 50 of 50
+variants, `EXT-HST-RBRT-TFF-11` with `barcode: null`; a Livid control with 21
+barcode-less sizes still sends none. The add-a-barcode-later flow that re-pushes
+to every system is not built yet.
+
 **Not proven: that Loom stores it.** A dry run cannot show that. The first live
 push should be read back from `GET /products?colorway_id=` — a completed job is
 not evidence (see `loom-price-lists`: an unknown list × type pair is dropped with
