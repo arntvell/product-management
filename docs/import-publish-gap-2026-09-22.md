@@ -7,7 +7,7 @@ import screen has no publish step, and never had one.
 
 ## Evidence from the production database
 
-Thirteen `ProductDraft` rows reached `COMPLETED` today (10:37 and 11:30), all
+Twelve `ProductDraft` rows reached `COMPLETED` today (10:37 and 11:30), all
 with `channels = {SHOPIFY, LOOM, SITOO}`, together creating 24 colourways and 50
 variants (49 barcoded).
 
@@ -33,7 +33,7 @@ The push machinery has never run for a product created in the app.
 
 ## Why — five layers, in the order they bite
 
-**1. The import screen ends at "Created 13 of 13".** `Result` in
+**1. The import screen ends at a created count and stops.** `Result` in
 `src/components/catalog/import-products.tsx` posts to `/api/catalog/drafts/batch`
 with `action: "create"`, toasts a count, and stops. There is no publish button,
 no progress, and no link onward. The only push UI in the app is `DraftPushPanel`
@@ -210,12 +210,17 @@ ever verified against the sandbox.
 
 Two ways, and they are not equivalent:
 
-- **Today, on `main`:** thirteen `/done` pages, "Push to channels", then "Push
+- **Today, on `main`:** twelve `/done` pages, "Push to channels", then "Push
   anyway" on each. Shopify and Sitoo would go out — but `seasonCode` is null on
   `main`, so **Loom silently skips all 24** as `not in season CONTINUITY`. Layer
   5 is not fixed on `main`.
 - **Once this branch lands:** one push from the import screen, or one `/done`
   page each with the season attached, and all three channels are reached.
+
+Confirmed still true on 2026-09-23: `PushBatch` holds the same two probe rows,
+all 72 `ChannelPublication` rows read `published=false / lastPushStatus=null`,
+and these colourways have **zero** `VariantChannelRef` of any system. Nothing has
+been pushed by anyone.
 
 The safe next step either way is a **dry run** of a batch over the 24 from this
 branch: one `PushBatch` row, nothing written outward, and it exercises the season
