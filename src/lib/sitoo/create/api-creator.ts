@@ -178,8 +178,10 @@ async function createOne(
   const payload: SitooProductCreate[] = toCreate.map((v) => ({
     sku: v.sku,
     title: `${input.title} ${v.sizeLabel}`.trim(),
-    ...(input.priceNok ? { moneyprice: input.priceNok } : {}),
-    ...(input.costNok ? { moneypricein: input.costNok } : {}),
+    // Through money() like every other price field: the master's Decimal
+    // prints "230", and Sitoo 400s anything without two decimals.
+    ...(input.priceNok ? { moneyprice: money(input.priceNok) } : {}),
+    ...(input.costNok ? { moneypricein: money(input.costNok) } : {}),
     vatid: input.vatId ? Number(input.vatId) : DEFAULT_VAT_ID,
     ...(input.defaultCategoryId ? { defaultcategoryid: Number(input.defaultCategoryId) } : {}),
     ...(input.manufacturerId ? { manufacturerid: Number(input.manufacturerId) } : {}),

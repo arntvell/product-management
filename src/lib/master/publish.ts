@@ -4,6 +4,7 @@
 // NOT write to Shopify — the live push is wired separately and run deliberately.
 import { prisma } from "@/lib/db";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
+import { channelProductTitle } from "./channel-title";
 
 // seasonCode scopes the price to the season the user is pushing FROM, so we
 // never send another season's price. Omitted -> all prices (legacy behaviour,
@@ -192,7 +193,7 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
     externalId: shopifyPub?.externalId ?? null,
     unisex,
     product: {
-      title: cw.name,
+      title: channelProductTitle(cw),
       handle: cw.colorwaySku.toLowerCase(),
       vendor: cw.vendor,
       // A mapped category wins over the free text: someone chose the Shopify

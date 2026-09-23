@@ -25,6 +25,7 @@ import { getSitooCreator, type SitooCreateInput } from "@/lib/sitoo/create";
 import type { SitooTarget } from "@/lib/sitoo/client";
 import type { Channel } from "@/generated/prisma/enums";
 import { declareChannel } from "./channel-membership";
+import { channelProductTitle } from "./channel-title";
 
 export type PushChannel = "SHOPIFY" | "LOOM" | "SITOO";
 
@@ -608,7 +609,8 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
     }
     inputs.push({
       colorwayId: cw.id,
-      title: cw.name,
+      // "Style Colour" for Origio-made colourways; see channel-title.ts.
+      title: channelProductTitle(cw),
       variants: cw.variants.map((v) => ({
         variantId: v.id,
         sku: v.variantSku,
