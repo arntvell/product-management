@@ -189,6 +189,56 @@ sends anyway, with nulls, and the stock link silently does not reconcile. On thi
 branch the Shopify leg pushes and lands a **DRAFT** product: in the admin, not on
 the storefront, which is what "not published immediately" means here.
 
+## The Loom push, made right for externals — 2026-09-23
+
+Kristoffer's rule: **externals send MSRP only.** No wholesale, no cost. And a
+Loom push must name a season, because the season is what selects the prices.
+
+Three changes, on this branch:
+
+1. **MSRP only for external brands** (`buildRegistryColorway`). Keyed on
+   `Brand.isLivid`, the same fact eligibility reads. Livid's own production is
+   untouched and still sends msrp, ws and cost. Before this, the 24 went out as
+   `NOK {msrp, cost}` — what Livid paid Hestra and Pantherella was going into
+   Loom. Cost had been added to the registry in `a51d804` as part of a general
+   enrichment, with no Loom-side requirement recorded.
+2. **The season guard the code advertised is now real** (`push.ts`). A
+   non-archived colourway with no `SeasonEntry` in the pushed season is skipped
+   as `not in season`, not built empty and filed there. Archived colourways stay
+   exempt, because a withdrawal must reach Loom. Every other caller already
+   buckets by the colourway's own season (`push/loom` requires `seasonCode`;
+   `style-splits/verify` groups by it), so this changes nothing for them.
+3. **No silent CONTINUITY fallback** (`push-orchestrator.ts`). A batch with no
+   season blocks its Loom items at creation, not waivable, and `submitLoom`
+   blocks them again at run time — because "Push anyway" resets every BLOCKED
+   item to PENDING, including these.
+
+Verified by dry run through `pushColorwaysToLoom` itself (returns before
+anything leaves the process):
+
+```
+season=FW26        wouldSend=24  styles=12  skipped=0
+season=CONTINUITY  wouldSend=0   skipped=24 "not in season CONTINUITY"
+prices sent (FW26)      NOK:msrp            ← was NOK:msrp+cost
+Livid control LIV-KVN-GRY  EUR/NOK/USD msrp+ws   ← unchanged
+49 variants, every one with an explicit sku and a barcode
+```
+
+The shape Loom receives, per the preview: **style** (stable `style_id`,
+`style_sku`, name, category) → **colourway** (stable `colorway_id`,
+`colorway_sku`, brand, colour, product type, the complete customs block,
+`prices`, `channels {loom, shopify, sitoo}: true`) → **variant** (stable
+`variant_id`, explicit `sku` — which avoids Loom's derive-and-rename trap —
+barcode, `dimensions.size`, and `shopify_inventory_item_id` once the Shopify leg
+has run). `gender` is null on all twelve styles and `manufacturer_id` is null on
+all 24; both are null on every external already in Loom, and neither is used by
+the registry.
+
+**Not proven: that Loom stores it.** A dry run cannot show that. The first live
+push should be read back from `GET /products?colorway_id=` — a completed job is
+not evidence (see `loom-price-lists`: an unknown list × type pair is dropped with
+no error at all).
+
 ## Four decisions that are yours
 
 **a. Waive the merchandising gaps on import?** Implemented as yes, because the
@@ -202,14 +252,10 @@ instead, or a lighter `shopifyMissing` for non-Livid brands.
 photograph, and DRAFT is what makes (a) safe. If you want them live, the honest
 order is: fill the merchandising fields, then activate.
 
-**d. The first Loom push carries `sitoo_product_id: null`.** `PHASES` is
-SHOPIFY → LOOM → SITOO, and the Sitoo ref is written in the last phase, so Loom
-hears about the product before Sitoo has an id for it. `declareChannel` already
-sends `sitoo: true` up front, which is the `channel_declared_absent` state Loom
-asked to be able to raise — so this is reported, not silent, and a second data
-push fills the id. The tidier fix is SHOPIFY → SITOO → LOOM, but that reorders
-every batch path and the declare-up-front comment suggests the current order was
-chosen, not stumbled into. Left alone deliberately; worth its own look.
+**d. (Resolved — not a gap.)** The first Loom push does carry
+`sitoo_product_id: null`, but Loom ignores that field and links Sitoo itself by
+barcode: a read-back of an external already in Loom shows `sitoo_sku_source:
+"barcode"`. Once the Sitoo product exists, Loom matches it with nothing from us.
 
 **c. The Vercel production environment.** Confirm `SITOO_API_ID`,
 `SITOO_API_KEY`, `SITOO_BASE_URL`, `SITOO_CREATE_MODE=api` and

@@ -142,6 +142,15 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
         }
       }
 
+      if (channel === "LOOM" && !input.seasonCode) {
+        // Loom files a delivery under the season it names, and the same code
+        // selects which prices go with it. There is no safe default: the old
+        // one, CONTINUITY, put new FW26 product on Loom's Archive shelf with no
+        // prices. Not waivable — "Push anyway" must not reach this.
+        state = "BLOCKED";
+        error = "no season on this batch — Loom needs one to file the product and send its prices";
+      }
+
       if (channel === "SITOO" && !sitooConfigured) {
         // A configuration fact, not a failure. SITOO_* is absent in Production
         // (WORK-DECK D2), and leaving a batch permanently red for that would
@@ -225,7 +234,7 @@ export async function runPushBatch(
     if (phase === "SHOPIFY")
       await stepShopify(batchId, deadline, batch.seasonCode, batch.allowIncomplete, opts);
     if (phase === "LOOM") {
-      await submitLoom(batchId, batch.seasonCode ?? "CONTINUITY", opts);
+      await submitLoom(batchId, batch.seasonCode, opts);
       const poll = await confirmLoom(batchId);
       if (poll) nextPollAfterMs = poll;
     }
@@ -366,13 +375,26 @@ async function stepShopify(
  */
 async function submitLoom(
   batchId: string,
-  seasonCode: string,
+  seasonCode: string | null,
   opts: RunOptions
 ): Promise<void> {
   const pending = await prisma.pushBatchItem.findMany({
     where: { batchId, channel: "LOOM", state: "PENDING" },
   });
   if (!pending.length) return;
+
+  // Checked here as well as at creation, because retryPushBatch resets every
+  // BLOCKED item to PENDING — including one blocked for having no season.
+  if (!seasonCode) {
+    await prisma.pushBatchItem.updateMany({
+      where: { id: { in: pending.map((p) => p.id) } },
+      data: {
+        state: "BLOCKED",
+        error: "no season on this batch — Loom needs one to file the product and send its prices",
+      },
+    });
+    return;
+  }
 
   // Loom needs Shopify's ids, so anything whose Shopify push failed waits rather
   // than going out incomplete.

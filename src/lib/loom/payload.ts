@@ -147,8 +147,18 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition ?? null,
     country_of_origin: cw.countryOfOrigin ?? null,
   };
+  // External brands send MSRP and nothing else. They are bought in, not
+  // wholesaled, so Loom has no use for a wholesale price and should not be
+  // holding what Livid paid for them — decided by Kristoffer 2026-09-23. Livid's
+  // own production keeps all three: the wholesale catalogue prices from WS, and
+  // COST is its own figure.
+  //
+  // Keyed on the brand, the same fact isLoomEligible reads, rather than on
+  // Source or the SKU prefix: an external is external however it arrived.
+  const msrpOnly = cw.brand?.isLivid !== true;
   const prices: Record<string, { msrp?: number; ws?: number; cost?: number }> = {};
   for (const p of cw.prices) {
+    if (msrpOnly && p.priceType !== "MSRP") continue;
     const slot = (prices[p.currency] ??= {});
     if (p.priceType === "MSRP") slot.msrp = Number(p.amount);
     else if (p.priceType === "WHOLESALE") slot.ws = Number(p.amount);

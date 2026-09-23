@@ -148,6 +148,20 @@ export async function pushColorwaysToLoom(
       skipped.push({ colorwayId: id, reason: `not in season ${seasonCode}` });
       continue;
     }
+    // The check the comment above always promised. loadColorwaysForLoom filters
+    // its INCLUDES by season, not the colorway, so the branch above only ever
+    // caught an id that did not exist. A colorway with no SeasonEntry in this
+    // season was built anyway — prices, entry and image all empty — and filed
+    // on Loom under the season named here. With the batch's CONTINUITY fallback
+    // that put new FW26 product on Loom's Archive shelf with `prices: {}`, and
+    // the job reported success.
+    //
+    // An archived colorway is exempt for the same reason it bypasses readiness
+    // below: a withdrawal has to reach Loom, and it is not being published.
+    if (!cw.archived && cw.entries.length === 0) {
+      skipped.push({ colorwayId: id, reason: `not in season ${seasonCode}` });
+      continue;
+    }
     // Eligibility before readiness. In catalogue mode this keeps externals and
     // vintage out of the wholesale feed; in registry mode nothing is excluded,
     // because stock that does not reach the registry does not reconcile.
