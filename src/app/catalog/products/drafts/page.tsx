@@ -70,14 +70,31 @@ export default async function DraftsPage() {
             {finished.length} finished or discarded
           </summary>
           <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-            {finished.slice(0, 50).map((d) => (
-              <div key={d.id} className="flex justify-between gap-4">
-                <span className="truncate">
-                  {d.title} — {d.status.toLowerCase()}
-                </span>
-                <span className="shrink-0">{new Date(d.updatedAt).toLocaleDateString()}</span>
-              </div>
-            ))}
+            {finished.slice(0, 50).map((d) => {
+              const row = (
+                <>
+                  <span className="truncate">
+                    {d.title} — {d.status.toLowerCase()}
+                  </span>
+                  <span className="shrink-0">{new Date(d.updatedAt).toLocaleDateString()}</span>
+                </>
+              );
+              // A completed draft's page is where its publish panel lives, and
+              // publishing is retryable — so it has to stay reachable after "Created".
+              return d.status === "COMPLETED" ? (
+                <Link
+                  key={d.id}
+                  href={`/catalog/products/drafts/${d.id}/done`}
+                  className="flex justify-between gap-4 hover:text-foreground hover:underline"
+                >
+                  {row}
+                </Link>
+              ) : (
+                <div key={d.id} className="flex justify-between gap-4">
+                  {row}
+                </div>
+              );
+            })}
           </div>
         </details>
       ) : null}

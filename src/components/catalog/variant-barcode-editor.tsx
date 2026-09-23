@@ -339,7 +339,9 @@ export function VariantBarcodeEditor({
                       <div className="font-mono text-xs">{r.variantSku}</div>
                       {newGroup ? (
                         <div className="text-xs text-muted-foreground">
-                          {r.name}
+                          {r.name.toLowerCase().includes(r.styleName.toLowerCase())
+                            ? r.name
+                            : `${r.styleName} — ${r.name}`}
                           {r.seasons.length ? ` · ${r.seasons.join(", ")}` : ""}
                           {r.status !== "ACTIVE" ? ` · ${r.status.toLowerCase()}` : ""}
                         </div>

@@ -59,6 +59,8 @@ export interface VariantEditorRow {
   colorwayId: string;
   colorwaySku: string;
   name: string;
+  /** An imported colourway is named by its colour alone ("Black"); this says whose. */
+  styleName: string;
   status: string;
   seasons: string[];
   /** Linked to a Shopify variant — a correction will be written there. */
@@ -96,6 +98,10 @@ export async function listVariantsForEditor(
               { barcode: { contains: q } },
               { colorway: { colorwaySku: { contains: q, mode: "insensitive" } } },
               { colorway: { name: { contains: q, mode: "insensitive" } } },
+              // Imported colourways carry only the colour as their name, so
+              // "Thornham" or "Hestra" finds them by style or brand or not at all.
+              { colorway: { style: { styleName: { contains: q, mode: "insensitive" } } } },
+              { colorway: { style: { brand: { name: { contains: q, mode: "insensitive" } } } } },
             ],
           }
         : {}),
@@ -117,6 +123,7 @@ export async function listVariantsForEditor(
           colorwaySku: true,
           name: true,
           status: true,
+          style: { select: { styleName: true } },
           entries: { select: { season: { select: { code: true } } } },
           publications: {
             where: { channel: "LOOM" },
@@ -141,6 +148,7 @@ export async function listVariantsForEditor(
       colorwayId: v.colorway.id,
       colorwaySku: v.colorway.colorwaySku,
       name: v.colorway.name,
+      styleName: v.colorway.style.styleName,
       status: v.colorway.status,
       seasons: v.colorway.entries.map((e) => e.season.code),
       shopify: v.channelRefs.some((r) => r.channel === "SHOPIFY"),
