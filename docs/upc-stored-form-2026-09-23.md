@@ -42,13 +42,13 @@ the master's value, every one of those rows would be stripped in its channel on 
 | `finalize.ts` (≈182, 444, 582) | stored the 13-digit form; taken-check was an exact `in`, so it missed the 211 twelve-digit rows | stores `storedForm`; taken/ledger checks look up both spellings, matched by key |
 | `draft-barcodes.ts` (CSV into draft) | 13-digit form into the payload | `storedForm`; duplicate check keyed by `barcodeKey` |
 | `add-size.ts` (new on main) | 13-digit form; exact `in` taken-check | `storedForm`; both spellings; "different from existing" by key |
-| `apply-barcodes.ts` | holder map keyed by the raw DB string, so a 12-digit holder was invisible to a 13-digit target | holders and claims keyed by `barcodeKey`; writes `storedForm`; a same-code re-spelling is a change only with the new `reformat` option |
+| `apply-barcodes.ts` | holder map keyed by the raw DB string, so a 12-digit holder was invisible to a 13-digit target | holders and claims keyed by `barcodeKey`; writes `storedForm`; a same-code re-spelling is a change only with the new `reformat` option; a held non-barcode still counts as blank |
 | `variant-barcodes.ts` (the `/catalog/variants` editor) | 12 over 0+12 reported "unchanged" | passes `reformat: true`; preview `from` shows the stored spelling; Shopify dup-search asks for both spellings |
 | `shopify/push-barcodes.ts` | sent the 13-digit form; "agrees" by identity | sends the master's spelling (`cleanBarcode`); decides by `channelNeedsBarcode`; dup guard by key |
 | `sitoo/push.ts` | same as Shopify; unwind matched raw values | same as Shopify; unwind matched by key |
 | `cin7/import.ts` | existing-barcode set was raw strings; stored the 13-digit form | set keyed by `barcodeKey`; stores `storedForm` (Cin7 holds UPCs padded, e.g. `0195208040573`) |
 | `import-gaps.ts` | display | `storedForm` for display |
-| `threadflow/sync.ts` | update wrote the 13-digit form over every non-manual row | update skips when the held code is the same barcode in either spelling. **Create is unchanged** (writes as Threadflow gives it): this path has no identity check, so the unique index is its only guard, and re-spelling there would let a pair through it |
+| `threadflow/sync.ts` | update wrote the 13-digit form over every non-manual row; create wrote Threadflow's raw value | update skips when the held code is the same barcode in either spelling; create writes `storedForm` for a valid code, raw otherwise. This path has no identity check, so the string index catches a clash only when both rows are spelled alike (true before and after) |
 | `lookup.ts` | exact match on the 13-digit form, so the 211 twelve-digit rows were unfindable by barcode | searches both spellings; mismatch still by identity |
 | `shopify/link.ts`, `sitoo/link.ts`, `barcode-inference.ts`, `step-barcodes.tsx` | identity/validation | renamed to `barcodeKey`, no behaviour change |
 | `recordIssued` / `parseAllocation` / `isInternalRange` | — | unchanged: Livid's ranges start `7`, never `0`, and `isInternalRange` already looked past the padding zero |
@@ -76,8 +76,11 @@ CREATE UNIQUE INDEX CONCURRENTLY "Variant_barcode_identity_key"
   WHERE barcode IS NOT NULL;
 ```
 
-Caveat: `prisma migrate dev` may report an index it does not know as drift. Check that
-before adding it as a migration rather than running it by hand.
+**Run it by hand** (psql / Neon console), not as a Prisma migration:
+`CREATE INDEX CONCURRENTLY` cannot run inside a transaction, and Prisma wraps
+each migration in one. As a migration it would have to drop `CONCURRENTLY`,
+which locks `Variant` for writes while it builds. Either way, `prisma migrate dev`
+may then report the index it does not know about as drift.
 
 ## Verified
 
@@ -93,6 +96,28 @@ before adding it as a migration rather than running it by hand.
   - `planSitooPush` over all 416 legacy rows plans 0 re-spellings. Its 1 write
     (`EXT-PNT-YS1025-01-L`) is a genuinely different code, and the old code planned it too.
 - `tsc --noEmit` clean. `check-style-splits.ts` fails 2 checks, the same on `main` before this change.
+
+## Decision: 5 channel values a push would re-spell
+
+The new rule acts only where the master holds 12 digits and a channel still
+holds the zero. Planned read-only on 2026-09-23 over all 211 twelve-digit master
+rows (and, for Sitoo, the whole master):
+
+| SKU | Channel | Now | A barcode push would write |
+|---|---|---|---|
+| EXT-PF-11-INCNS | Sitoo | 0855111006683 | 855111006683 |
+| EXT-PF-11-INCNS | Shopify | 0855111006683 | 855111006683 |
+| EXT-STM-401 | Sitoo | 0750810801662 | 750810801662 |
+| EXT-STM-LNTBRS-Dark Grey | Shopify | 0644824543109 | 644824543109 |
+| EXT-STM-935 | Shopify | 0644824542935 | 644824542935 |
+
+Under the old code a push left these alone, because the forms counted as equal. Now
+the next barcode push that covers them strips the zero. The unscoped callers are
+`POST /api/catalog/push/sitoo` and `/api/catalog/push/shopify/barcodes` without
+`variantIds`. This is the direction the business asked for, but nobody has
+decided these five. If one of them scans *because* of the zero, set the master
+to the padded form in the editor first. Nothing else in the channels would change
+spelling: the 416 legacy padded master rows plan 0 re-spellings.
 
 ## Not done
 

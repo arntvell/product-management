@@ -1617,10 +1617,11 @@ function buildColorway(p: PlannedColorway, ctx: ColorwayCtx): void {
         id,
         colorwayId,
         variantSku: v.sku,
-        // As Threadflow spells it. Not re-spelled with storedForm: this path has
-        // no identity check, so the unique index is its only guard, and it only
-        // catches a collision spelled the same way.
-        barcode: hasValue(v.barcode) ? v.barcode : null,
+        // A valid code in the master's spelling (a UPC-A as 12 digits);
+        // anything else as Threadflow has it, as before. This path has no
+        // identity check: the unique index catches a clash only when both rows
+        // are spelled alike, whichever spelling is written here.
+        barcode: storedForm(v.barcode) ?? (hasValue(v.barcode) ? v.barcode : null),
         sizeLabel,
         dim1,
         dim2,

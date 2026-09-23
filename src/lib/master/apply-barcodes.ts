@@ -166,7 +166,9 @@ export function planOnce(
       plan.unknownSku.push(c.variantSku);
       continue;
     }
-    const current = v.barcode;
+    // A held value that is not a barcode at all ("******mangler") counts as
+    // blank, as it always has: filling it is not overwriting a code.
+    const current = barcodeKey(v.barcode) ? v.barcode : null;
     if (current === target) {
       plan.unchanged++;
       continue;

@@ -186,7 +186,7 @@ export async function preflightPayload(
         continue;
       }
       const prior = proposedBarcodes.get(c);
-      if (prior) errors.push(`Barcode ${c} is on both ${prior} and ${v.variantSku}.`);
+      if (prior) errors.push(`Barcode ${storedForm(c)} is on both ${prior} and ${v.variantSku}.`);
       proposedBarcodes.set(c, v.variantSku);
     }
   }

@@ -125,5 +125,8 @@ eq("two edits claiming one code in two spellings clash", twoClaims.collisions.le
 const fill = plan([{ variantSku: "A", barcode: UPC0 }], [{ variantSku: "A", barcode: null }]);
 eq("a fill is stored in 12 digits", fill.fill, [{ variantSku: "A", to: UPC }]);
 
+const junk = plan([{ variantSku: "A", barcode: UPC }], [{ variantSku: "A", barcode: "******mangler" }]);
+eq("a held non-barcode counts as blank: filled without overwrite", junk.fill, [{ variantSku: "A", to: UPC }]);
+
 console.log(failed ? `\n${failed} FAILED` : "\nall passed");
 process.exit(failed ? 1 : 0);
