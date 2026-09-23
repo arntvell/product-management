@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getFixList } from "@/lib/master/fix-list";
 import { FixGrid } from "@/components/catalog/fix-grid";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,11 @@ export default async function FixPage({
   const includeCore = sp.core !== "0";
   const lividOnly = sp.livid !== "0";
 
+  const seasons = await prisma.season.findMany({
+    select: { code: true, kind: true },
+    orderBy: { sortOrder: "asc" },
+  });
+
   const { rows, manufacturers, counts } = await getFixList({
     seasonCode: season,
     includeCore,
@@ -23,12 +29,14 @@ export default async function FixPage({
     includeReady: false,
   });
 
-  const toggle = (key: string, on: boolean) => {
-    const p = new URLSearchParams({ season });
-    if (key !== "core" ? !includeCore : !on) p.set("core", "0");
-    if (key !== "livid" ? !lividOnly : !on) p.set("livid", "0");
+  const href = (o: { season?: string; core?: boolean; livid?: boolean }) => {
+    const p = new URLSearchParams({ season: o.season ?? season });
+    if (!(o.core ?? includeCore)) p.set("core", "0");
+    if (!(o.livid ?? lividOnly)) p.set("livid", "0");
     return `/catalog/fix?${p.toString()}`;
   };
+  const chip = (on: boolean) =>
+    `rounded-full border px-2.5 py-1 font-medium ${on ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`;
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 py-10">
@@ -44,17 +52,21 @@ export default async function FixPage({
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded-full border px-2.5 py-1 font-medium">{season}</span>
-        <Link
-          href={toggle("core", !includeCore)}
-          className={`rounded-full border px-2.5 py-1 font-medium ${includeCore ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
-        >
+        {seasons.map((s) => (
+          <Link
+            key={s.code}
+            href={href({ season: s.code })}
+            className={chip(s.code === season)}
+            title={s.kind === "CONTINUITY" ? "Loom's Archive" : undefined}
+          >
+            {s.code}
+          </Link>
+        ))}
+        <span className="mx-1 h-4 w-px bg-border" />
+        <Link href={href({ core: !includeCore })} className={chip(includeCore)}>
           + Core
         </Link>
-        <Link
-          href={toggle("livid", !lividOnly)}
-          className={`rounded-full border px-2.5 py-1 font-medium ${lividOnly ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`}
-        >
+        <Link href={href({ livid: !lividOnly })} className={chip(lividOnly)}>
           Livid only
         </Link>
         <span className="text-muted-foreground">
@@ -63,7 +75,13 @@ export default async function FixPage({
         </span>
       </div>
 
-      <FixGrid rows={rows} manufacturers={manufacturers} />
+      {/* Keyed on the scope: the grid copies its rows into state, so without a
+          remount a season switch would keep showing the previous season. */}
+      <FixGrid
+        key={`${season}|${includeCore}|${lividOnly}`}
+        rows={rows}
+        manufacturers={manufacturers}
+      />
     </div>
   );
 }

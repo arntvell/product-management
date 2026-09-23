@@ -46,6 +46,7 @@ export function FixGrid({
   // impossible to correct a mistake or set a second field.
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<string>("");
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<"all" | "blocked" | "warnings" | "fixable">("fixable");
   const [bulkField, setBulkField] = useState<Field>("manufacturerId");
@@ -87,9 +88,14 @@ export function FixGrid({
         if (!matchesFilter(r) && !touched.has(r.id)) return false;
         if (typeFilter && (r.productType?.trim() || "(none)") !== typeFilter)
           return false;
+        if (query.trim()) {
+          const hay = `${r.styleName} ${r.name} ${r.colorwaySku}`.toLowerCase();
+          if (!query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w)))
+            return false;
+        }
         return true;
       }),
-    [rows, matchesFilter, touched, typeFilter]
+    [rows, matchesFilter, touched, typeFilter, query]
   );
 
   async function save(colorwayIds: string[], patch: Partial<Record<Field, string | null>>) {
@@ -198,6 +204,13 @@ export function FixGrid({
             {label}
           </button>
         ))}
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search name or SKU…"
+          className="ml-2 w-56 rounded-full border bg-background px-3 py-1 text-xs"
+        />
         {touched.size > 0 && (
           <span className="ml-2 text-xs text-green-700 dark:text-green-500">
             {touched.size} edited this session · rows stay listed until you reload
