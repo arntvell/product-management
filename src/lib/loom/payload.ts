@@ -147,8 +147,18 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition ?? null,
     country_of_origin: cw.countryOfOrigin ?? null,
   };
+  // External brands send MSRP and nothing else. They are bought in, not
+  // wholesaled, so Loom has no use for a wholesale price and should not be
+  // holding what Livid paid for them — decided by Kristoffer 2026-09-23. Livid's
+  // own production keeps all three: the wholesale catalogue prices from WS, and
+  // COST is its own figure.
+  //
+  // Keyed on the brand, the same fact isLoomEligible reads, rather than on
+  // Source or the SKU prefix: an external is external however it arrived.
+  const msrpOnly = cw.brand?.isLivid !== true;
   const prices: Record<string, { msrp?: number; ws?: number; cost?: number }> = {};
   for (const p of cw.prices) {
+    if (msrpOnly && p.priceType !== "MSRP") continue;
     const slot = (prices[p.currency] ??= {});
     if (p.priceType === "MSRP") slot.msrp = Number(p.amount);
     else if (p.priceType === "WHOLESALE") slot.ws = Number(p.amount);
@@ -194,8 +204,22 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     // (NON_MERCH_CATEGORIES). That is deliberate: the same argument holds for
     // all of them. It is wider than "the STORAGE-* rows", which is what someone
     // reading only the paragraph above would assume.
+    //
+    // External brands are the second exemption (Kristoffer, 2026-09-23). Bought-in
+    // stock sometimes arrives before its barcode does, and it is created in every
+    // system at once so it can be sold; leaving it out of Loom until someone
+    // types the EAN meant the registry never heard of it. Loom accepts
+    // `barcode: null` and links Sitoo on the SKU instead — the Sitoo create uses
+    // the variant SKU, so the two agree — and the barcode is filled on a later
+    // push against the same stable variant_id. Livid's own production keeps the
+    // rule: it is barcoded at source, so a gap there is a data error to fix.
     variants: cw.variants
-      .filter((v) => (v.barcode && v.barcode.trim()) || cw.kind === "CONSUMABLE")
+      .filter(
+        (v) =>
+          (v.barcode && v.barcode.trim()) ||
+          cw.kind === "CONSUMABLE" ||
+          cw.brand?.isLivid !== true
+      )
       .map((v) => {
       const shopify = v.channelRefs.find((r) => r.channel === "SHOPIFY");
       const sitoo = v.channelRefs.find((r) => r.channel === "SITOO");
@@ -210,7 +234,10 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
         // always sent, and they must never disagree.
         sku: v.variantSku,
         variant_sku: v.variantSku,
-        barcode: v.barcode ?? null,
+        // Null, never "". Barcode-less variants now travel, and a blank string is
+        // a value: Loom's ownership registry would see every one of them sharing
+        // the same barcode.
+        barcode: v.barcode?.trim() || null,
         dimensions: v.dim2 ? { waist: v.dim1, length: v.dim2 } : { size: v.dim1 },
         // Where the stock actually moves, per channel. Shopify's InventoryItem
         // is NOT its ProductVariant — the variant is the listing, the inventory

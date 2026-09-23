@@ -28,6 +28,7 @@ import type {
   CategoryDecision,
   ImportReport,
 } from "@/lib/master/import-products";
+import { DraftPushPanel } from "@/components/catalog/draft-push-panel";
 
 interface BrandOption {
   id: string;
@@ -67,11 +68,16 @@ export function ImportProducts({
   seasons,
   sizeSystems,
   categories,
+  resumeBatchId,
 }: {
   brands: BrandOption[];
   seasons: { id: string; code: string }[];
   sizeSystems: SizeSystemView[];
   categories: CategoryOption[];
+  /** `?batch=` — a push this screen started that has not finished. Loom jobs
+   *  outlive the tab that submitted them, and an import batch belongs to no
+   *  single draft, so without this a refresh loses the only handle on it. */
+  resumeBatchId?: string | null;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -175,7 +181,44 @@ export function ImportProducts({
     [report, decisions]
   );
 
-  if (result) return <Result result={result} report={report} />;
+  if (result)
+    return (
+      <Result
+        result={result}
+        report={report}
+        channels={PUBLISH_CHANNELS.filter((c) => channels[c])}
+        seasonCode={seasons.find((s) => s.id === seasonId)?.code}
+      />
+    );
+
+  // A push from an earlier visit that has not finished. Shown ahead of the
+  // wizard because starting a second import before the first has published is
+  // how the first one gets forgotten.
+  if (resumeBatchId)
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg border p-5">
+          <h2 className="text-sm font-semibold">A publish from this screen is unfinished</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            The products are in the master. Resume to let it finish — typically Loom, whose
+            job runs longer than the page that submitted it.
+          </p>
+          <DraftPushPanel
+            title="Unfinished publish"
+            draftId={null}
+            colorwayIds={[]}
+            channels={[]}
+            unfinishedBatchId={resumeBatchId}
+          />
+          <Link
+            href="/catalog/products/import"
+            className="mt-3 inline-block text-xs underline underline-offset-4"
+          >
+            Start a new import instead
+          </Link>
+        </div>
+      </div>
+    );
 
   return (
     <div className="space-y-6">
@@ -604,11 +647,35 @@ function ReportView({
   );
 }
 
-function Result({ result, report }: { result: CommitResult; report: ImportReport | null }) {
+function Result({
+  result,
+  report,
+  channels,
+  seasonCode,
+}: {
+  result: CommitResult;
+  report: ImportReport | null;
+  /** The channels ticked in step 2. Creating is only half of what that tick
+   *  asked for — the other half is this screen pushing to them. */
+  channels: PublishChannelKey[];
+  /** The season chosen in step 1. Loom sends nothing without it. */
+  seasonCode?: string;
+}) {
   const [busy, setBusy] = useState<null | "check" | "create">(null);
   const [rows, setRows] = useState<
-    Array<{ id: string; ok: boolean; created: boolean; error: string | null; report: unknown }>
+    Array<{
+      id: string;
+      ok: boolean;
+      created: boolean;
+      error: string | null;
+      report: unknown;
+      colorwayIds: string[];
+    }>
   >([]);
+  // The colorways "create" actually made. Set once, and its presence is what
+  // turns this screen from a create screen into a publish screen.
+  const [createdIds, setCreatedIds] = useState<string[] | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(null);
   const router = useRouter();
 
   async function run(action: "check" | "create") {
@@ -626,8 +693,19 @@ function Result({ result, report }: { result: CommitResult; report: ImportReport
       toast[s.blocked ? "warning" : "success"](
         action === "check"
           ? `${s.passed} of ${s.total} ready to create.`
-          : `Created ${s.created} of ${s.total}.`
+          : channels.length
+            ? `Created ${s.created} of ${s.total} — publishing now.`
+            : `Created ${s.created} of ${s.total}.`
       );
+      if (action === "create") {
+        const ids = (json.rows as Array<{ colorwayIds?: string[] }>).flatMap(
+          (r) => r.colorwayIds ?? []
+        );
+        // Even when nothing was created, say so by setting an empty list: the
+        // panel then reports "nothing to publish" instead of this screen
+        // looking exactly like the one that silently stopped at the master.
+        setCreatedIds(ids);
+      }
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
@@ -666,11 +744,66 @@ function Result({ result, report }: { result: CommitResult; report: ImportReport
           <Button size="sm" variant="outline" onClick={() => run("check")} disabled={busy !== null}>
             {busy === "check" ? "Checking…" : "Check all"}
           </Button>
-          <Button size="sm" onClick={() => run("create")} disabled={busy !== null}>
-            {busy === "create" ? "Creating…" : "Create all that pass"}
+          <Button
+            size="sm"
+            onClick={() => run("create")}
+            disabled={busy !== null || createdIds !== null}
+          >
+            {busy === "create"
+              ? "Creating…"
+              : channels.length
+                ? "Create and publish all that pass"
+                : "Create all that pass"}
           </Button>
         </div>
+        {createdIds === null ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            {channels.length
+              ? `Creating writes the master and then pushes to ${channels
+                  .map((c) => PUBLISH_CHANNEL_LABELS[c])
+                  .join(", ")} — Shopify first, so Loom receives its inventory ids. Anything
+                  held back is listed here rather than pushed.`
+              : "No channels were ticked in step 2, so these products will exist only in the master."}
+          </p>
+        ) : null}
       </div>
+
+      {/* --------- Publish. Creating a product is not publishing it, and this
+          screen used to end one step short: it said "Created 13 of 13" and left
+          thirteen products in the master that no channel had ever heard of. --- */}
+      {createdIds !== null && createdIds.length > 0 ? (
+        <DraftPushPanel
+          title="Publishing to channels"
+          draftId={null}
+          colorwayIds={createdIds}
+          channels={channels}
+          kind="import"
+          note={`import of ${result.drafts.length} draft(s)`}
+          seasonCode={seasonCode}
+          // The file has seven columns — style, colorway, size, price in, price
+          // out, barcode, category — and none of them is a description, a
+          // photograph, a swatch, a care page or a fit guide. Holding an import
+          // back for gaps its own template cannot carry is a button that always
+          // has to be pressed, which is not a decision. The product is created
+          // ProductStatus.DRAFT, so Shopify receives a draft product and nothing
+          // reaches a customer until someone makes it ACTIVE.
+          allowIncomplete
+          autoStart
+          onBatchCreated={(id) => {
+            setBatchId(id);
+            // An import batch spans many drafts, so `PushBatch.draftId` is null
+            // and no /done page can find it. The URL is then the only handle on
+            // a Loom job that outlives this tab.
+            router.replace(`/catalog/products/import?batch=${id}`, { scroll: false });
+          }}
+        />
+      ) : null}
+      {createdIds !== null && createdIds.length === 0 ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          Nothing was created, so nothing was published. Open a draft below to see what
+          its pre-flight refused.
+        </div>
+      ) : null}
 
       <div className="rounded-md border">
         {result.drafts.map((d) => {
@@ -682,7 +815,11 @@ function Result({ result, report }: { result: CommitResult; report: ImportReport
             >
               <div className="min-w-0">
                 <Link
-                  href={`/catalog/products/drafts/${d.id}`}
+                  href={
+                    r?.created
+                      ? `/catalog/products/drafts/${d.id}/done`
+                      : `/catalog/products/drafts/${d.id}`
+                  }
                   className="truncate font-medium underline-offset-4 hover:underline"
                 >
                   {d.styleName}
@@ -698,7 +835,15 @@ function Result({ result, report }: { result: CommitResult; report: ImportReport
                 ) : null}
               </div>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {r?.created ? "created" : r ? (r.ok ? "ready" : "blocked") : "draft"}
+                {r?.created
+                  ? batchId
+                    ? "created · publishing"
+                    : "created · not published"
+                  : r
+                    ? r.ok
+                      ? "ready"
+                      : "blocked"
+                    : "draft"}
               </span>
             </div>
           );

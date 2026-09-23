@@ -8,7 +8,22 @@ import { ImportProducts } from "@/components/catalog/import-products";
 
 export const dynamic = "force-dynamic";
 
-export default async function ImportProductsPage() {
+export default async function ImportProductsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ batch?: string }>;
+}) {
+  const { batch } = await searchParams;
+
+  // Only offer to resume a batch that has something left to do. A finished one
+  // would otherwise leave "a publish from this screen is unfinished" on the
+  // screen forever, which is the same kind of lie this page was fixed for.
+  const unfinished = batch
+    ? await prisma.pushBatch.findFirst({
+        where: { id: batch, status: { in: ["pending", "running"] } },
+        select: { id: true },
+      })
+    : null;
   const [brandRows, seasons, sizeSystems, categoryTree] = await Promise.all([
     prisma.brand.findMany({
       where: { isLivid: false, archived: false },
@@ -99,6 +114,7 @@ export default async function ImportProductsPage() {
         seasons={seasons}
         sizeSystems={sizeSystems.filter((s) => !s.archived)}
         categories={categories}
+        resumeBatchId={unfinished?.id ?? null}
       />
     </main>
   );
