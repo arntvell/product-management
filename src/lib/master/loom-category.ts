@@ -63,8 +63,22 @@ export function toLoomCategory(value: string | null | undefined): string {
  */
 export function loomCategoryFor(
   ref: { loomCategory: string | null } | null | undefined,
-  fallback: string | null | undefined
+  fallback: string | null | undefined,
+  opts: { asWritten?: boolean } = {}
 ): string {
   const mapped = ref?.loomCategory?.trim();
-  return mapped ? mapped : toLoomCategory(fallback);
+  if (mapped) return mapped;
+  if (opts.asWritten) return fallback?.trim() || "Uncategorized";
+  return toLoomCategory(fallback);
+}
+
+/**
+ * Vintage reaches Loom with its categories as written — Coat, Jacket, Tee — not
+ * folded into Outerwear/Jersey. The store buckets are merchandised by those
+ * finer categories, and vintage never enters the wholesale catalogue the 1
+ * September vocabulary was agreed for. Kristoffer, 2026-09-24. A deliberate
+ * `Category.loomCategory` still wins.
+ */
+export function sendsCategoryAsWritten(brand: { name: string } | null | undefined): boolean {
+  return brand?.name?.trim().toLowerCase() === "vintage";
 }

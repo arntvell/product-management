@@ -3,7 +3,7 @@
 // customs block + manufacturer, channels, and per-season lifecycle flags.
 import { prisma } from "@/lib/db";
 import { loomMissing } from "@/lib/master/readiness";
-import { loomCategoryFor } from "@/lib/master/loom-category";
+import { loomCategoryFor, sendsCategoryAsWritten } from "@/lib/master/loom-category";
 
 export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: string) {
   return prisma.colorway.findMany({
@@ -171,7 +171,9 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     name: cw.name,
     brand: cw.brand?.name ?? null,
     color: cw.color ?? null,
-    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType),
+    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType, {
+      asWritten: sendsCategoryAsWritten(cw.brand),
+    }),
     ...customs,
     manufacturer_id: cw.manufacturer
       ? (cw.manufacturer.threadflowId ?? cw.manufacturer.id)
@@ -302,7 +304,9 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     // delivery carries.
     is_core: cw.isCore,
     tags: cw.tags,
-    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType),
+    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType, {
+      asWritten: sendsCategoryAsWritten(cw.brand),
+    }),
     image: cw.seasonImages[0]?.url ?? null,
     ...customs,
     manufacturer_id: manufacturer?.manufacturer_id ?? null,
@@ -458,7 +462,9 @@ export function buildLoomPayloadFromColorways(
       style_name: s.styleName,
       gender: s.gender,
       unisex: s.unisex,
-      category: loomCategoryFor(s.categoryRef, s.category),
+      category: loomCategoryFor(s.categoryRef, s.category, {
+        asWritten: cws.every((cw) => sendsCategoryAsWritten(cw.brand)),
+      }),
       colorways: cws.map((cw) => build(cw, archive)),
     };
   });

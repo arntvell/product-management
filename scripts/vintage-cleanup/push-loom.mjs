@@ -13,6 +13,7 @@
 //
 //   node scripts/vintage-cleanup/push-loom.mjs --dry-run
 //   node scripts/vintage-cleanup/push-loom.mjs
+//   node scripts/vintage-cleanup/push-loom.mjs --ids=<file.json>   re-send only these colourways (no withdrawals)
 //   node scripts/vintage-cleanup/push-loom.mjs --job=<id>     re-read a job
 import { readFileSync, writeFileSync } from "node:fs";
 import { config } from "dotenv";
@@ -49,8 +50,12 @@ const plan = JSON.parse(readFileSync("snapshots/vintage-cleanup-plan.json", "utf
 const changed = plan.plan.filter(
   (p) => p.changes.name || p.changes.styleName || p.changes.category || p.action === "archive"
 );
-const archived = changed.filter((p) => p.action === "archive");
-const updates = changed.filter((p) => p.action !== "archive");
+const idsArg = process.argv.find((a) => a.startsWith("--ids="));
+const only = idsArg ? new Set(JSON.parse(readFileSync(idsArg.slice(6), "utf8"))) : null;
+const archived = only ? [] : changed.filter((p) => p.action === "archive");
+const updates = only
+  ? plan.plan.filter((p) => only.has(p.colorwayId) && p.action !== "archive")
+  : changed.filter((p) => p.action !== "archive");
 
 const body = {
   colorwayIds: [...updates, ...archived].map((p) => p.colorwayId),

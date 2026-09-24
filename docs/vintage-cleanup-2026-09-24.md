@@ -61,3 +61,19 @@ Re-running `plan.mjs` afterwards finds 0 renames and 0 recategorisations left.
 - New categories have no `loomCategory`, so the registry receives them as written
   (as Blouse, Bottoms etc. already are). Set one on /catalog/categories if Loom's
   catalogue should group them.
+
+## Follow-up: vintage categories reach Loom as written
+
+The first push sent Coat/Jacket as "Outerwear" and Tee as "Jersey" — the 1 September
+vocabulary in `loom-category.ts`, agreed for the wholesale catalogue. Kristoffer
+(2026-09-24): vintage should show its own categories. `loomCategoryFor` now takes
+`asWritten`, set for brand "Vintage" (`sendsCategoryAsWritten`); a deliberate
+`Category.loomCategory` still wins, and Livid products are unchanged.
+
+The 42 affected colourways (29 Jacket, 6 Coat, 7 Tee) were re-sent: Loom job
+`cmufh8d9l0bhkgq0go2d4qk6i`, 42 updated, 0 errors. `check-loom-categories.ts` prints
+what a payload carries, since the push preview does not.
+
+Every other brand-Vintage colourway (~2,100, including VN-ONLN) picks this up the
+next time it is pushed — until then Loom still shows the folded category for any
+of them that are Jacket/Coat/Tee/Sweatshirt/Cap/Scarf.
