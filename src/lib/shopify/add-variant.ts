@@ -14,11 +14,11 @@
 //                           price (compareAt) belongs to the whole product
 //   inventoryPolicy         CONTINUE on a sibling means the shop oversells on
 //                           purpose; the new size should behave the same
-//   tracked                 an untracked variant on an ACTIVE product is
-//                           purchasable immediately, with no stock at all. Sent
-//                           only when true: false is the API's default, and the
-//                           less of inventoryItem we write, the less can be
-//                           refused
+//   tracked                 NOT copied: always sent true. An untracked variant
+//                           ignores the stock Pio, Loom and Sitoo sync onto it,
+//                           and on an ACTIVE product is purchasable with no
+//                           stock at all. Copying it would pass that on from
+//                           the Origio-created products that went out untracked
 //   customs                 country of origin and HS code are per garment, not
 //                           per size
 //
@@ -138,6 +138,7 @@ export interface ShopifyAddSizePlan {
   priceSource?: "siblings" | "master";
   /** Locations the siblings are stocked in — reported, not written. */
   locations?: string[];
+  /** Whether the SIBLINGS are tracked. The new size is always sent tracked. */
   tracked?: boolean;
   copiedFrom?: string | null;
   /** The whole planned mutation input, for the report. */
@@ -269,7 +270,7 @@ export async function planShopifyAddSize(input: ShopifyAddSizeInput): Promise<Sh
     taxable: model.taxable,
     inventoryItem: {
       sku: input.size.sku,
-      ...(inv?.tracked ? { tracked: true } : {}),
+      tracked: true,
       requiresShipping: inv?.requiresShipping ?? true,
       ...(inv?.countryCodeOfOrigin ? { countryCodeOfOrigin: inv.countryCodeOfOrigin } : {}),
       ...(inv?.harmonizedSystemCode ? { harmonizedSystemCode: inv.harmonizedSystemCode } : {}),

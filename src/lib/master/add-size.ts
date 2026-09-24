@@ -622,7 +622,7 @@ function describeShopify(p: Awaited<ReturnType<typeof planShopifyAddSize>>): str
   return [
     `${p.productTitle} (${p.productStatus?.toLowerCase()})`,
     `price ${p.price}${p.compareAtPrice ? `, was ${p.compareAtPrice}` : ""} — from ${p.priceSource === "siblings" ? "its sizes" : "the master"}`,
-    p.tracked ? "inventory tracked, like its sizes" : "inventory NOT tracked — its sizes are untracked too",
+    p.tracked ? "inventory tracked, like its sizes" : "inventory tracked — its sizes are NOT, so they ignore synced stock",
     (p.locations?.length ?? 0) > 1
       ? `its sizes are stocked in ${p.locations!.length} locations; Shopify stocks the new one at its default ` +
         "location only (Origio's token cannot write inventory)"

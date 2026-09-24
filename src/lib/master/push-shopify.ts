@@ -247,12 +247,19 @@ export async function pushColorwayToShopify(
         `recognises, so it was omitted. A wrong code would reject the whole product.`
     );
 
+  // Track inventory on everything we stock. Shopify creates variants untracked
+  // unless told otherwise, and an untracked item ignores the stock Pio, Loom and
+  // Sitoo sync onto it — every product Origio created before this landed
+  // untracked. Services (gift wrap) carry no stock and are left as they are. On
+  // an update this is a no-op for an item that is already tracked.
+  const tracked = cw.kind !== "SERVICE";
+
   // One "Size" option; one variant per master variant (deduped size labels).
   const sizes = [...new Set(preview.variants.map((v) => v.size))];
   const variants = preview.variants.map((v) => ({
     optionValues: [{ optionName: "Size", name: v.size }],
     ...(v.price ? { price: v.price } : {}),
-    inventoryItem: { sku: v.sku, ...customsInput },
+    inventoryItem: { sku: v.sku, ...(tracked ? { tracked: true } : {}), ...customsInput },
     ...(v.barcode ? { barcode: v.barcode } : {}),
   }));
 
