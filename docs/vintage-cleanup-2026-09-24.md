@@ -29,6 +29,24 @@ default; `sitoo-sandbox-check.mjs` proved the Sitoo writes first.
 | Sitoo | 5 categories created (Footwear 84, Mix 85, Selected 86, Shirt Long Sleeve 87, Shirt Short Sleeve 88; Market = existing 82). 164 product writes: 77 titles, 138 categories, 5 deactivated (`active`/`activepos` false). POPUP (83) membership kept. Product count unchanged (14,756) |
 | Shopify | none of the 263 SKUs exist there — nothing to do |
 
+Loom: 192 updates were sent, of which 10 were no-ops by construction — no name
+change, and old/new category collapse to the same Loom value (T-Shirt→Tee and
+Sweatshirt→Jersey are both Jersey, Jacket→Coat both Outerwear, Cap→Accessories).
+Loom reported 184 updated against 182 real changes, with 0 item errors.
+
+Sitoo titles that already differed from Origio were overwritten with the master's
+new name — before-values are in `snapshots/vintage-cleanup-sitoo-before-*.json`:
+
+| SKU | Sitoo before | Now |
+|---|---|---|
+| `EXT-VN-NW-SLK-SQSCRF` | SILK SCARF (SQUARE) | Silk Scarf |
+| `EXT-VN-NW-JHS-JK` | SELECTED JACKET | Selected Jacket |
+| `EXT-VN-SCTVRS-OS` | Selected varsity, OS | Selected Varsity |
+| `EXT-VN-NW-LLW-DN` | Branded Denim Shirt | LLW Shirt Denim |
+
+Only POPUP (83) was kept as a secondary Sitoo category; `VN-WOSKT-OS` lost its
+secondary 69 (Sweatshirt).
+
 Re-running `plan.mjs` afterwards finds 0 renames and 0 recategorisations left.
 
 ## Still open
