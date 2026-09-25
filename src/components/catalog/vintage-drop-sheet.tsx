@@ -136,6 +136,21 @@ export function VintageDropSheet({
     setRows((rs) => rs.map((r) => (r.itemNumber === n ? { ...r, ...patch } : r)));
   }, []);
 
+  const selectAll = useCallback((include: boolean) => {
+    setRows((rs) => rs.map((r) => ({ ...r, include })));
+  }, []);
+
+  /**
+   * Keep only the garments the shoot has actually photographed.
+   *
+   * The common shape of a drop day: the writing is done for all 45, the
+   * upload is halfway, and you want to push what is ready without hand-
+   * unticking twenty rows.
+   */
+  const selectPhotographed = useCallback(() => {
+    setRows((rs) => rs.map((r) => ({ ...r, include: r.photos.length > 0 })));
+  }, []);
+
   const fillDown = useCallback((field: keyof Row) => {
     setRows((rs) => {
       const first = rs.find((r) => r.include);
@@ -373,7 +388,34 @@ export function VintageDropSheet({
       )}
 
       {rows.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => selectAll(true)}
+            className="rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted"
+          >
+            Select all
+          </button>
+          <button
+            type="button"
+            onClick={() => selectAll(false)}
+            className="rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted"
+          >
+            Select none
+          </button>
+          <button
+            type="button"
+            onClick={selectPhotographed}
+            disabled={!rows.some((r) => r.photos.length)}
+            className="rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted disabled:opacity-40"
+            title="Keep only the garments the shoot has uploaded"
+          >
+            Select photographed
+          </button>
+          <span className="mr-1 text-xs text-muted-foreground">
+            {included.length} of {rows.length}
+          </span>
+          <span className="h-4 w-px bg-border" aria-hidden />
           {(
             [
               ["category", "Category"],
