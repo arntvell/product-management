@@ -439,6 +439,7 @@ model Colorway {
   publications   ChannelPublication[]
   channelContent ChannelContent[]
   seasonImages   SeasonImage[]
+  vintage        VintageDetail?
 
   archived       Boolean         @default(false) // whole-channel archive (plan §8)
   createdAt      DateTime        @default(now())
@@ -449,6 +450,62 @@ model Colorway {
   @@index([brandId])
   @@index([categoryId])
   @@index([manufacturerId])
+}
+
+// The measurements and provenance of one second-hand garment.
+//
+// A side table rather than nine more columns on Colorway, which already
+// carries 42: these apply to online vintage and nothing else, and a mainline
+// product should not have to answer what its front rise is.
+//
+// They are stored rather than composed away because they are the canonical
+// data — the Shopify body HTML and the plain-text `custom.full_description`
+// are both DERIVED from these at push time (`vintage-body.ts`). Keeping only
+// the composed text is what the spreadsheet did, and it is why an inseam could
+// never be corrected without retyping the paragraph around it.
+model VintageDetail {
+  colorwayId String   @id
+  colorway   Colorway @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+
+  /// The item number the photographs are named after: 13644 -> 13644.jpg.
+  itemNumber String
+
+  /// Beskrivelse — the free copy that opens the body.
+  description String
+
+  /// Type mål. "1" is a top; anything else is a bottom. Selects the template.
+  measurementType String
+
+  /// Kategori, as the sheet spells it. Also the Shopify product type.
+  category String?
+
+  /// Størrelse — the size printed on the garment's own label.
+  taggedSize String?
+
+  /// Approx size — the standardised contemporary size. Its presence is what
+  /// turns a bottom into the jeans template, so blank and absent differ.
+  approxSize String?
+
+  // Measurements in cm, as entered. Strings because the sheet accepts "62",
+  // "62.5" and the occasional "62-64", and rounding them at entry would lose
+  // what the tape actually said.
+  chestWidth  String?
+  frontLength String?
+  waist       String?
+  frontRise   String?
+  inseam      String?
+
+  /// BRAND — the garment's original maker, a Shopify tag rather than a Brand
+  /// row: every vintage product's Origio brand is "Vintage".
+  originalBrand String?
+
+  /// Opprinnelig produkt — what the COST lookup keys on.
+  sourceProduct String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemNumber])
 }
 
 model Variant {

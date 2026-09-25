@@ -521,6 +521,11 @@ export async function pushColorwayToShopify(
     vendor: preview.product.vendor ?? undefined,
     productType: preview.product.productType ?? undefined,
     tags,
+    // Vintage only — see the field's note in publish.ts. Omitting it for
+    // mainline is what leaves a merchandiser's Shopify-side body alone.
+    ...(preview.product.descriptionHtml
+      ? { descriptionHtml: preview.product.descriptionHtml }
+      : {}),
     ...(status ? { status } : {}),
     metafields,
     ...(productMediaGids.length

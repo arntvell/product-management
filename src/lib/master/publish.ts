@@ -5,6 +5,8 @@
 import { prisma } from "@/lib/db";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { channelProductTitle } from "./channel-title";
+import { isVintageBrand, vintageHandle } from "./vintage";
+import { buildVintageBody } from "./vintage-body";
 
 // seasonCode scopes the price to the season the user is pushing FROM, so we
 // never send another season's price. Omitted -> all prices (legacy behaviour,
@@ -17,6 +19,9 @@ export async function getColorwayForPublish(id: string, seasonCode?: string) {
       // the deliberate spelling, and without the join the free-text column is
       // the only thing this can send.
       categoryRef: true,
+      // The measurements a vintage body is generated from; null for everything
+      // else, which is what `isVintage` below keys on together with the brand.
+      vintage: true,
       style: { include: { categoryRef: true } },
       brand: true,
       channelContent: true,
@@ -51,6 +56,16 @@ export interface ShopifyPreview {
     productType: string | null;
     status: string;
     tags: string[];
+    /**
+     * The product body. Only set for vintage, and deliberately so.
+     *
+     * For mainline the storefront reads `custom.full_description` and the
+     * product's own body is merchandising's to edit in Shopify admin — sending
+     * it from here would overwrite their work on every push. A vintage garment
+     * has no merchandiser: its body is generated from measurements and is the
+     * master's to own.
+     */
+    descriptionHtml?: string;
   };
   metafields: ShopifyMetafieldPreview[];
   // Managed custom.* keys whose master value is now empty — the push deletes
@@ -106,6 +121,7 @@ const SINGLE_REFERENCE_FIELDS: Array<{ key: string; type: string; get: (c: Publi
 
 export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
   const warnings: string[] = [];
+  const isVintage = isVintageBrand(cw.brand?.name);
   const mf: ShopifyMetafieldPreview[] = [];
   // Text/reference keys whose master value is blank -> delete from Shopify.
   // (Media keys are handled separately in the push; they're best-effort.)
@@ -205,7 +221,11 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
     unisex,
     product: {
       title: channelProductTitle(cw),
-      handle: cw.colorwaySku.toLowerCase(),
+      // Vintage handles are `<item number>-vintage`, not the SKU: that is the
+      // URL all 2,086 live products already have, and a handle is an address.
+      // Pushing `vn-onln-13644` at a product living at `13644-vintage` would
+      // move the page and leave the old URL 404ing.
+      handle: isVintage ? vintageHandle(cw.colorwaySku) : cw.colorwaySku.toLowerCase(),
       vendor: cw.vendor,
       // A mapped category wins over the free text: someone chose the Shopify
       // spelling on the categories screen, and the text column is 76 values of
@@ -216,6 +236,9 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
         cw.productType,
       status: cw.status,
       tags,
+      ...(isVintage && cw.vintage
+        ? { descriptionHtml: buildVintageBody(cw.vintage) }
+        : {}),
     },
     metafields: mf,
     emptyMetafieldKeys,

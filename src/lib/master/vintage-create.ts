@@ -1,0 +1,369 @@
+// Creating a week's vintage drop in the master.
+//
+// 40-60 one-of-one garments every Friday. This is deliberately not the
+// seven-step product wizard: that shape exists to mint a grid of colourways
+// and sizes from a style, and a vintage garment is one row with one size. It
+// is also not `finalize.ts`, though it writes the same tables in the same
+// order and that file is the reference for this transaction.
+//
+// Where it diverges from the wizard, and why:
+//
+//   SKU. The wizard's invariant is `variantSku = colorwaySku + "-" + size`.
+//   Vintage sets style, colourway and variant SKU all to `VN-ONLN-<n>` — no
+//   size suffix — because that is what all 2,086 existing rows carry and what
+//   the live Shopify variants carry. Live wins over the invariant.
+//
+//   Size. `sizeLabel` is the real size (L, M, W29), never "OS". The Shopify
+//   option value is what identifies a variant to `productSet`, so a garment
+//   pushed as "OS" when the store has "L" would delete and recreate the
+//   variant and detach its unit of stock.
+import { prisma } from "@/lib/db";
+import { normalizeSku } from "./sku";
+import { storedForm } from "./barcode";
+import { buildVintageBody, vintageBodyShape, REQUIRED_MEASUREMENTS } from "./vintage-body";
+import { VINTAGE_BRAND_NAME, VINTAGE_CUSTOMS } from "./vintage";
+
+export class VintageError extends Error {}
+
+/** One row of the drop sheet — the sheet's INPUT columns, in its own terms. */
+export interface VintageItemInput {
+  /** Nummer (A). The photographs are named after it. */
+  itemNumber: string;
+  /** Tittel (B). */
+  title: string;
+  /** Beskrivelse (C). */
+  description: string;
+  /** Kategori (D). */
+  category: string;
+  /** Opprinnelig produkt (E) — keys the COST lookup. */
+  sourceProduct?: string | null;
+  /** Pris nett (G) — what it sells for, NOK. */
+  price: string;
+  /** COST, NOK. Defaults to 100 at push time when absent. */
+  cost?: string | null;
+  chestWidth?: string | null;
+  frontLength?: string | null;
+  waist?: string | null;
+  frontRise?: string | null;
+  inseam?: string | null;
+  /** Størrelse (J). */
+  taggedSize?: string | null;
+  /** Approx size (N). Presence selects the jeans body template. */
+  approxSize?: string | null;
+  /** Type mål (O). "1" = top. */
+  measurementType: string;
+  /** Barcode (Q). */
+  barcode: string;
+  /** BRAND (R) — the garment's original maker, a Shopify tag. */
+  originalBrand?: string | null;
+  /** Ordered photo URLs, base photo first. */
+  photoUrls: string[];
+}
+
+export interface VintageItemProblem {
+  itemNumber: string;
+  problems: string[];
+}
+
+/**
+ * Everything the spreadsheet could get wrong in silence.
+ *
+ * All of these are fatal rather than warnings. The sheet's failure mode is
+ * that a row with no photo, or a bottom with no waist, exports perfectly
+ * happily and goes live broken — `9309-vintage` is a bandana whose body reads
+ * "Waist  cm". Refusing the drop is the entire point of moving off it.
+ */
+export function validateVintageItems(items: VintageItemInput[]): VintageItemProblem[] {
+  const out: VintageItemProblem[] = [];
+  const seen = new Map<string, number>();
+  for (const i of items) seen.set(i.itemNumber, (seen.get(i.itemNumber) ?? 0) + 1);
+
+  for (const i of items) {
+    const p: string[] = [];
+    const n = i.itemNumber?.trim();
+
+    if (!n) p.push("no item number");
+    else if (!/^\d+$/.test(n)) p.push(`item number "${n}" is not a number`);
+    else if ((seen.get(i.itemNumber) ?? 0) > 1) p.push(`item number ${n} appears more than once`);
+
+    if (!i.title?.trim()) p.push("no title");
+    if (!i.description?.trim()) p.push("no description");
+    if (!i.category?.trim()) p.push("no category");
+    if (!i.barcode?.trim()) p.push("no barcode");
+    if (!i.price?.trim()) p.push("no price");
+    if (!i.taggedSize?.trim() && !i.approxSize?.trim()) p.push("no size");
+
+    // The measurements the body template will print. A blank one does not
+    // fail the export, it prints an empty measurement to a customer.
+    const shape = vintageBodyShape(i);
+    for (const field of REQUIRED_MEASUREMENTS[shape]) {
+      const v = (i as unknown as Record<string, string | null | undefined>)[field];
+      if (!v?.toString().trim()) p.push(`${shape}: no ${field}`);
+    }
+
+    // A product with no photograph is the September 2026 outage.
+    if (!i.photoUrls?.length) p.push("no photo");
+    else if (!i.photoUrls[0]) p.push("no base photo — a numbered shot would lead the gallery");
+
+    if (p.length) out.push({ itemNumber: n || "(blank)", problems: p });
+  }
+  return out;
+}
+
+/** `VN-ONLN-13644` from `13644`. */
+export function vintageSku(itemNumber: string): string {
+  return normalizeSku(`VN-ONLN-${itemNumber.trim()}`);
+}
+
+/**
+ * The product title: `Tittel (Size)`, e.g. "2009 Carhartt Worker Shirt (L)".
+ *
+ * The size goes in the NAME as well as on the variant, because Shopify's
+ * product title is what a customer scanning a collection reads, and one-of-one
+ * garments are browsed by size. `channelProductTitle` passes it through
+ * unchanged: for vintage the style name and the colourway name are the same
+ * string, so it does not get prefixed.
+ */
+export function vintageName(title: string, size: string): string {
+  return `${title.trim()} (${size.trim()})`;
+}
+
+/** Approx size wins over the tagged size — it is the contemporary one. */
+export function vintageSize(i: { approxSize?: string | null; taggedSize?: string | null }): string {
+  return (i.approxSize?.trim() || i.taggedSize?.trim() || "").trim();
+}
+
+/**
+ * The plain-text twin of the body, for `custom.full_description`.
+ *
+ * The sheet writes both: HTML into the product body, and this into the
+ * metafield, with a different layout ("Chest Width: 62", no "cm"). Read off
+ * `13762-vintage` on 2026-09-25. The push already maps
+ * `Colorway.fullDescription` to that metafield, so this is what gets stored
+ * there.
+ */
+export function vintagePlainDescription(i: VintageItemInput): string {
+  const shape = vintageBodyShape(i);
+  const lines: string[] = [i.description.trim(), ""];
+  if (shape === "tops") {
+    lines.push(`Chest Width: ${i.chestWidth ?? ""}`, `Front Length: ${i.frontLength ?? ""}`);
+  } else {
+    if (shape === "jeans")
+      lines.push(
+        `Standardized contemporary size: ${i.approxSize ?? ""}`,
+        `Tagged size: ${i.taggedSize ?? ""}`
+      );
+    lines.push(`Waist: ${i.waist ?? ""}`, `Front rise: ${i.frontRise ?? ""}`, `Inseam Length: ${i.inseam ?? ""}`);
+  }
+  lines.push("", "Hot tip for buying vintage online");
+  lines.push(
+    "Please be aware that sizes and fits vary greatly from brand to brand, and decade to decade. " +
+      "Instead of just following the garments' S/M/L labels, we recommend comparing the garments' " +
+      "measurements with a similar product you own and know fits you."
+  );
+  return lines.join("\n");
+}
+
+/** Shopify tags: the drop, the original brand, and the storefront's own flags. */
+export function vintageTags(drop: string, originalBrand?: string | null): string[] {
+  const dropTag = `DROP${drop.replace(/\D/g, "")}`;
+  return [dropTag, "rocket-hide", ...(originalBrand?.trim() ? [originalBrand.trim()] : []), "hide"];
+}
+
+export interface CreateVintageResult {
+  created: number;
+  colorwayIds: string[];
+  skipped: Array<{ itemNumber: string; reason: string }>;
+}
+
+/**
+ * Write a drop. One transaction: either the whole drop lands or none of it
+ * does, so a half-created drop never has to be reconciled by hand.
+ */
+export async function createVintageItems(
+  drop: string,
+  items: VintageItemInput[],
+  opts: { dryRun?: boolean } = {}
+): Promise<CreateVintageResult> {
+  const problems = validateVintageItems(items);
+  if (problems.length)
+    throw new VintageError(
+      `${problems.length} item(s) cannot be created:\n` +
+        problems.map((p) => `  ${p.itemNumber}: ${p.problems.join("; ")}`).join("\n")
+    );
+
+  const brand = await prisma.brand.findFirst({
+    where: { name: VINTAGE_BRAND_NAME },
+    select: { id: true },
+  });
+  if (!brand) throw new VintageError(`No "${VINTAGE_BRAND_NAME}" brand in the master.`);
+
+  const season = await prisma.season.findFirst({
+    where: { kind: "CONTINUITY" },
+    select: { id: true },
+  });
+  if (!season) throw new VintageError("No CONTINUITY season in the master.");
+
+  // Refuse rather than collide: the SKU is the item number, and a repeated
+  // number means the sheet reused one.
+  const skus = items.map((i) => vintageSku(i.itemNumber));
+  const existing = await prisma.colorway.findMany({
+    where: { colorwaySku: { in: skus } },
+    select: { colorwaySku: true },
+  });
+  if (existing.length)
+    throw new VintageError(
+      `${existing.length} item(s) already exist in the master: ` +
+        existing.map((e) => e.colorwaySku).join(", ")
+    );
+
+  const styleRows: Array<Record<string, unknown>> = [];
+  const colorwayRows: Array<Record<string, unknown>> = [];
+  const variantRows: Array<Record<string, unknown>> = [];
+  const entryRows: Array<Record<string, unknown>> = [];
+  const linkRows: Array<Record<string, unknown>> = [];
+  const priceRows: Array<Record<string, unknown>> = [];
+  const pubRows: Array<Record<string, unknown>> = [];
+  const detailRows: Array<Record<string, unknown>> = [];
+  const mediaRows: Array<Record<string, unknown>> = [];
+  const colorwayIds: string[] = [];
+
+  for (const i of items) {
+    const sku = vintageSku(i.itemNumber);
+    const size = vintageSize(i);
+    const name = vintageName(i.title, size);
+    const styleId = crypto.randomUUID();
+    const colorwayId = crypto.randomUUID();
+    const variantId = crypto.randomUUID();
+    const entryId = crypto.randomUUID();
+    colorwayIds.push(colorwayId);
+
+    // One garment is its own style. styleName === name so the shared
+    // `channelProductTitle` leaves the title alone rather than prefixing it.
+    styleRows.push({
+      id: styleId,
+      styleSku: sku,
+      styleName: name,
+      brandId: brand.id,
+      source: "CIN7_IMPORT",
+      hsCode: VINTAGE_CUSTOMS.hsCode,
+      customsDescription: VINTAGE_CUSTOMS.customsDescription,
+      weightKg: VINTAGE_CUSTOMS.weightKg,
+    });
+
+    colorwayRows.push({
+      id: colorwayId,
+      styleId,
+      brandId: brand.id,
+      colorwaySku: sku,
+      name,
+      styleName: name,
+      source: "CIN7_IMPORT",
+      kind: "MERCHANDISE",
+      // DRAFT until pushed, like every other create path.
+      status: "DRAFT",
+      vendor: VINTAGE_BRAND_NAME,
+      productType: i.category.trim(),
+      countryOfOrigin: VINTAGE_CUSTOMS.countryOfOrigin,
+      tags: vintageTags(drop, i.originalBrand),
+      fullDescription: vintagePlainDescription(i),
+      shortDescription: i.description.trim(),
+    });
+
+    variantRows.push({
+      id: variantId,
+      colorwayId,
+      variantSku: sku,
+      barcode: storedForm(i.barcode),
+      sizeLabel: size,
+      dim1: size,
+      dim2: null,
+    });
+
+    entryRows.push({ id: entryId, colorwayId, seasonId: season.id, drop, approvedForProduction: true });
+    linkRows.push({ seasonEntryId: entryId, variantId });
+
+    for (const [priceType, amount] of [
+      ["MSRP", i.price],
+      ["COST", i.cost],
+    ] as const) {
+      if (!amount?.trim()) continue;
+      priceRows.push({
+        seasonId: season.id,
+        colorwayId,
+        currency: "NOK",
+        priceType,
+        amount: amount.trim().replace(",", "."),
+      });
+    }
+
+    // Both channels: Loom holds the stock, Shopify sells it.
+    for (const channel of ["SHOPIFY", "LOOM"] as const)
+      pubRows.push({ colorwayId, channel, published: false });
+
+    detailRows.push({
+      colorwayId,
+      itemNumber: i.itemNumber.trim(),
+      description: i.description.trim(),
+      measurementType: i.measurementType.trim(),
+      category: i.category.trim(),
+      taggedSize: i.taggedSize?.trim() || null,
+      approxSize: i.approxSize?.trim() || null,
+      chestWidth: i.chestWidth?.trim() || null,
+      frontLength: i.frontLength?.trim() || null,
+      waist: i.waist?.trim() || null,
+      frontRise: i.frontRise?.trim() || null,
+      inseam: i.inseam?.trim() || null,
+      originalBrand: i.originalBrand?.trim() || null,
+      sourceProduct: i.sourceProduct?.trim() || null,
+    });
+
+    // Position follows the caller's order, which `photos.ts` has already
+    // sorted so the base photo leads — position 0 is the featured image.
+    i.photoUrls.forEach((url, position) => {
+      mediaRows.push({
+        colorwayId,
+        url,
+        source: "EXTERNAL",
+        role: "GALLERY",
+        blobPathname: null,
+        position,
+      });
+    });
+  }
+
+  if (opts.dryRun)
+    return { created: items.length, colorwayIds: [], skipped: [] };
+
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.style.createMany({ data: styleRows as never });
+      await tx.colorway.createMany({ data: colorwayRows as never });
+      await tx.variant.createMany({ data: variantRows as never });
+      await tx.seasonEntry.createMany({ data: entryRows as never });
+      await tx.seasonVariant.createMany({ data: linkRows as never });
+      if (priceRows.length) await tx.price.createMany({ data: priceRows as never });
+      await tx.channelPublication.createMany({ data: pubRows as never });
+      await tx.vintageDetail.createMany({ data: detailRows as never });
+      if (mediaRows.length) await tx.mediaAsset.createMany({ data: mediaRows as never });
+    },
+    { timeout: 30_000, maxWait: 5_000 }
+  );
+
+  return { created: items.length, colorwayIds, skipped: [] };
+}
+
+/** The Shopify body for a stored garment, rebuilt from its VintageDetail. */
+export function bodyForDetail(d: {
+  description: string;
+  measurementType: string;
+  approxSize: string | null;
+  taggedSize: string | null;
+  chestWidth: string | null;
+  frontLength: string | null;
+  waist: string | null;
+  frontRise: string | null;
+  inseam: string | null;
+}): string {
+  return buildVintageBody(d);
+}
