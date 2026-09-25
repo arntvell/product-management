@@ -370,6 +370,30 @@ export function VintageDropSheet({
       );
   }
 
+  /**
+   * Attach the share's photographs to garments already in the master.
+   *
+   * The counterpart to "Load photos" for rows being written. Separate because
+   * the target is different — these garments exist, so the pictures go into
+   * MediaAsset rather than into browser state — and because it is pressed
+   * repeatedly through the day as the shoot works through the rail.
+   */
+  async function onAttachPhotos() {
+    if (!drop.trim()) return toast.error("Which drop?");
+    const json = await call("Attach photos", "/api/vintage/photos/attach", { drop: drop.trim() });
+    if (!json) return;
+    toast.success(
+      `Attached ${json.attached} photo(s) to ${json.garments} garment(s).` +
+        (json.stillWaiting?.length ? ` ${json.stillWaiting.length} still unphotographed.` : "")
+    );
+    if (json.photosWithoutRows?.length)
+      toast.warning(
+        `${json.photosWithoutRows.length} photo(s) on the share have no garment: ` +
+          json.photosWithoutRows.slice(0, 10).join(", ")
+      );
+    await onLoadDrop();
+  }
+
   async function onDelete(g: Existing) {
     if (!confirm(`Delete ${g.sku} — ${g.name}? Its item number and barcode stay bound, so re-entering ${g.itemNumber} gets the same code back.`))
       return;
@@ -616,6 +640,19 @@ export function VintageDropSheet({
                 </button>
               </div>
             ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onAttachPhotos}
+              disabled={busy !== null}
+              className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+            >
+              {busy === "Attach photos" ? "Reading share…" : "Attach photos from share"}
+            </button>
+            <span className="text-xs text-muted-foreground">
+              {existing.filter((g) => g.photos.length).length} of {existing.length} photographed
+            </span>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             The buttons at the bottom act on these. An item number stays bound to its barcode, so
