@@ -550,6 +550,34 @@ model VintageSourceProduct {
   @@index([category])
 }
 
+// When a drop should go on sale.
+//
+// Pushing and revealing are separate moments: garments reach Shopify hidden as
+// the shoot finishes, and the drop opens at an announced time. Storing the
+// intention means nobody has to be at a keyboard on Friday at the hour.
+//
+// Keyed by the drop label as the entries carry it ("DROP 187"), because that
+// is the only identity a drop has — there is no drop entity, just a string on
+// SeasonEntry.
+model VintageDropReveal {
+  drop String @id
+
+  /// When it should open. Null = scheduled but paused.
+  revealAt DateTime?
+
+  /// Set once it has actually been revealed, so a re-run is a no-op rather
+  /// than a second attempt at products that are already live.
+  revealedAt DateTime?
+
+  /// What the last attempt said, successful or not.
+  lastResult String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([revealAt])
+}
+
 model Variant {
   id             String              @id @default(cuid()) // stable id — TF has none, we mint it
   colorwayId     String

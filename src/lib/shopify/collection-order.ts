@@ -36,17 +36,23 @@ const JOB_QUERY = `
   }
 `;
 
-/** Is this product currently a member of the collection? */
+/**
+ * Is this product currently a member of the collection?
+ *
+ * `Product.inCollection(id:)` is the field for this. An earlier version asked
+ * the collection instead — `collection.products(query: "id:…")` — which is not
+ * valid: `Collection.products` takes first/after/last/before/reverse/sortKey
+ * and NO query. That made every membership check throw, so the reorder never
+ * ran at all and reported a collection that "does not yet list" the product.
+ */
 async function isMember(collectionId: string, productGid: string): Promise<boolean> {
-  const res = await shopifyGraphQL<{
-    collection: { products: { nodes: { id: string }[] } } | null;
-  }>(
-    `query InCollection($id: ID!, $q: String!) {
-       collection(id: $id) { products(first: 1, query: $q) { nodes { id } } }
+  const res = await shopifyGraphQL<{ product: { inCollection: boolean } | null }>(
+    `query InCollection($id: ID!, $collectionId: ID!) {
+       product(id: $id) { inCollection(id: $collectionId) }
      }`,
-    { id: collectionId, q: `id:${productGid.split("/").pop()}` }
+    { id: productGid, collectionId }
   );
-  return (res.collection?.products.nodes ?? []).some((n) => n.id === productGid);
+  return res.product?.inCollection === true;
 }
 
 /**

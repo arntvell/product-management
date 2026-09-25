@@ -216,6 +216,87 @@ export function VintageDropSheet({
     [bySource]
   );
 
+  /**
+   * Paste rows straight out of the INPUT sheet.
+   *
+   * The columns are the sheet's, in the sheet's order, so a block can be
+   * copied from Excel and dropped in. Nummer is matched rather than trusted as
+   * a position: a paste that skips a row, or starts halfway down, still lands
+   * on the right garments. Rows whose number is not in this drop are reported
+   * instead of silently ignored.
+   *
+   *   Nummer  Tittel  Beskrivelse  Kategori  Opprinnelig  Retail  Pris nett
+   *   Chest   Front   Størrelse    Waist     Rise         Inseam  Approx  ...
+   */
+  const applyPaste = useCallback((text: string) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) return { applied: 0, unknown: [] as string[] };
+    // A header row is common when copying with the titles; drop it.
+    const start = /^\s*nummer\b/i.test(lines[0]) ? 1 : 0;
+    const unknown: string[] = [];
+    let applied = 0;
+
+    setRows((rs) => {
+      const byNumber = new Map(rs.map((r) => [r.itemNumber, r]));
+      for (const line of lines.slice(start)) {
+        const c = line.split("\t").map((x) => x.trim());
+        const n = c[0]?.replace(/\.0+$/, "");
+        if (!n) continue;
+        const row = byNumber.get(n);
+        if (!row) {
+          unknown.push(n);
+          continue;
+        }
+        byNumber.set(n, {
+          ...row,
+          title: c[1] || row.title,
+          description: c[2] || row.description,
+          category: c[3] || row.category,
+          sourceProduct: c[4] || row.sourceProduct,
+          price: (c[6] || "").replace(/\.0+$/, "") || row.price,
+          chestWidth: (c[7] || "").replace(/\.0+$/, "") || row.chestWidth,
+          frontLength: (c[8] || "").replace(/\.0+$/, "") || row.frontLength,
+          taggedSize: c[9] || row.taggedSize,
+          waist: (c[10] || "").replace(/\.0+$/, "") || row.waist,
+          frontRise: (c[11] || "").replace(/\.0+$/, "") || row.frontRise,
+          inseam: (c[12] || "").replace(/\.0+$/, "") || row.inseam,
+          approxSize: c[13] || row.approxSize,
+          originalBrand: c[17] || row.originalBrand,
+        });
+        applied++;
+      }
+      return rs.map((r) => byNumber.get(r.itemNumber) ?? r);
+    });
+    return { applied, unknown };
+  }, []);
+
+  async function onReveal() {
+    if (!created?.length) return;
+    const json = await call("Reveal", "/api/vintage/reveal", { colorwayIds: created });
+    if (!json) return;
+    const w = (json.warnings ?? []) as string[];
+    if (w.length) toast.warning(w[0]);
+    toast.success(
+      `Untagged ${json.untagged?.length ?? 0}, published ${json.published?.length ?? 0} to sales channels.`
+    );
+  }
+
+  async function onSchedule() {
+    if (!drop.trim()) return toast.error("Which drop?");
+    const when = prompt(
+      `Open ${drop.trim()} at? Local time, e.g. 2026-09-26 17:00`,
+      new Date(Date.now() + 864e5).toISOString().slice(0, 16).replace("T", " ")
+    );
+    if (!when) return;
+    const at = new Date(when.replace(" ", "T"));
+    if (Number.isNaN(at.getTime())) return toast.error("Could not read that date.");
+    const json = await call("Schedule", "/api/vintage/schedule", {
+      drop: drop.trim(),
+      revealAt: at.toISOString(),
+    });
+    if (json) toast.success(`${drop.trim()} opens ${at.toLocaleString()}.`);
+  }
+
   const selectAll = useCallback((include: boolean) => {
     setRows((rs) => rs.map((r) => ({ ...r, include })));
   }, []);
@@ -572,6 +653,35 @@ export function VintageDropSheet({
       )}
 
       {rows.length > 0 && (
+        <details className="rounded-lg border p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            Paste from the INPUT sheet
+          </summary>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Copy a block of rows out of Excel and paste it here — the sheet&rsquo;s own columns, in
+            its own order, header row optional. Rows are matched on Nummer rather than position, so
+            a partial paste still lands on the right garments.
+          </p>
+          <textarea
+            className={cn(INPUT, "mt-2 min-h-[6rem] font-mono text-xs")}
+            placeholder="13763&#9;Disneyland Epcot Bomber Jacket&#9;100% cotton…&#9;Jacket&#9;Bomber jacket&#9;499&#9;499&#9;60&#9;72&#9;L…"
+            onPaste={(e) => {
+              const text = e.clipboardData.getData("text");
+              if (!text.includes("\t")) return;
+              e.preventDefault();
+              const { applied, unknown } = applyPaste(text);
+              if (applied) toast.success(`Filled ${applied} garment(s) from the sheet.`);
+              if (unknown.length)
+                toast.warning(
+                  `${unknown.length} row(s) are not in this drop: ${unknown.slice(0, 8).join(", ")}`
+                );
+              if (!applied && !unknown.length) toast.error("Nothing recognisable in that paste.");
+            }}
+          />
+        </details>
+      )}
+
+      {rows.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -870,6 +980,25 @@ export function VintageDropSheet({
             className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
           >
             {busy === "Move to top" ? "Moving…" : "Move to top of collection"}
+          </button>
+          <span className="text-muted-foreground">→</span>
+          <button
+            type="button"
+            disabled={!created?.length || busy !== null}
+            onClick={onReveal}
+            title="Drop the hide tags and publish to every sales channel"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+          >
+            {busy === "Reveal" ? "Revealing…" : "Reveal now"}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null || !drop.trim()}
+            onClick={onSchedule}
+            title="Reveal automatically at a set time"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+          >
+            {busy === "Schedule" ? "Scheduling…" : "Schedule reveal"}
           </button>
           {created !== null && (
             <span className="text-sm text-muted-foreground">

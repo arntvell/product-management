@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/vintage/schedule?run=due",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
