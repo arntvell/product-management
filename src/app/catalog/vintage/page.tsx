@@ -27,6 +27,30 @@ async function brandList(): Promise<string[]> {
   return rows.map((r) => r.tag);
 }
 
+/**
+ * The store products an online garment can be written up against.
+ *
+ * This is the economics: the shop sells categories, online sells unique
+ * pieces, and a piece inherits what its category retails and costs.
+ */
+async function sourceProductList() {
+  const rows = await prisma.vintageSourceProduct.findMany({
+    where: { archived: false },
+    orderBy: { name: "asc" },
+    select: { name: true, sku: true, category: true, webCategory: true, retailNok: true, costNok: true },
+  });
+  return rows.map((r) => ({
+    name: r.name,
+    sku: r.sku,
+    category: r.category,
+    webCategory: r.webCategory,
+    retail: r.retailNok?.toString() ?? null,
+    // An average across a category's buying — 210.2492 implies a precision a
+    // single second-hand garment's cost does not have.
+    cost: r.costNok == null ? null : String(Math.round(Number(r.costNok))),
+  }));
+}
+
 /** The categories the master already models, which is where vintage's live. */
 async function categoryList() {
   const rows = await prisma.category.findMany({
@@ -38,7 +62,11 @@ async function categoryList() {
 }
 
 export default async function VintageDropPage() {
-  const [brands, categories] = await Promise.all([brandList(), categoryList()]);
+  const [brands, categories, sourceProducts] = await Promise.all([
+    brandList(),
+    categoryList(),
+    sourceProductList(),
+  ]);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -55,11 +83,17 @@ export default async function VintageDropPage() {
           barcodes follow from that — none is typed, and the barcodes are the ones already
           assigned to those numbers, so they match the printed labels. Write the garments up,
           load the photographs whenever the shoot has uploaded them, then send the stock to
-          Loom, push to Shopify and move the drop to the top of the collection.
+          Loom, push to Shopify and move the drop to the top of the collection. Choosing the
+          store product a garment came out of fills its price and cost from what that
+          category sells at — both as defaults, since about a third get priced up.
         </p>
       </div>
 
-      <VintageDropSheet brands={brands} categories={categories} />
+      <VintageDropSheet
+        brands={brands}
+        categories={categories}
+        sourceProducts={sourceProducts}
+      />
     </main>
   );
 }

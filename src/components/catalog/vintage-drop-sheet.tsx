@@ -96,13 +96,28 @@ const MONO = "font-mono text-[11px] text-muted-foreground";
 
 const STORAGE_KEY = "vintage-drop-sheet";
 
+export interface SourceProduct {
+  name: string;
+  sku: string | null;
+  category: string | null;
+  webCategory: string | null;
+  retail: string | null;
+  cost: string | null;
+}
+
 export function VintageDropSheet({
   brands,
   categories,
+  sourceProducts,
 }: {
   brands: string[];
   categories: { name: string; webCategory: string | null }[];
+  sourceProducts: SourceProduct[];
 }) {
+  const bySource = useMemo(
+    () => new Map(sourceProducts.map((p) => [p.name.toLowerCase(), p])),
+    [sourceProducts]
+  );
   const [drop, setDrop] = useState("");
   const [count, setCount] = useState("45");
   const [rows, setRows] = useState<Row[]>([]);
@@ -135,6 +150,33 @@ export function VintageDropSheet({
   const set = useCallback((n: string, patch: Partial<Row>) => {
     setRows((rs) => rs.map((r) => (r.itemNumber === n ? { ...r, ...patch } : r)));
   }, []);
+
+  /**
+   * Choosing the store product an online garment came out of.
+   *
+   * It supplies the economics, which is what "category fills in the price"
+   * means: the category's retail becomes this garment's price, and its average
+   * cost becomes the cost. Both are DEFAULTS — in the sheet's own history
+   * roughly two thirds of recent garments sell at the category's retail and a
+   * third are priced up — so anything already typed is left alone.
+   */
+  const pickSource = useCallback(
+    (itemNumber: string, name: string) => {
+      const p = bySource.get(name.trim().toLowerCase());
+      setRows((rs) =>
+        rs.map((r) => {
+          if (r.itemNumber !== itemNumber) return r;
+          const next: Row = { ...r, sourceProduct: name };
+          if (!p) return next;
+          if (!r.category.trim()) next.category = p.webCategory || p.category || "";
+          if (!r.price.trim() && p.retail) next.price = String(Math.round(Number(p.retail)));
+          if (!r.cost.trim() && p.cost) next.cost = p.cost;
+          return next;
+        })
+      );
+    },
+    [bySource]
+  );
 
   const selectAll = useCallback((include: boolean) => {
     setRows((rs) => rs.map((r) => ({ ...r, include })));
@@ -554,9 +596,10 @@ export function VintageDropSheet({
                     />
                     <input
                       className={cn(INPUT, "lg:col-span-2")}
-                      placeholder="Opprinnelig produkt"
+                      list="vintage-source-products"
+                      placeholder="Opprinnelig produkt — fills price & cost"
                       value={r.sourceProduct}
-                      onChange={(e) => set(r.itemNumber, { sourceProduct: e.target.value })}
+                      onChange={(e) => pickSource(r.itemNumber, e.target.value)}
                     />
                   </div>
 
@@ -617,6 +660,15 @@ export function VintageDropSheet({
       <datalist id="vintage-brands">
         {brands.map((b) => (
           <option key={b} value={b} />
+        ))}
+      </datalist>
+      <datalist id="vintage-source-products">
+        {sourceProducts.map((p) => (
+          <option key={p.name} value={p.name}>
+            {[p.webCategory ?? p.category, p.retail ? `${Math.round(Number(p.retail))} kr` : null]
+              .filter(Boolean)
+              .join(" · ")}
+          </option>
         ))}
       </datalist>
       <datalist id="vintage-categories">

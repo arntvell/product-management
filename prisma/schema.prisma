@@ -508,6 +508,48 @@ model VintageDetail {
   @@index([itemNumber])
 }
 
+// The physical store's vintage products — what the shop sells by the category
+// rather than by the garment.
+//
+// The two halves of vintage work differently, and this table is that
+// difference made explicit: the STORE sells categories ("Belts", "70s Shirt")
+// as aggregate SKUs, while ONLINE sells unique pieces. An online garment is
+// written up against the store product it came out of, and inherits its
+// economics — what that category retails at, and what it costs us on average.
+//
+// Kept as reference data rather than folded into Colorway because only 122 of
+// the 247 rows correspond to a master colorway at all; the rest exist only in
+// the buying sheet. Pretending they were the same records would invent links
+// that are not there.
+model VintageSourceProduct {
+  id String @id @default(cuid())
+
+  /// `Kategori kasse` — what the buyer calls it, and the lookup key.
+  name String @unique
+
+  /// The store SKU, where there is one. Often an `EXT-VN-*` aggregate.
+  sku String?
+
+  /// The master category this rolls up to.
+  category String?
+
+  /// `Kategori nett` — the customer-facing category for the web.
+  webCategory String?
+
+  /// What the store sells this category at. Becomes the online garment's
+  /// default price, overridden about a third of the time.
+  retailNok Decimal? @db.Decimal(10, 2)
+
+  /// Average cost across the category's buying. Not a per-garment truth, which
+  /// is why it is a default and not an assertion.
+  costNok Decimal? @db.Decimal(10, 2)
+
+  archived  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+}
+
 model Variant {
   id             String              @id @default(cuid()) // stable id — TF has none, we mint it
   colorwayId     String
