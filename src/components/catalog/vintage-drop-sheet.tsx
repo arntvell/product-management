@@ -113,6 +113,23 @@ const MONO = "font-mono text-[11px] text-muted-foreground";
 
 const STORAGE_KEY = "vintage-drop-sheet";
 
+interface Existing {
+  id: string;
+  itemNumber: string;
+  sku: string;
+  variantSku: string;
+  handle: string;
+  barcode: string | null;
+  name: string;
+  status: string;
+  tags: string[];
+  category: string | null;
+  price: string | null;
+  photos: { url: string; position: number; pushed: boolean }[];
+  onLoom: boolean;
+  onShopify: boolean;
+}
+
 export interface SourceProduct {
   name: string;
   sku: string | null;
@@ -141,6 +158,10 @@ export function VintageDropSheet({
   const [busy, setBusy] = useState<string | null>(null);
   const [created, setCreated] = useState<string[] | null>(null);
   const [numbering, setNumbering] = useState<string | null>(null);
+  // Garments already in the master for this drop. Separate from `rows`, which
+  // are being written: these exist, and the only questions left are whether
+  // they have reached Loom and Shopify.
+  const [existing, setExisting] = useState<Existing[] | null>(null);
 
   // 45 rows of typing is too much to lose to a reload. Per-browser only; the
   // master is the real store of record, once Create has run.
@@ -240,6 +261,44 @@ export function VintageDropSheet({
     }
   }
 
+  /**
+   * Pull back a drop that has already been created.
+   *
+   * Creating and pushing are not one act: a create can succeed and a push
+   * fail, and photographs arrive through the day. Without this the sheet
+   * could only push what it had created in the same browser session, so a
+   * failed push left the drop stranded.
+   */
+  async function onLoadDrop() {
+    if (!drop.trim()) return toast.error("Which drop?");
+    const json = await call(
+      "Load drop",
+      `/api/vintage/drops/${encodeURIComponent(drop.trim())}`,
+      undefined,
+      "GET"
+    );
+    if (!json) return;
+    setExisting(json.garments as Existing[]);
+    setCreated((json.garments as Existing[]).map((g) => g.id));
+    if (!json.garments.length) toast.info(`Nothing created for ${drop.trim()} yet.`);
+    else
+      toast.success(
+        `${json.garments.length} garment(s) in ${drop.trim()} — ` +
+          `${json.garments.filter((g: Existing) => g.onLoom).length} on Loom, ` +
+          `${json.garments.filter((g: Existing) => g.onShopify).length} on Shopify.`
+      );
+  }
+
+  async function onDelete(g: Existing) {
+    if (!confirm(`Delete ${g.sku} — ${g.name}? Its item number and barcode stay bound, so re-entering ${g.itemNumber} gets the same code back.`))
+      return;
+    const json = await call("Delete", `/api/vintage/garments/${g.id}`, undefined, "DELETE");
+    if (!json) return;
+    setExisting((xs) => (xs ?? []).filter((x) => x.id !== g.id));
+    setCreated((c) => (c ?? []).filter((id) => id !== g.id));
+    toast.success(`Deleted ${json.deleted}. Enter it again when you are ready.`);
+  }
+
   async function onStart() {
     const n = Number(count);
     if (!drop.trim()) return toast.error("Which drop?");
@@ -271,6 +330,7 @@ export function VintageDropSheet({
       }))
     );
     setCreated(null);
+    setExisting(null);
     if (json.beyondPreassigned?.length)
       toast.warning(
         `${json.beyondPreassigned.length} number(s) are past the sheet's pre-assigned range — their barcodes are extrapolated, not recorded.`
@@ -400,6 +460,15 @@ export function VintageDropSheet({
         >
           {busy === "Start" ? "Reserving…" : rows.length ? "Start over" : "Start drop"}
         </button>
+        <button
+          type="button"
+          onClick={onLoadDrop}
+          disabled={busy !== null}
+          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+          title="Pull back garments already created for this drop, to push or fix them"
+        >
+          {busy === "Load drop" ? "Loading…" : "Load existing drop"}
+        </button>
         {rows.length > 0 && (
           <>
             <button
@@ -417,6 +486,62 @@ export function VintageDropSheet({
           </>
         )}
       </div>
+
+      {existing && existing.length > 0 && (
+        <div className="rounded-lg border p-4">
+          <p className="mb-3 text-sm font-medium">
+            {existing.length} garment(s) already created in {drop.trim()}
+          </p>
+          <div className="space-y-1.5">
+            {existing.map((g) => (
+              <div
+                key={g.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border px-2 py-1.5 text-sm"
+              >
+                <span className="font-mono text-xs">{g.itemNumber}</span>
+                <span className="min-w-0 flex-1 truncate">{g.name}</span>
+                <span className={MONO}>{g.barcode}</span>
+                <span className="text-xs text-muted-foreground">
+                  {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}
+                </span>
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[11px]",
+                    g.onLoom ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {g.onLoom ? "on Loom" : "not on Loom"}
+                </span>
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-0.5 text-[11px]",
+                    g.onShopify ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {g.onShopify ? "on Shopify" : "not on Shopify"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onDelete(g)}
+                  disabled={busy !== null || g.onShopify}
+                  title={
+                    g.onShopify
+                      ? "Live on Shopify — archive it there first"
+                      : "Delete so it can be entered again"
+                  }
+                  className="rounded border px-2 py-0.5 text-xs transition-colors hover:bg-muted disabled:opacity-40"
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            The buttons at the bottom act on these. An item number stays bound to its barcode, so
+            deleting and re-entering the same number gets the same code back.
+          </p>
+        </div>
+      )}
 
       {numbering && (
         <p className="rounded-lg border border-sky-500/40 bg-sky-500/5 p-3 text-sm text-muted-foreground">
@@ -709,11 +834,11 @@ export function VintageDropSheet({
       </datalist>
 
       {/* --- The four stages --------------------------------------------- */}
-      {rows.length > 0 && (
+      {(rows.length > 0 || (existing?.length ?? 0) > 0) && (
         <div className="sticky bottom-0 flex flex-wrap items-center gap-2 border-t bg-background/95 py-3 backdrop-blur">
           <button
             type="button"
-            disabled={!ready || busy !== null || created !== null}
+            disabled={!ready || busy !== null || created !== null || rows.length === 0}
             onClick={onCreate}
             className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-40"
           >
