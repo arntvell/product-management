@@ -15,6 +15,10 @@ const BUTTON_CLASS =
 const PRIMARY_LINKS = [
   { href: "/catalog/collections", label: "Collections" },
   { href: "/catalog/drops", label: "Drops" },
+  // Its own entry rather than a Drops tab: the weekly vintage drop starts from
+  // the photo share, not from products already in the master, so it is a
+  // different screen doing a different job.
+  { href: "/catalog/vintage", label: "Vintage" },
   { href: "/catalog/edit", label: "Bulk editor" },
   { href: "/catalog/variants", label: "Variant editor" },
   // An unfinished new product is ordinary work in progress, not a repair job.
