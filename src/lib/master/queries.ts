@@ -1,7 +1,7 @@
 // Read-model queries for the Catalog browse UI (Phase 1).
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import { shopifyMissing, loomMissing } from "./readiness";
+import { shopifyMissing, loomMissing, readinessProfileFor } from "./readiness";
 
 export interface SeasonOption {
   id: string;
@@ -77,6 +77,9 @@ export async function listColorwaysForPublishing(
         },
       },
       publications: true,
+      // Readiness is judged per profile, and the profile comes from the brand —
+      // vintage is not missing a fit guide, it simply never has one.
+      brand: { select: { name: true } },
       // Season-scoped price so readiness matches the price the push will send
       // for THIS season (a product priced only in another season isn't ready).
       prices: {
@@ -119,6 +122,7 @@ export async function listColorwaysForPublishing(
       swatchHex: cw.swatchHex,
       carePageId: cw.carePageId,
       fitguidePageId: cw.fitguidePageId,
+      profile: readinessProfileFor(cw.brand?.name),
     });
     const loomMiss = loomMissing({
       hasVariants,

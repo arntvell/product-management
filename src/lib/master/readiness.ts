@@ -76,6 +76,17 @@ export function purposeForMode(mode: "full" | "data" | undefined): LoomPurpose {
   return mode === "data" ? "registry" : "catalogue";
 }
 
+/**
+ * Which profile of the gate a product is judged against.
+ *
+ * "mainline"  everything Livid and its resold brands sell as a production run.
+ * "vintage"   a one-of-one second-hand garment. It has no swatch, no care page
+ *             and no fit guide, and never will — there is one of it, and no
+ *             production data behind it. Judged against the mainline profile it
+ *             fails 100% of the time.
+ */
+export type ShopifyReadinessProfile = "mainline" | "vintage";
+
 export interface ShopifyReadinessInput {
   hasVariants: boolean;
   hasPrice: boolean;
@@ -87,6 +98,8 @@ export interface ShopifyReadinessInput {
   swatchHex?: string | null;
   carePageId?: string | null;
   fitguidePageId?: string | null;
+  /** Defaults to "mainline" so every existing caller is unchanged. */
+  profile?: ShopifyReadinessProfile;
 }
 
 /**
@@ -97,6 +110,13 @@ export interface ShopifyReadinessInput {
  * something to put in front of a customer, and checking only the commerce
  * fields meant the app reported 226 FW26 products ready when none had either.
  * The merchandising fields are part of the gate for that reason.
+ *
+ * Vintage waives exactly three references it can never hold, and nothing else:
+ * variants, price, description, image and tags stay required. The alternative —
+ * pushing vintage with `allowIncomplete` — waives the image check too, and a
+ * product going live with no photograph is the failure this gate exists to
+ * prevent. The exception lives here rather than at the call site because this
+ * module is the single source of truth: the badge and the push must not drift.
  */
 export function shopifyMissing(i: ShopifyReadinessInput): string[] {
   const missing: string[] = [];
@@ -105,10 +125,24 @@ export function shopifyMissing(i: ShopifyReadinessInput): string[] {
   if (!has(i.description)) missing.push("description");
   if (i.hasImage === false) missing.push("image");
   if (i.hasTags === false) missing.push("tags");
-  if (!has(i.swatchHex)) missing.push("swatch");
-  if (!has(i.carePageId)) missing.push("care page");
-  if (!has(i.fitguidePageId)) missing.push("fit guide");
+  if (i.profile !== "vintage") {
+    if (!has(i.swatchHex)) missing.push("swatch");
+    if (!has(i.carePageId)) missing.push("care page");
+    if (!has(i.fitguidePageId)) missing.push("fit guide");
+  }
   return missing;
+}
+
+/**
+ * The readiness profile a colorway is judged against.
+ *
+ * Keyed off the brand, like `isLoomEligible` — it is a fact about what the
+ * product IS, not a per-product intent someone can tick wrong. Deliberately not
+ * keyed off `Source`: the 2,086 online-vintage rows arrived as CIN7_IMPORT and
+ * `Source` becomes pure history once Cin7 retires.
+ */
+export function readinessProfileFor(brandName: string | null | undefined): ShopifyReadinessProfile {
+  return brandName?.trim().toLowerCase() === "vintage" ? "vintage" : "mainline";
 }
 
 /** The subset that stops a product being orderable at all. */

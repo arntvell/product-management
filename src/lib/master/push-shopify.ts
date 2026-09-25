@@ -13,7 +13,8 @@ import {
 } from "@/lib/shopify/mutations";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
-import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
+import { shopifyMissing, shopifyBlockingMissing, readinessProfileFor } from "./readiness";
+import { vintageInventory, vintageCost } from "./vintage";
 import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
 import {
   adoptExistingShopifyProduct,
@@ -211,6 +212,10 @@ export async function pushColorwayToShopify(
     cw.channelContent.find((c) => c.channel === "SHOPIFY" && c.field === "fullDescription")?.value ??
     cw.fullDescription ??
     cw.shortDescription;
+  // A one-of-one vintage garment has no swatch, care page or fit guide and is
+  // judged without them; everything else about the gate is unchanged.
+  const profile = readinessProfileFor(cw.brand?.name);
+  const isVintage = profile === "vintage";
   const missing = shopifyMissing({
     hasVariants,
     hasPrice,
@@ -220,6 +225,7 @@ export async function pushColorwayToShopify(
     swatchHex: cw.swatchHex,
     carePageId: cw.carePageId,
     fitguidePageId: cw.fitguidePageId,
+    profile,
   });
   // Variants and price are absolute; the merchandising fields can be waived
   // deliberately, but never by omission — publishing a product page with no
@@ -292,6 +298,12 @@ export async function pushColorwayToShopify(
   // an update this is a no-op for an item that is already tracked.
   const tracked = cw.kind !== "SERVICE";
 
+  // A vintage garment is one-of-one: exactly one unit, never oversold, and it
+  // carries what we paid for it. None of this applies to a production run, so
+  // it is gated on the brand and mainline payloads are unchanged.
+  const vintageInv = isVintage ? vintageInventory(action) : null;
+  const vintageCostInput = isVintage ? { cost: vintageCost(cw.prices) } : {};
+
   const variants = preview.variants.map((v) => ({
     optionValues: is2D
       ? [
@@ -300,8 +312,14 @@ export async function pushColorwayToShopify(
         ]
       : [{ optionName: "Size", name: v.size }],
     ...(v.price ? { price: v.price } : {}),
-    inventoryItem: { sku: v.sku, ...(tracked ? { tracked: true } : {}), ...customsInput },
+    inventoryItem: {
+      sku: v.sku,
+      ...(tracked ? { tracked: true } : {}),
+      ...customsInput,
+      ...vintageCostInput,
+    },
     ...(v.barcode ? { barcode: v.barcode } : {}),
+    ...(vintageInv ?? {}),
   }));
 
   // A 2-D colorway with a variant missing its length would silently collapse

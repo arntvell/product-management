@@ -20,7 +20,7 @@ import { prisma } from "@/lib/db";
 import { pushColorwayToShopify } from "./push-shopify";
 import { pushColorwaysToLoom } from "@/lib/loom/push";
 import { getLoomJob } from "@/lib/loom/client";
-import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
+import { shopifyMissing, shopifyBlockingMissing, readinessProfileFor } from "./readiness";
 import { getSitooCreator, type SitooCreateInput } from "@/lib/sitoo/create";
 import type { SitooTarget } from "@/lib/sitoo/client";
 import type { Channel } from "@/generated/prisma/enums";
@@ -130,6 +130,7 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
             swatchHex: cw.swatchHex,
             carePageId: cw.carePageId,
             fitguidePageId: cw.fitguidePageId,
+            profile: readinessProfileFor(cw.brand?.name),
           });
           if (soft.length) {
             // NOT waived silently. A candle has no care page or fit guide, and

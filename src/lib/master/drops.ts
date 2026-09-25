@@ -5,7 +5,7 @@
 // Free text rather than an enum — merchandising names its own waves, and a new
 // one should not need a migration.
 import { prisma } from "@/lib/db";
-import { shopifyMissing } from "./readiness";
+import { shopifyMissing, readinessProfileFor } from "./readiness";
 
 export interface DropRow {
   colorwayId: string;
@@ -80,6 +80,7 @@ export async function getDropBoard(opts: {
           shortDescription: true, fullDescription: true, details: true,
           styleTagline: true, carePageId: true, fitguidePageId: true, modelInfoId: true,
           style: { select: { styleName: true } },
+          brand: { select: { name: true } },
           channelContent: { select: { channel: true, field: true, value: true } },
           publications: { where: { channel: "SHOPIFY" }, select: { published: true } },
           seasonImages: { where: { seasonId: season.id }, select: { id: true } },
@@ -133,6 +134,7 @@ export async function getDropBoard(opts: {
         swatchHex: c.swatchHex,
         carePageId: c.carePageId,
         fitguidePageId: c.fitguidePageId,
+        profile: readinessProfileFor(c.brand?.name),
       }),
       publishedToShopify: c.publications.some((p) => p.published),
     };
