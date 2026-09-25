@@ -56,15 +56,31 @@ interface Row extends Identity {
 }
 
 /**
- * Type mål, derived rather than asked for — exactly as the sheet derives it
- * (`=if(isblank(H),2,1)`). A garment is a top if it has a chest measurement.
- * Asking the operator to also declare it is asking the same question twice and
- * inviting the two answers to disagree.
+ * Type mål, derived rather than asked for — the operator picks by typing in
+ * the right measurement boxes, as they do in the sheet.
+ *
+ * TOPS IS THE DEFAULT, which is where this differs from the sheet's
+ * `=if(isblank(H),2,1)`. Most vintage garments carry a chest width and a front
+ * length and nothing else — jackets included — so a blank row is a top until a
+ * trouser measurement says otherwise. Defaulting the other way is what let a
+ * bomber jacket be written up with a waist: the row demanded Waist/Rise/Inseam
+ * before a single measurement had been typed.
  */
 function shapeOf(r: Row): Shape {
-  const isTop = r.chestWidth.trim() !== "" || r.frontLength.trim() !== "";
-  if (isTop) return "tops";
-  return r.approxSize.trim() ? "jeans" : "trousers";
+  const hasBottom =
+    r.waist.trim() !== "" || r.frontRise.trim() !== "" || r.inseam.trim() !== "";
+  const hasTop = r.chestWidth.trim() !== "" || r.frontLength.trim() !== "";
+  if (hasBottom && !hasTop) return r.approxSize.trim() ? "jeans" : "trousers";
+  return "tops";
+}
+
+/**
+ * The title should not carry its own size — the size is appended when the
+ * product is named, so typing it produces "… (L) (M)". Warned about rather
+ * than silently stripped: only the person writing it knows which is right.
+ */
+function titleLooksSized(title: string): boolean {
+  return /\([^()]{1,12}\)\s*$/.test(title.trim());
 }
 
 function measurementType(r: Row): string {
@@ -73,19 +89,20 @@ function measurementType(r: Row): string {
 
 function rowProblems(r: Row): string[] {
   const p: string[] = [];
-  if (!r.title.trim()) p.push("title");
-  if (!r.description.trim()) p.push("description");
-  if (!r.category.trim()) p.push("category");
-  if (!r.price.trim()) p.push("price");
-  if (!r.taggedSize.trim() && !r.approxSize.trim()) p.push("size");
+  if (!r.title.trim()) p.push("no title");
+  else if (titleLooksSized(r.title)) p.push("size is already in the title");
+  if (!r.description.trim()) p.push("no description");
+  if (!r.category.trim()) p.push("no category");
+  if (!r.price.trim()) p.push("no price");
+  if (!r.taggedSize.trim() && !r.approxSize.trim()) p.push("no size");
   const shape = shapeOf(r);
   if (shape === "tops") {
-    if (!r.chestWidth.trim()) p.push("chest width");
-    if (!r.frontLength.trim()) p.push("front length");
+    if (!r.chestWidth.trim()) p.push("no chest width");
+    if (!r.frontLength.trim()) p.push("no front length");
   } else {
-    if (!r.waist.trim()) p.push("waist");
-    if (!r.frontRise.trim()) p.push("front rise");
-    if (!r.inseam.trim()) p.push("inseam");
+    if (!r.waist.trim()) p.push("no waist");
+    if (!r.frontRise.trim()) p.push("no front rise");
+    if (!r.inseam.trim()) p.push("no inseam");
   }
   return p;
 }
@@ -421,7 +438,7 @@ export function VintageDropSheet({
           <ul className="mt-2 space-y-0.5 text-muted-foreground">
             {problems.slice(0, 6).map((p) => (
               <li key={p.itemNumber}>
-                <span className="font-mono">{p.itemNumber}</span> — no {p.problems.join(", no ")}
+                <span className="font-mono">{p.itemNumber}</span> — {p.problems.join(", ")}
               </li>
             ))}
             {problems.length > 6 && <li>…and {problems.length - 6} more</li>}
@@ -535,7 +552,7 @@ export function VintageDropSheet({
                       type mål {measurementType(r)} · {shape}
                     </span>
                     {probs.length > 0 && (
-                      <span className="text-xs text-amber-600">no {probs.join(", no ")}</span>
+                      <span className="text-xs text-amber-600">{probs.join(", ")}</span>
                     )}
                   </div>
 

@@ -160,11 +160,15 @@ export function vintageName(title: string, size: string): string {
   const t = title.trim();
   const sz = size.trim();
   if (!sz) return t;
-  // The operator often types the size into the title, because that is how the
-  // finished product reads. Appending regardless produced "Disneyland Epcot
-  // Bomber Jacket (L) (M)" — twice, and disagreeing with itself. If the title
-  // already ends in a parenthesised token, take it as the size already said.
-  if (/\([^()]{1,12}\)\s*$/.test(t)) return t;
+  // Always append. The title is written WITHOUT the size and the size is added
+  // here, which is what the sheet does and what every live product reads like.
+  //
+  // A guard that skipped appending when the title already ended in brackets
+  // lived here briefly and was wrong twice over: it would silently drop the
+  // size from a legitimate title like "Nike (vintage) Crewneck", and it papered
+  // over an entry mistake rather than showing it. The drop sheet warns on a
+  // title that looks like it already carries its size, which is the place to
+  // catch it — while it can still be corrected.
   return `${t} (${sz})`;
 }
 
