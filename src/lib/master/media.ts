@@ -39,6 +39,45 @@ export async function createBlobMedia(input: {
   });
 }
 
+/**
+ * Record a MediaAsset for an image that lives on someone else's host.
+ *
+ * Vintage photographs sit on the drop image host and are referenced, not
+ * copied: the Shopify push accepts any public `https://` URL and uploads it
+ * through `fileCreate`'s `originalSource`, caching the resulting file GID, so
+ * there is no reason to round-trip the bytes through Blob first.
+ *
+ * `blobPathname` stays null, which is what tells `deleteMedia` and
+ * `purgeColorwayBlobs` that we do not own the object — deleting the row must
+ * not try to delete someone else's file.
+ *
+ * `position` follows `createBlobMedia`: the first asset on a colorway is 0, and
+ * position 0 is the featured image on the storefront. Callers that care which
+ * photo leads must insert in order.
+ */
+export async function createExternalMedia(input: {
+  colorwayId: string;
+  url: string;
+  alt?: string | null;
+  role?: "GALLERY" | "FLAT" | "MEN" | "WOMEN";
+}) {
+  const max = await prisma.mediaAsset.aggregate({
+    where: { colorwayId: input.colorwayId },
+    _max: { position: true },
+  });
+  return prisma.mediaAsset.create({
+    data: {
+      colorwayId: input.colorwayId,
+      url: input.url,
+      blobPathname: null,
+      source: "EXTERNAL",
+      alt: input.alt ?? null,
+      role: input.role ?? "GALLERY",
+      position: (max._max.position ?? -1) + 1,
+    },
+  });
+}
+
 export async function reorderMedia(
   colorwayId: string,
   orderedIds: string[]
