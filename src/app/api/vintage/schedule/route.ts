@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { revealProducts, HIDE_TAGS } from "@/lib/shopify/reveal";
+import { revealProducts } from "@/lib/shopify/reveal";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -119,13 +119,12 @@ async function runDue() {
     }
 
     const r = await revealProducts(live.map((c) => c.publications[0]!.externalId!));
-    await prisma.$transaction(
-      live.map((c) =>
-        prisma.colorway.update({
-          where: { id: c.id },
-          data: { tags: c.tags.filter((t) => !HIDE_TAGS.includes(t.trim().toLowerCase() as never)) },
-        })
-      )
+    // One statement — see the note in the reveal route. A per-row transaction
+    // timed out on a drop of 41 after Shopify was already live.
+    await prisma.$executeRawUnsafe(
+      `update "Colorway" set tags = array_remove(array_remove(tags, 'hide'), 'rocket-hide')
+         where id = any($1::text[])`,
+      live.map((c) => c.id)
     );
     await prisma.vintageDropReveal.update({
       where: { drop: row.drop },

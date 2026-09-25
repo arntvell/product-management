@@ -58,13 +58,16 @@ export async function POST(req: Request) {
 
   // Keep the master honest. Tags merge additively on push, so leaving `hide`
   // here would re-hide the product the next time anything touched it.
-  await prisma.$transaction(
-    onShopify.map((r) =>
-      prisma.colorway.update({
-        where: { id: r.id },
-        data: { tags: r.tags.filter((t) => !HIDE_TAGS.includes(t.trim().toLowerCase() as never)) },
-      })
-    )
+  //
+  // One statement, not 41 updates in a transaction: `array_remove` does the
+  // whole drop at once. The per-row version timed out at 5s on a drop of 41
+  // over a pooled connection, AFTER Shopify had already been revealed — which
+  // is the worst place to fail, since the channels were live and the master
+  // still said hidden. Raising the timeout would only move the cliff.
+  await prisma.$executeRawUnsafe(
+    `update "Colorway" set tags = array_remove(array_remove(tags, 'hide'), 'rocket-hide')
+       where id = any($1::text[])`,
+    onShopify.map((r) => r.id)
   );
 
   return NextResponse.json({ ok: true, ...result, notPushed });
