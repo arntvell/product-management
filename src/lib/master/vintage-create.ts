@@ -60,8 +60,14 @@ export interface VintageItemInput {
   barcode: string;
   /** BRAND (R) — the garment's original maker, a Shopify tag. */
   originalBrand?: string | null;
-  /** Ordered photo URLs, base photo first. */
+  /** Ordered photo URLs, base photo first. Empty until the shoot uploads. */
   photoUrls: string[];
+  /**
+   * Shopify tags. Omitted -> the standard set for the drop. Given -> used as
+   * written, because a drop sometimes carries a campaign or collaboration tag
+   * that no rule could know about.
+   */
+  tags?: string[] | null;
 }
 
 export interface VintageItemProblem {
@@ -123,9 +129,13 @@ export function validateVintageItems(items: VintageItemInput[]): VintageItemProb
       if (!v?.toString().trim()) p.push(`${shape}: no ${field}`);
     }
 
-    // A product with no photograph is the September 2026 outage.
-    if (!i.photoUrls?.length) p.push("no photo");
-    else if (!i.photoUrls[0]) p.push("no base photo — a numbered shot would lead the gallery");
+    // Photographs are NOT required here. The shoot uploads after the writing
+    // is done, so a garment legitimately exists in the master for a while with
+    // no image. What must never happen is that one reaching the storefront —
+    // and the Shopify readiness gate already refuses a colorway with no media
+    // (`hasImage` in shopifyMissing), which is the check that actually
+    // protects the customer. Blocking creation too would only force the
+    // operator to retype the drop once the photos land.
 
     if (p.length) out.push({ itemNumber: n || "(blank)", problems: p });
   }
@@ -320,7 +330,7 @@ export async function createVintageItems(
       vendor: VINTAGE_BRAND_NAME,
       productType: i.category.trim(),
       countryOfOrigin: VINTAGE_CUSTOMS.countryOfOrigin,
-      tags: vintageTags(drop, i.originalBrand),
+      tags: i.tags?.length ? i.tags.map((t) => t.trim()).filter(Boolean) : vintageTags(drop, i.originalBrand),
       fullDescription: vintagePlainDescription(i),
       shortDescription: i.description.trim(),
     });
