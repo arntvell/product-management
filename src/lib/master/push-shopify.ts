@@ -83,7 +83,14 @@ async function buildMetafields(
   add("details", "multi_line_text_field", rs("details", cw.details));
   add("style_tagline", "multi_line_text_field", rs("styleTagline", cw.styleTagline));
   add("style_name", "single_line_text_field", rs("styleName", cw.styleName));
-  add("color_hex", "color", cw.swatchHex);
+  // Shopify rejects a malformed colour outright, failing the whole product for
+  // a swatch. "#00000" (five digits) did exactly that. Send it only if it is a
+  // real hex; otherwise warn and let the rest of the product through.
+  if (cw.swatchHex && !/^#[0-9A-Fa-f]{6}$/.test(cw.swatchHex.trim())) {
+    warnings.push(`Skipped color_hex — "${cw.swatchHex}" is not a 6-digit hex colour.`);
+  } else {
+    add("color_hex", "color", cw.swatchHex);
+  }
 
   // Reference metafields (Shopify GIDs, stored directly).
   add("care_page", "page_reference", cw.carePageId);
@@ -369,7 +376,16 @@ export async function pushColorwayToShopify(
     // metafields to 3, losing its description, details, care page and model
     // info. Emptying a field on purpose is what `clearEmptied` is for, and it
     // runs after this as an explicit delete.
-    const liveMetafields = live.product?.metafields.nodes ?? [];
+    // `global.title_tag` / `global.description_tag` are Shopify's own SEO
+    // fields surfaced as metafields. productSet owns them through its `seo`
+    // input, so sending them back as metafields is rejected outright — "Key
+    // must be unique within this namespace on this resource" — and takes the
+    // whole product with it. They are Shopify-managed, so omitting them does
+    // not delete them.
+    const RESERVED_NS = new Set(["global"]);
+    const liveMetafields = (live.product?.metafields.nodes ?? []).filter(
+      (m) => !RESERVED_NS.has(m.namespace)
+    );
     const managed = new Set(metafields.map((m) => `${m.namespace}.${m.key}`));
     // When the caller asked to clear emptied fields, the keys the master
     // manages and has deliberately blanked must NOT be carried back — that is
