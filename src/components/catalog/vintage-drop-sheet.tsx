@@ -603,48 +603,62 @@ export function VintageDropSheet({
                     />
                   </div>
 
-                  {/* Only the measurements this garment's body will print —
-                      which is also what decides Type mål. */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {shape === "tops" ? (
-                      <>
+                  {/* BOTH measurement groups, as the spreadsheet shows them
+                      (its row 1 headers are "Mål Overdel" over H-J and "Mål
+                      Jeans/trouser" over K-M). Showing only one and choosing
+                      which by what is already filled is a trap: a blank row
+                      has no measurements, so it guesses "bottom", offers
+                      Waist/Rise/Inseam, and a jacket gets written up with a
+                      waist. That happened to 13763. Type mål still derives
+                      from whichever group is filled — the operator picks by
+                      typing in the right boxes, exactly as in the sheet. */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-6">
+                    <div className="col-span-2 lg:col-span-2">
+                      <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                        Mål Overdel (cm)
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
                         <input
-                          className={INPUT}
-                          placeholder="Chest width (cm)"
+                          className={cn(INPUT, shape === "tops" && "ring-1 ring-ring/40")}
+                          placeholder="Chest width"
                           value={r.chestWidth}
                           onChange={(e) => set(r.itemNumber, { chestWidth: e.target.value })}
                         />
                         <input
-                          className={INPUT}
-                          placeholder="Front length (cm)"
+                          className={cn(INPUT, shape === "tops" && "ring-1 ring-ring/40")}
+                          placeholder="Front length"
                           value={r.frontLength}
                           onChange={(e) => set(r.itemNumber, { frontLength: e.target.value })}
                         />
-                      </>
-                    ) : (
-                      <>
+                      </div>
+                    </div>
+                    <div className="col-span-2 lg:col-span-3">
+                      <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                        Mål Jeans/trouser (cm)
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
                         <input
-                          className={INPUT}
-                          placeholder="Waist (cm)"
+                          className={cn(INPUT, shape !== "tops" && "ring-1 ring-ring/40")}
+                          placeholder="Waist"
                           value={r.waist}
                           onChange={(e) => set(r.itemNumber, { waist: e.target.value })}
                         />
                         <input
-                          className={INPUT}
-                          placeholder="Front rise (cm)"
+                          className={cn(INPUT, shape !== "tops" && "ring-1 ring-ring/40")}
+                          placeholder="Front rise"
                           value={r.frontRise}
                           onChange={(e) => set(r.itemNumber, { frontRise: e.target.value })}
                         />
                         <input
-                          className={INPUT}
-                          placeholder="Inseam (cm)"
+                          className={cn(INPUT, shape !== "tops" && "ring-1 ring-ring/40")}
+                          placeholder="Inseam"
                           value={r.inseam}
                           onChange={(e) => set(r.itemNumber, { inseam: e.target.value })}
                         />
-                      </>
-                    )}
+                      </div>
+                    </div>
                     <input
-                      className={cn(INPUT, "col-span-3 lg:col-span-3")}
+                      className={cn(INPUT, "col-span-2 mt-auto lg:col-span-1")}
                       placeholder="Tags, comma separated"
                       value={r.tags}
                       onChange={(e) => set(r.itemNumber, { tags: e.target.value })}

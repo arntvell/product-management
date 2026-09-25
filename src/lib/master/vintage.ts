@@ -81,8 +81,16 @@ export function vintageHandle(colorwaySku: string): string {
 export interface VintageVariantInventory {
   /** Never oversell a garment there is exactly one of. */
   inventoryPolicy: "DENY";
-  /** `InventoryLevelInput`. Present only on create — see `vintageInventory`. */
-  inventoryQuantities?: Array<{ locationId: string; availableQuantity: number }>;
+  /**
+   * `ProductSetInventoryInput` — NOT `InventoryLevelInput`, which is what the
+   * other inventory mutations take and what this was briefly written against.
+   * The two differ: this one is { locationId, name, quantity } where `name` is
+   * "available" or "on_hand"; the other is { locationId, availableQuantity }.
+   * Sending the wrong one fails the whole productSet with "Field is not
+   * defined on ProductSetInventoryInput", after the media has already
+   * uploaded. Present only on create — see `vintageInventory`.
+   */
+  inventoryQuantities?: Array<{ locationId: string; name: "available"; quantity: number }>;
 }
 
 /**
@@ -104,7 +112,7 @@ export function vintageInventory(action: "create" | "update"): VintageVariantInv
     ...(action === "create"
       ? {
           inventoryQuantities: [
-            { locationId: VINTAGE_STOCK_LOCATION_GID, availableQuantity: 1 },
+            { locationId: VINTAGE_STOCK_LOCATION_GID, name: "available" as const, quantity: 1 },
           ],
         }
       : {}),

@@ -157,7 +157,15 @@ export function vintageSku(itemNumber: string): string {
  * string, so it does not get prefixed.
  */
 export function vintageName(title: string, size: string): string {
-  return `${title.trim()} (${size.trim()})`;
+  const t = title.trim();
+  const sz = size.trim();
+  if (!sz) return t;
+  // The operator often types the size into the title, because that is how the
+  // finished product reads. Appending regardless produced "Disneyland Epcot
+  // Bomber Jacket (L) (M)" — twice, and disagreeing with itself. If the title
+  // already ends in a parenthesised token, take it as the size already said.
+  if (/\([^()]{1,12}\)\s*$/.test(t)) return t;
+  return `${t} (${sz})`;
 }
 
 /** Approx size wins over the tagged size — it is the contemporary one. */
