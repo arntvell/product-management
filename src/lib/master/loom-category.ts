@@ -24,6 +24,21 @@ const TO_LOOM: Record<string, string> = {
   "suitpant": "Trouser",
 };
 
+// A note on what deliberately is NOT in the map above, 2026-09-18.
+//
+// 104 Livid colorways reach the wholesale catalogue carrying values outside
+// LOOM_CATEGORIES — "Hats", "Hat", "Beanie", "Belt", "Bags", "Top" — and the
+// obvious fix looks like adding them here next to `cap` and `scarf`. It is the
+// wrong place. This map applies to BOTH modes, so collapsing "Sunglasses" or
+// "Sweater" into Accessories/Knitwear here would also flatten them on the
+// stock-registry rows, and the Loom stock report is filtered by category. That
+// would make the report less useful in order to tidy the catalogue.
+//
+// Those belong in `Category.loomCategory` instead — per category, visible on
+// /catalog/categories, and reversible. `loomCategoryFor` already prefers it over
+// this map. Accessories is one of the eleven, so the screen can already express
+// every one of the 104 today.
+
 /** Loom's live vocabulary — anything outside it is passed through untouched. */
 export const LOOM_CATEGORIES = [
   "Jersey", "Outerwear", "Accessories", "Trouser",
@@ -35,4 +50,35 @@ export function toLoomCategory(value: string | null | undefined): string {
   const v = (value ?? "").trim();
   if (!v) return "Uncategorized";
   return TO_LOOM[v.toLowerCase()] ?? v;
+}
+
+/**
+ * Loom's category for a product, preferring the modelled one.
+ *
+ * `toLoomCategory` guesses from free text and is right for the ~4,500 rows that
+ * only ever had free text. Where a Category has been mapped deliberately — the
+ * review screen's whole purpose — that mapping wins, because someone chose it.
+ * The fallback keeps working untouched, so this can be adopted one product at a
+ * time rather than in a backfill.
+ */
+export function loomCategoryFor(
+  ref: { loomCategory: string | null } | null | undefined,
+  fallback: string | null | undefined,
+  opts: { asWritten?: boolean } = {}
+): string {
+  const mapped = ref?.loomCategory?.trim();
+  if (mapped) return mapped;
+  if (opts.asWritten) return fallback?.trim() || "Uncategorized";
+  return toLoomCategory(fallback);
+}
+
+/**
+ * Vintage reaches Loom with its categories as written — Coat, Jacket, Tee — not
+ * folded into Outerwear/Jersey. The store buckets are merchandised by those
+ * finer categories, and vintage never enters the wholesale catalogue the 1
+ * September vocabulary was agreed for. Kristoffer, 2026-09-24. A deliberate
+ * `Category.loomCategory` still wins.
+ */
+export function sendsCategoryAsWritten(brand: { name: string } | null | undefined): boolean {
+  return brand?.name?.trim().toLowerCase() === "vintage";
 }

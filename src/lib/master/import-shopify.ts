@@ -228,9 +228,25 @@ export async function runShopifyImport(
 
   const usedSkus = new Set(existing.skus);
 
+  // Shopify has no style level either — a product is one saleable thing — so
+  // this used to mint a Style per product with `styleSku = colorwaySku = handle`.
+  // That is the shape cin7/import.ts throws to prevent, and it is where the
+  // "a colourway is a style on its own" half of the Loom split came from. Reuse
+  // an existing style of the same name within the brand before minting.
+  const styleIdByBrandAndName = new Map<string, string>();
+  const styleKey = (brandId: string | null, name: string) =>
+    `${brandId ?? "-"}|${name.trim().toLowerCase()}`;
+  for (const st of await prisma.style.findMany({
+    select: { id: true, brandId: true, styleName: true },
+  })) {
+    const k = styleKey(st.brandId, st.styleName);
+    if (!styleIdByBrandAndName.has(k)) styleIdByBrandAndName.set(k, st.id);
+  }
+
   for (const p of toImport) {
     const brandId = p.vendor ? brandIdByName.get(p.vendor) ?? null : null;
-    const styleId = randomUUID();
+    const existingStyleId = styleIdByBrandAndName.get(styleKey(brandId, p.title));
+    const styleId = existingStyleId ?? randomUUID();
     const colorwayId = randomUUID();
     const entryId = randomUUID();
 
@@ -243,14 +259,19 @@ export async function runShopifyImport(
       if (target && node.value) enrichment[target] = node.value;
     }
 
-    styleCreates.push({
-      id: styleId,
-      source: "SHOPIFY_IMPORT",
-      styleSku: p.handle,
-      styleName: p.title,
-      category: p.productType || "Uncategorized",
-      brandId,
-    });
+    if (!existingStyleId) {
+      styleCreates.push({
+        id: styleId,
+        source: "SHOPIFY_IMPORT",
+        // `-style` keeps the parent SKU distinct from the colourway's, which is
+        // the handle. A style must never be its own colorway.
+        styleSku: `${p.handle}-style`,
+        styleName: p.title,
+        category: p.productType || "Uncategorized",
+        brandId,
+      });
+      styleIdByBrandAndName.set(styleKey(brandId, p.title), styleId);
+    }
     colorwayCreates.push({
       id: colorwayId,
       source: "SHOPIFY_IMPORT",

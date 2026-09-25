@@ -47,6 +47,15 @@ export interface PublishingRow {
   dropped: boolean;
   shopify: ChannelCellState;
   loom: ChannelCellState;
+  /**
+   * Sitoo has no readiness gate of its own — the POS takes identity, price and
+   * classification, and there is no description or care page to be missing. So
+   * `ready` tracks whether the colorway can be pushed at all, and the column is
+   * here for the membership answer rather than for a publish decision: it is the
+   * only place an operator can see that a garment is store-only, which is the
+   * fact Loom's stock hub needs and could not previously be told.
+   */
+  sitoo: ChannelCellState;
 }
 
 export async function listColorwaysForPublishing(
@@ -86,7 +95,7 @@ export async function listColorwaysForPublishing(
   });
 
   return rows.map((cw) => {
-    const pub = (ch: "SHOPIFY" | "LOOM"): ChannelCellState => {
+    const pub = (ch: "SHOPIFY" | "LOOM" | "SITOO"): ChannelCellState => {
       const p = cw.publications.find((x) => x.channel === ch);
       return { targeted: !!p, published: !!p?.published, ready: false, missing: [] };
     };
@@ -128,6 +137,14 @@ export async function listColorwaysForPublishing(
     const loom = pub("LOOM");
     loom.missing = loomMiss;
     loom.ready = loomMiss.length === 0;
+    const sitoo = pub("SITOO");
+    // Variants and a price are the whole of it: a till needs something to scan
+    // and something to charge.
+    sitoo.missing = [
+      ...(hasVariants ? [] : ["variants"]),
+      ...(hasPrice ? [] : ["price"]),
+    ];
+    sitoo.ready = sitoo.missing.length === 0;
 
     return {
       id: cw.id,
@@ -137,6 +154,7 @@ export async function listColorwaysForPublishing(
       dropped: isDropped(cw.entries, seasonCode),
       shopify,
       loom,
+      sitoo,
     };
   });
 }
@@ -173,6 +191,7 @@ export async function getBrandTemplate(brandId: string) {
     fiberComposition: t.fiberComposition ?? "",
     countryOfOrigin: t.countryOfOrigin ?? "",
     manufacturerId: t.manufacturerId ?? "",
+    defaultSizeSystemId: t.defaultSizeSystemId ?? "",
     sizes: t.sizes,
   };
 }

@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     skipJobWait?: boolean;
     eventId?: string;
     mode?: string;
+    allowVariantReparent?: boolean;
   };
   try {
     body = await req.json();
@@ -52,6 +53,10 @@ export async function POST(req: Request) {
       skipJobWait: body.skipJobWait,
       eventId: body.eventId,
       mode: mode as LoomMode,
+      // Opt-in, and only ever true when the caller said so explicitly. Loom
+      // refuses a re-parent by default because the variant row carries stock,
+      // cost and order history; that refusal is a guard, not an obstacle.
+      allowVariantReparent: body.allowVariantReparent === true,
     });
     return NextResponse.json(result, { status: result.ok ? 200 : 502 });
   } catch (err) {

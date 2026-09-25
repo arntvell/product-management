@@ -14,6 +14,19 @@ interface PushReport {
   issues: string[]; // failures, warnings, and skips — one line each
 }
 
+/**
+ * Channel enum -> the key it occupies on a PublishingRow, and the name a person
+ * reads. Two ternaries did this while there were two channels; a third made them
+ * silently wrong rather than a type error.
+ */
+const CHANNEL_KEY = {
+  SHOPIFY: "shopify",
+  LOOM: "loom",
+  SITOO: "sitoo",
+} as const satisfies Record<string, keyof PublishingRow>;
+
+const CHANNEL_NAME = { SHOPIFY: "Shopify", LOOM: "Loom", SITOO: "Sitoo" } as const;
+
 /** Result of a Loom dry run — what a push would do, before it does it. */
 interface LoomPreview {
   season: string;
@@ -244,11 +257,14 @@ export function PublishingTable({
   function selectAll() {
     setSelected(allSelected ? new Set() : new Set(visible.map((i) => i.id)));
   }
-  function selectReady(channel: "shopify" | "loom") {
+  function selectReady(channel: "shopify" | "loom" | "sitoo") {
     setSelected(new Set(visible.filter((i) => i[channel].ready).map((i) => i.id)));
   }
 
-  async function bulk(channel: "SHOPIFY" | "LOOM", action: "target" | "untarget") {
+  async function bulk(
+    channel: "SHOPIFY" | "LOOM" | "SITOO",
+    action: "target" | "untarget"
+  ) {
     if (selected.size === 0) return;
     setBusy(true);
     const ids = [...selected];
@@ -259,7 +275,7 @@ export function PublishingTable({
         body: JSON.stringify({ colorwayIds: ids, channel, action }),
       });
       if (!res.ok) throw new Error("Failed");
-      const key = channel === "SHOPIFY" ? "shopify" : "loom";
+      const key = CHANNEL_KEY[channel];
       setItems((prev) =>
         prev.map((r) =>
           selected.has(r.id)
@@ -268,7 +284,7 @@ export function PublishingTable({
         )
       );
       toast.success(
-        `${action === "target" ? "Targeted" : "Untargeted"} ${ids.length} → ${channel === "SHOPIFY" ? "Shopify" : "Loom"}`
+        `${action === "target" ? "Targeted" : "Untargeted"} ${ids.length} → ${CHANNEL_NAME[channel]}`
       );
     } catch {
       toast.error("Bulk update failed");
@@ -277,8 +293,11 @@ export function PublishingTable({
     }
   }
 
-  async function toggleOne(row: PublishingRow, channel: "SHOPIFY" | "LOOM") {
-    const key = channel === "SHOPIFY" ? "shopify" : "loom";
+  async function toggleOne(
+    row: PublishingRow,
+    channel: "SHOPIFY" | "LOOM" | "SITOO"
+  ) {
+    const key = CHANNEL_KEY[channel];
     const action = row[key].targeted ? "untarget" : "target";
     setBusy(true);
     try {
@@ -303,15 +322,24 @@ export function PublishingTable({
   const counts = {
     shopify: items.filter((r) => r.shopify.targeted).length,
     loom: items.filter((r) => r.loom.targeted).length,
+    sitoo: items.filter((r) => r.sitoo.targeted).length,
     shopifyReady: items.filter((r) => r.shopify.ready).length,
     loomReady: items.filter((r) => r.loom.ready).length,
+    // The split Loom's stock hub cares about. A product in exactly one of the
+    // two storefront channels needs no Sitoo<->Shopify stock link at all, and
+    // before these flags were sent Loom had to treat every one of them as a
+    // broken link it should report.
+    both: items.filter((r) => r.shopify.targeted && r.sitoo.targeted).length,
+    neither: items.filter((r) => !r.shopify.targeted && !r.sitoo.targeted).length,
   };
 
   return (
     <>
       <p className="mt-1 text-sm text-muted-foreground">
-        {items.length} products · {counts.shopify} → Shopify · {counts.loom} → Loom ·{" "}
-        {counts.shopifyReady} Shopify-ready · {counts.loomReady} Loom-ready.
+        {items.length} products · {counts.shopify} → Shopify · {counts.sitoo} → Sitoo ·{" "}
+        {counts.loom} → Loom · {counts.both} in both storefront channels (stock
+        syncs), {counts.neither} in neither · {counts.shopifyReady} Shopify-ready ·{" "}
+        {counts.loomReady} Loom-ready.
         {items.length > counts.loomReady && (
           <>
             {" "}
@@ -458,6 +486,9 @@ export function PublishingTable({
           <Button size="sm" variant="outline" disabled={busy || !selected.size} onClick={() => bulk("SHOPIFY", "target")}>
             Target Shopify
           </Button>
+          <Button size="sm" variant="outline" disabled={busy || !selected.size} onClick={() => bulk("SITOO", "target")}>
+            Target Sitoo
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -469,6 +500,9 @@ export function PublishingTable({
           </Button>
           <Button size="sm" variant="outline" disabled={busy || !selected.size} onClick={() => bulk("LOOM", "target")}>
             Target Loom
+          </Button>
+          <Button size="sm" variant="ghost" disabled={busy || !selected.size} onClick={() => bulk("SITOO", "untarget")} className="text-muted-foreground">
+            Untarget Sitoo
           </Button>
           <Button size="sm" variant="ghost" disabled={busy || !selected.size} onClick={() => bulk("SHOPIFY", "untarget")} className="text-muted-foreground">
             Untarget Shopify
@@ -539,6 +573,7 @@ export function PublishingTable({
               <th className="w-12 p-3"></th>
               <th className="p-3">Product</th>
               <th className="w-40 p-3 text-center">Shopify</th>
+              <th className="w-40 p-3 text-center">Sitoo</th>
               <th className="w-40 p-3 text-center">Loom</th>
             </tr>
           </thead>
@@ -573,6 +608,7 @@ export function PublishingTable({
                     <div className="text-xs text-muted-foreground">{r.styleName}</div>
                   </td>
                   <ChannelCell state={r.shopify} busy={busy} onToggle={() => toggleOne(r, "SHOPIFY")} />
+                  <ChannelCell state={r.sitoo} busy={busy} onToggle={() => toggleOne(r, "SITOO")} />
                   <ChannelCell state={r.loom} busy={busy} onToggle={() => toggleOne(r, "LOOM")} />
                 </tr>
               );

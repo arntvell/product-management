@@ -126,9 +126,10 @@ been cut down to the colourway. This one is worse in reach than §1 and it was
 caught only because the §1 test run did it to Fuller Chino Khaki, which was then
 restored.
 
-The title is now composed — `shopifyTitle(styleName, colorwayName)` in
-`publish.ts` — skipping the style when the name already leads with it, so an
-imported "Barnes Japan Dawn" does not become "Barnes Barnes Japan Dawn".
+The title is now composed — `channelProductTitle(cw)` in `channel-title.ts` —
+skipping the style when the name already leads with it, so an imported "Barnes
+Japan Dawn" does not become "Barnes Barnes Japan Dawn". The same helper titles
+Sitoo and the orchestrator, so the two channels cannot drift apart.
 
 **After the fix, 120 of 128 titles are byte-identical to what is live.** The
 remaining 8 are real master-vs-Shopify drift, not a bug, and want a merchandising

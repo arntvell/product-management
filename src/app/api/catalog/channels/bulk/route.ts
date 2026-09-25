@@ -5,12 +5,13 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 // POST /api/catalog/channels/bulk
-//   { colorwayIds: string[], channel: "SHOPIFY"|"LOOM", action: "target"|"untarget" }
+//   { colorwayIds: string[], channel: "SHOPIFY"|"LOOM"|"SITOO",
+//     action: "target"|"untarget" }
 // Targets or untargets a channel for many colorways at once.
 export async function POST(req: Request) {
   let body: {
     colorwayIds?: string[];
-    channel?: "SHOPIFY" | "LOOM";
+    channel?: "SHOPIFY" | "LOOM" | "SITOO";
     action?: "target" | "untarget";
   };
   try {

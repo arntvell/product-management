@@ -50,3 +50,6 @@ loom-payload-*.json
 # Reconciliation snapshots — business data, large, regenerable
 snapshots/
 __pycache__/
+
+# Local dev-server launch config (editor/agent tooling)
+.claude/

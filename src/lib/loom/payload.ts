@@ -3,13 +3,17 @@
 // customs block + manufacturer, channels, and per-season lifecycle flags.
 import { prisma } from "@/lib/db";
 import { loomMissing } from "@/lib/master/readiness";
-import { toLoomCategory } from "@/lib/master/loom-category";
+import { loomCategoryFor, sendsCategoryAsWritten } from "@/lib/master/loom-category";
 
 export async function loadColorwaysForLoom(colorwayIds: string[], seasonCode: string) {
   return prisma.colorway.findMany({
     where: { id: { in: colorwayIds } },
     include: {
-      style: true,
+      // The mapped category, at both levels — a colourway may override its
+      // style's. Without these the 93 modelled categories are unreachable from
+      // the feed and every product falls back to free-text guessing.
+      categoryRef: true,
+      style: { include: { categoryRef: true } },
       brand: true,
       manufacturer: true,
       variants: {
@@ -33,6 +37,32 @@ function has(v: string | null | undefined): string | null {
   return v && v.trim() ? v : null;
 }
 
+/**
+ * Shopify ids leave this feed as the plain numeric id, never the GraphQL gid.
+ *
+ * We store the gid (`gid://shopify/InventoryItem/46082782724345`) because every
+ * Admin API call needs it, but Loom's contract specifies the bare number and
+ * their ingest is not the only consumer of the feed. Loom found 5,590 of 5,698
+ * linked variants arriving wrapped (2026-09-19); they normalise on ingest, so
+ * this is a contract fix, not an outage.
+ *
+ * The expected `type` is checked rather than just taking the last segment
+ * (`extractId` in lib/utils does that) because the two Shopify ids we send are
+ * easy to cross: the ProductVariant is the listing, the InventoryItem is what a
+ * stock movement references, and they are different numbers. A value of the
+ * wrong type is passed through UNCHANGED — still recognisably a gid, so Loom
+ * sees the mismatch — rather than being stripped into a plausible-looking
+ * number or nulled, which would drop a linkage we have.
+ */
+function shopifyNumericId(
+  value: string | null | undefined,
+  type: "InventoryItem" | "ProductVariant",
+): string | null {
+  if (!value) return null;
+  const m = new RegExp(`^gid://shopify/${type}/(\\d+)$`).exec(value);
+  return m ? m[1] : value;
+}
+
 /** Required fields missing for THIS colorway's Loom push (empty = ready). */
 export function loomMissingForColorway(cw: LoomColorway): string[] {
   return loomMissing({
@@ -48,6 +78,44 @@ export function loomMissingForColorway(cw: LoomColorway): string[] {
 }
 
 /**
+ * The `channels` block, built once so the registry and catalogue payloads cannot
+ * drift apart.
+ *
+ * `loom` is a WITHDRAWAL signal and cascades — false archives the colorway
+ * across every season and retires its Pio SKUs. `shopify` and `sitoo` cascade
+ * into nothing: they tell Loom's stock hub whether a missing channel link is a
+ * real gap or a product that was never meant to be sold there. Before they
+ * existed Loom could not tell those apart, which is what produced 2 049
+ * `no_inventory_item` failures that were mostly not failures.
+ *
+ * Membership is read from ChannelPublication ROW PRESENCE, not from `published`.
+ * `published` means "a push wrote this", which is a different question: it is
+ * true on 72 of 2 408 Shopify rows because most Shopify publications were minted
+ * by the LINKER finding a product that already existed rather than by a push
+ * creating one. Deriving membership from it would report 2 336 colorways that
+ * are live on Shopify as absent from it. Row presence is what the channel editor
+ * writes and what "targeted" has always meant here.
+ *
+ * Loom reads a missing key as "keep what you have" and an explicit `false` as
+ * "deliberately not sold there" — so a key we cannot answer must be OMITTED,
+ * never sent as false. Sending false for unknown silently switches off error
+ * reporting for those products, which is worse than the noise it replaces.
+ */
+function channelsFor(cw: LoomColorway, archive?: Set<string>) {
+  return {
+    // Loom treats loom:false as ARCHIVE — it hides the product across
+    // catalogue, order builder, curation and pricing. It is a withdrawal
+    // signal, not "not published yet", so it must express intent: true for
+    // anything we are deliberately putting on Loom, false only when we mean
+    // to withdraw it. Deriving it from whether a publication row happened to
+    // exist meant every product's FIRST push archived it on arrival.
+    loom: !archive?.has(cw.id),
+    shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
+    sitoo: cw.publications.some((p) => p.channel === "SITOO"),
+  };
+}
+
+/**
  * Registry payload — identity only.
  *
  * The stock registry needs to know *which garment* a movement refers to, and
@@ -58,24 +126,66 @@ export function loomMissingForColorway(cw: LoomColorway): string[] {
  * rule this mode deliberately bypasses.
  */
 function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
+  // Enriched on request: the registry now carries price, category and the
+  // customs block alongside identity.
+  //
+  // The original note above argued against this — "a registry that carries
+  // merchandising data invites Loom to render products it must not sell". That
+  // concern is real and has NOT gone away; what changes is that `registry_only`
+  // is still true and still the flag Loom is meant to gate rendering on. Until
+  // Loom confirms it does, this remains the one thing here that depends on
+  // another team, and it belongs on the WORK-DECK §A list next to A2.
+  //
+  // What has not changed: eligibility. Externals and vintage still do not enter
+  // the wholesale catalogue — isLoomEligible is untouched.
+  const customs = {
+    hs_code: has(cw.hsCodeOverride) ?? cw.style.hsCode ?? null,
+    customs_description:
+      has(cw.customsDescriptionOverride) ?? cw.style.customsDescription ?? null,
+    weight_kg: (cw.weightKgOverride ?? cw.style.weightKg)?.toString() ?? null,
+    fiber_composition:
+      has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition ?? null,
+    country_of_origin: cw.countryOfOrigin ?? null,
+  };
+  // External brands send MSRP and nothing else. They are bought in, not
+  // wholesaled, so Loom has no use for a wholesale price and should not be
+  // holding what Livid paid for them — decided by Kristoffer 2026-09-23. Livid's
+  // own production keeps all three: the wholesale catalogue prices from WS, and
+  // COST is its own figure.
+  //
+  // Keyed on the brand, the same fact isLoomEligible reads, rather than on
+  // Source or the SKU prefix: an external is external however it arrived.
+  const msrpOnly = cw.brand?.isLivid !== true;
+  const prices: Record<string, { msrp?: number; ws?: number; cost?: number }> = {};
+  for (const p of cw.prices) {
+    if (msrpOnly && p.priceType !== "MSRP") continue;
+    const slot = (prices[p.currency] ??= {});
+    if (p.priceType === "MSRP") slot.msrp = Number(p.amount);
+    else if (p.priceType === "WHOLESALE") slot.ws = Number(p.amount);
+    else if (p.priceType === "COST") slot.cost = Number(p.amount);
+  }
+
   return {
     colorway_id: cw.id,
     colorway_sku: cw.colorwaySku,
     name: cw.name,
     brand: cw.brand?.name ?? null,
+    color: cw.color ?? null,
+    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType, {
+      asWritten: sendsCategoryAsWritten(cw.brand),
+    }),
+    ...customs,
+    manufacturer_id: cw.manufacturer
+      ? (cw.manufacturer.threadflowId ?? cw.manufacturer.id)
+      : null,
+    prices,
     // Registry rows are stock-bearing records, not catalogue listings. loom:false
-    // still means withdraw, so the archive signal has to survive.
-    //
-    // `shopify` must report the product's REAL state, exactly as the catalogue
-    // builder does. It was hardcoded false here, which is only true of a product
-    // that happens not to be on Shopify — and a registry push is an upsert, so
-    // for anything Loom already held it overwrote a correct flag with a wrong
-    // one. The first live registry push sent shopify:false for 81 products that
-    // do have a Shopify publication.
-    channels: {
-      loom: !archive?.has(cw.id),
-      shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
-    },
+    // still means withdraw, so the archive signal has to survive. The channel
+    // flags must report the product's REAL state here exactly as they do in the
+    // catalogue: a registry push is an upsert, so a wrong flag overwrites a right
+    // one. This block was hardcoded shopify:false once and sent it for 81
+    // products that do have a Shopify publication.
+    channels: channelsFor(cw, archive),
     registry_only: true,
     // Barcoded variants only. The gate used to be colorway-level — any blank size
     // held back the whole run — which cost LIV-BTH-JPN-BLCK-DSK all 22 of its
@@ -83,23 +193,64 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     // that turned out to belong to the white shoe. Fixing one row's identity must
     // not cost its siblings theirs. A variant with no barcode cannot reconcile a
     // scan, so it is omitted rather than sent empty.
+    //
+    // CONSUMABLE is the one exemption. The 67 STORAGE-* records — packaging,
+    // hangtags, shop lighting, swatches, tools — are counted by hand on a shelf,
+    // never scanned at a till, and not one of them carries a barcode. Applying
+    // the rule to them drops their only variant, and Loom receives a product that
+    // cannot hold stock at all — which defeats the point of sending them. They
+    // are not merchandise, so no scan will ever need to reconcile against them.
+    //
+    // The exemption is keyed on the kind, so it reaches every CONSUMABLE — the
+    // Fitguide, Non-inventory, Shopify and SAVED categories map there too
+    // (NON_MERCH_CATEGORIES). That is deliberate: the same argument holds for
+    // all of them. It is wider than "the STORAGE-* rows", which is what someone
+    // reading only the paragraph above would assume.
+    //
+    // External brands are the second exemption (Kristoffer, 2026-09-23). Bought-in
+    // stock sometimes arrives before its barcode does, and it is created in every
+    // system at once so it can be sold; leaving it out of Loom until someone
+    // types the EAN meant the registry never heard of it. Loom accepts
+    // `barcode: null` and links Sitoo on the SKU instead — the Sitoo create uses
+    // the variant SKU, so the two agree — and the barcode is filled on a later
+    // push against the same stable variant_id. Livid's own production keeps the
+    // rule: it is barcoded at source, so a gap there is a data error to fix.
     variants: cw.variants
-      .filter((v) => v.barcode && v.barcode.trim())
+      .filter(
+        (v) =>
+          (v.barcode && v.barcode.trim()) ||
+          cw.kind === "CONSUMABLE" ||
+          cw.brand?.isLivid !== true
+      )
       .map((v) => {
       const shopify = v.channelRefs.find((r) => r.channel === "SHOPIFY");
       const sitoo = v.channelRefs.find((r) => r.channel === "SITOO");
       return {
         variant_id: v.id,
+        // Loom derives `{colorway_sku}-{suffix}` when `sku` is absent and treats
+        // the result as a RENAME. That derivation is a no-op today only because
+        // every colorway_sku happens to be the variant SKU minus its last
+        // segment; the moment a variant is re-parented it is not, and the
+        // rename would rewrite the SKU Sitoo matches on. Send both spellings —
+        // `sku` is the field Loom's feed reads, `variant_sku` is what we have
+        // always sent, and they must never disagree.
+        sku: v.variantSku,
         variant_sku: v.variantSku,
-        barcode: v.barcode ?? null,
+        // Null, never "". Barcode-less variants now travel, and a blank string is
+        // a value: Loom's ownership registry would see every one of them sharing
+        // the same barcode.
+        barcode: v.barcode?.trim() || null,
         dimensions: v.dim2 ? { waist: v.dim1, length: v.dim2 } : { size: v.dim1 },
         // Where the stock actually moves, per channel. Shopify's InventoryItem
         // is NOT its ProductVariant — the variant is the listing, the inventory
         // item is what a stock movement references, and Loom joins on the
         // latter. Null where we have no link; the registry falls back to
         // barcode, which is why barcode coverage gates what we send at all.
-        shopify_inventory_item_id: shopify?.externalInventoryId ?? null,
-        shopify_variant_id: shopify?.externalId ?? null,
+        shopify_inventory_item_id: shopifyNumericId(
+          shopify?.externalInventoryId,
+          "InventoryItem",
+        ),
+        shopify_variant_id: shopifyNumericId(shopify?.externalId, "ProductVariant"),
         sitoo_product_id: sitoo?.externalId ?? null,
       };
       }),
@@ -153,26 +304,21 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     // delivery carries.
     is_core: cw.isCore,
     tags: cw.tags,
-    product_type: toLoomCategory(cw.productType),
+    product_type: loomCategoryFor(cw.categoryRef ?? cw.style.categoryRef, cw.productType, {
+      asWritten: sendsCategoryAsWritten(cw.brand),
+    }),
     image: cw.seasonImages[0]?.url ?? null,
     ...customs,
     manufacturer_id: manufacturer?.manufacturer_id ?? null,
     manufacturer,
-    channels: {
-      // Loom treats loom:false as ARCHIVE — it hides the product across
-      // catalogue, order builder, curation and pricing. It is a withdrawal
-      // signal, not "not published yet", so it must express intent: true for
-      // anything we are deliberately putting on Loom, false only when we mean
-      // to withdraw it. Deriving it from whether a publication row happened to
-      // exist meant every product's FIRST push archived it on arrival.
-      loom: !archive?.has(cw.id),
-      shopify: cw.publications.some((p) => p.channel === "SHOPIFY"),
-    },
+    channels: channelsFor(cw, archive),
     dropped: entry?.cancelled ?? false,
     approved_for_production: entry?.approvedForProduction ?? false,
     prices,
     variants: cw.variants.map((v) => ({
       variant_id: v.id,
+      // See the note in buildRegistryColorway: `sku` is what Loom reads.
+      sku: v.variantSku,
       variant_sku: v.variantSku,
       barcode: v.barcode ?? null,
       dimensions: v.dim2
@@ -198,6 +344,16 @@ export interface LoomPayload {
    * natural response to that is to send it again.
    */
   event_id: string;
+  /**
+   * Opt in to Loom MOVING a variant to a different colorway.
+   *
+   * Loom's default is to refuse: the variant row is where stock, weighted
+   * average cost and every order, PO and receipt line live, so a nesting bug
+   * upstream would otherwise relocate all of it silently. Omitted entirely
+   * unless asked for — Loom requires a strict boolean `true` and treats
+   * anything else as off.
+   */
+  allow_variant_reparent?: true;
   styles: Array<{
     style_id: string;
     style_sku: string;
@@ -272,7 +428,21 @@ export function buildLoomPayloadFromColorways(
   seasonCode: string,
   archive?: Set<string>,
   eventId?: string,
-  mode: LoomMode = "full"
+  mode: LoomMode = "full",
+  /**
+   * Appended to the DERIVED event id on a retry.
+   *
+   * A failed Loom job keeps its id on Loom's side, so an identical resend
+   * returns the stale failure rather than running again. A retry after a
+   * *network* failure must keep the derived id so Loom dedupes; a retry after a
+   * *job* failure must change it. Hence a suffix rather than a fresh id.
+   */
+  eventIdSuffix?: string,
+  /**
+   * Ask Loom to re-parent variants whose colorway has changed. Only ever set
+   * for a deliberate restructure; see `allow_variant_reparent` on LoomPayload.
+   */
+  allowVariantReparent?: boolean
 ): LoomPayload {
   // Group colorways under their style.
   const build = mode === "data" ? buildRegistryColorway : buildColorway;
@@ -292,7 +462,9 @@ export function buildLoomPayloadFromColorways(
       style_name: s.styleName,
       gender: s.gender,
       unisex: s.unisex,
-      category: toLoomCategory(s.category),
+      category: loomCategoryFor(s.categoryRef, s.category, {
+        asWritten: cws.every((cw) => sendsCategoryAsWritten(cw.brand)),
+      }),
       colorways: cws.map((cw) => build(cw, archive)),
     };
   });
@@ -300,10 +472,17 @@ export function buildLoomPayloadFromColorways(
   return {
     season: loomSeasonName(seasonCode),
     mode,
+    // Present only when true. Loom reads a strict boolean, so sending `false`
+    // and sending nothing are the same thing to them — but omitting it keeps
+    // the payload honest about what this delivery is asking for.
+    ...(allowVariantReparent ? { allow_variant_reparent: true as const } : {}),
     // Derived from the delivery's contents when not supplied, so the same set
     // of products retried produces the same id. Keyed on the season Loom sees,
     // so the id and the delivery agree about what was sent.
-    event_id: eventId ?? deliveryId(loomSeasonName(seasonCode), colorways, archive),
+    event_id:
+      eventId ??
+      deliveryId(loomSeasonName(seasonCode), colorways, archive) +
+        (eventIdSuffix ? `-${eventIdSuffix}` : ""),
     styles,
   };
 }

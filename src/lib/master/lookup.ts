@@ -8,7 +8,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "@/lib/db";
-import { canonical } from "./barcode";
+import { barcodeKey, barcodeSpellings } from "./barcode";
 import { normalizeSku } from "./sku";
 
 /**
@@ -117,10 +117,11 @@ export async function lookupProducts(
   const q = query.trim();
   if (!q) return { query, results: [], channelSnapshot: null, truncated: false };
 
-  const asBarcode = canonical(q);
+  // Either spelling finds it: the master holds UPC-As as 12 and as 13 digits.
+  const asBarcode = barcodeSpellings(q);
   const colorways = await prisma.colorway.findMany({
-    where: asBarcode
-      ? { variants: { some: { barcode: asBarcode } } }
+    where: asBarcode.length
+      ? { variants: { some: { barcode: { in: asBarcode } } } }
       : {
           OR: [
             { colorwaySku: { contains: q, mode: "insensitive" } },
@@ -153,11 +154,11 @@ export async function lookupProducts(
     sizes: c.variants
       .map((v) => {
         const key = normalizeSku(v.variantSku);
-        const origio = canonical(v.barcode);
+        const origio = barcodeKey(v.barcode);
         const pick = (m: Index): ChannelValue => {
           const got = m.get(key);
           const raw = got === undefined || got === "" ? null : got;
-          const c = canonical(raw);
+          const c = barcodeKey(raw);
           return { raw, canonical: c, invalid: raw !== null && c === null };
         };
         const sitoo = pick(ch.sitoo);

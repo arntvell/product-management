@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { shopifyGraphQL } from "@/lib/shopify/client";
-import { canonical } from "@/lib/master/barcode";
+import { barcodeKey } from "@/lib/master/barcode";
 import { normalizeSku } from "@/lib/master/sku";
 import { applyAliasUpdates } from "@/lib/sitoo/link";
 import { bulkUpdateById } from "@/lib/db-bulk";
@@ -140,7 +140,7 @@ export async function linkShopifyVariants(
       const k = normalizeSku(r.sku);
       (bySku.get(k) ?? bySku.set(k, []).get(k)!).push(r);
     }
-    const bc = canonical(r.barcode);
+    const bc = barcodeKey(r.barcode);
     if (bc) (byBarcode.get(bc) ?? byBarcode.set(bc, []).get(bc)!).push(r);
   }
 
@@ -207,7 +207,7 @@ export async function linkShopifyVariants(
     let hits = bySku.get(normalizeSku(v.variantSku)) ?? [];
     let how: "sku" | "barcode" = "sku";
     if (!hits.length) {
-      const bc = canonical(v.barcode);
+      const bc = barcodeKey(v.barcode);
       if (bc) {
         hits = byBarcode.get(bc) ?? [];
         how = "barcode";

@@ -36,8 +36,27 @@ export interface LoomPushResult {
     created?: number;
     updated?: number;
     archived?: number;
+    /**
+     * What the job did to VARIANTS. `updated` counts colorway rows only, so an
+     * identity-only delivery that worked perfectly reports `updated: 0` — which
+     * we previously read as "nothing landed" and recorded in the schema as
+     * storage being unproven. Confirmed by Loom 2026-09-17.
+     */
+    variantsCreated?: number;
+    variantsUpdated?: number;
+    variantsMoved?: number;
+    variantsMoveRefused?: number;
+    /** Moved SKUs still not reconciled in Pio. Empty is the success case. */
+    pioReparentPending?: string[];
+    /** Prices actually stored. A list Loom does not know is dropped in silence. */
+    pricesCreated?: number;
+    pricesUpdated?: number;
+    /** Per-item refusals. Empty is the only good value. */
+    itemErrors?: unknown[];
     fatalError?: string;
     shapeWarnings?: string[];
+    /** Non-fatal by contract — never let these fail a push. */
+    warnings?: string[];
     /** The job never settled inside our polling window. */
     unconfirmed?: boolean;
   };
@@ -79,8 +98,31 @@ export interface LoomPushOptions {
    * products to be applied again.
    */
   eventId?: string;
+  /**
+   * Appended to the DERIVED delivery id, for a retry after a FAILED job.
+   *
+   * A failed job keeps its id on Loom's side, so an identical resend returns the
+   * stale failure instead of running again. A retry after a *network* failure
+   * must keep the derived id so Loom dedupes it; a retry after a *job* failure
+   * must change it. A suffix distinguishes the two without abandoning the
+   * content-derived id entirely.
+   */
+  eventIdSuffix?: string;
   /** "full" for a whole season, "data" for a targeted update. */
   mode?: LoomMode;
+  /**
+   * Ask Loom to MOVE a variant whose parent colorway has changed, instead of
+   * refusing the whole colorway.
+   *
+   * Off by default, and deliberately so — Loom's refusal is the guard that stops
+   * an upstream nesting bug from silently relocating stock, cost and order
+   * history. Set it only for a reviewed restructure, such as splitting a
+   * collapsed vintage colorway into one colorway per garment.
+   *
+   * Loom refuses a move regardless of this flag when the variant id already
+   * belongs to a different stable row, or when no variant id asserts the move.
+   */
+  allowVariantReparent?: boolean;
 }
 
 export async function pushColorwaysToLoom(
@@ -103,6 +145,20 @@ export async function pushColorwaysToLoom(
   for (const id of colorwayIds) {
     const cw = loadedById.get(id);
     if (!cw) {
+      skipped.push({ colorwayId: id, reason: `not in season ${seasonCode}` });
+      continue;
+    }
+    // The check the comment above always promised. loadColorwaysForLoom filters
+    // its INCLUDES by season, not the colorway, so the branch above only ever
+    // caught an id that did not exist. A colorway with no SeasonEntry in this
+    // season was built anyway — prices, entry and image all empty — and filed
+    // on Loom under the season named here. With the batch's CONTINUITY fallback
+    // that put new FW26 product on Loom's Archive shelf with `prices: {}`, and
+    // the job reported success.
+    //
+    // An archived colorway is exempt for the same reason it bypasses readiness
+    // below: a withdrawal has to reach Loom, and it is not being published.
+    if (!cw.archived && cw.entries.length === 0) {
       skipped.push({ colorwayId: id, reason: `not in season ${seasonCode}` });
       continue;
     }
@@ -146,15 +202,27 @@ export async function pushColorwaysToLoom(
   // add more, but cannot send an archived product as published by omission.
   const archive = new Set<string>(opts.archiveColorwayIds ?? []);
   for (const c of sendable) if (c.archived) archive.add(c.id);
-  const payload = buildLoomPayloadFromColorways(sendable, seasonCode, archive, opts.eventId, opts.mode);
+  const payload = buildLoomPayloadFromColorways(
+    sendable,
+    seasonCode,
+    archive,
+    opts.eventId,
+    opts.mode,
+    opts.eventIdSuffix,
+    opts.allowVariantReparent
+  );
 
   if (opts.dryRun) {
     // Nothing leaves the process and no ChannelPublication is touched.
     const all = payload.styles.flatMap((s) => s.colorways);
-    // The registry payload carries identity only, so the merchandising figures
-    // below simply do not apply to it. Narrow once rather than guarding each.
+    // The merchandising figures below belong to the CATALOGUE payload only.
+    //
+    // This narrowed on `"prices" in c`, which stopped working the moment the
+    // registry payload gained prices. `registry_only` is the field that actually
+    // means "this is the registry shape" — it is the flag Loom itself is meant
+    // to gate on — so narrowing on its absence says what was always intended.
     const cat = all.filter(
-      (c): c is Extract<typeof c, { prices: unknown }> => "prices" in c
+      (c): c is Extract<typeof c, { is_core: unknown }> => !("registry_only" in c)
     );
     const currencies = new Set<string>();
     for (const c of cat) for (const k of Object.keys(c.prices)) currencies.add(k);
@@ -223,8 +291,17 @@ export async function pushColorwaysToLoom(
         created: settled.summary?.created,
         updated: settled.summary?.updated,
         archived: settled.summary?.archived,
+        variantsCreated: settled.summary?.variantsCreated,
+        variantsUpdated: settled.summary?.variantsUpdated,
+        variantsMoved: settled.summary?.variantsMoved,
+        variantsMoveRefused: settled.summary?.variantsMoveRefused,
+        pioReparentPending: settled.summary?.pioReparentPending,
+        pricesCreated: settled.summary?.pricesCreated,
+        pricesUpdated: settled.summary?.pricesUpdated,
+        itemErrors: settled.summary?.itemErrors,
         fatalError: settled.summary?.fatalError,
         shapeWarnings: settled.summary?.shapeWarnings,
+        warnings: settled.summary?.warnings,
         unconfirmed: settled.status === "running" || settled.status === "queued",
       };
       // Only a finished, successful job means published. An errored job clearly
@@ -233,6 +310,10 @@ export async function pushColorwaysToLoom(
       // 26 August failure went unnoticed in the first place.
       if (settled.status === "error") ok = false;
       if (job.unconfirmed) ok = false;
+      // A refused move skips the whole colorway in Loom's preflight, so the
+      // products simply are not there — but the job itself still reports done.
+      // Marking those published would record a state Loom does not hold.
+      if ((job.variantsMoveRefused ?? 0) > 0) ok = false;
     }
   }
 

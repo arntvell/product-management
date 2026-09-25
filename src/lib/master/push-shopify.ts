@@ -14,6 +14,13 @@ import {
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
 import { shopifyMissing, shopifyBlockingMissing } from "./readiness";
+import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
+import {
+  adoptExistingShopifyProduct,
+  recordShopifyVariantRefs,
+  type AdoptionRoute,
+  type VariantRefResult,
+} from "@/lib/shopify/adopt";
 
 // Fetch the live product's fields we must MERGE with (not overwrite): tags a
 // merchant added in Shopify admin, and current publish status.
@@ -123,7 +130,16 @@ interface ProductSetResult {
       id: string;
       handle: string;
       status: string;
-      variants: { edges: { node: { id: string; sku: string; price: string } }[] };
+      variants: {
+        edges: {
+          node: {
+            id: string;
+            sku: string | null;
+            barcode: string | null;
+            inventoryItem: { id: string } | null;
+          };
+        }[];
+      };
     } | null;
     userErrors: { field: string[]; message: string }[];
   };
@@ -137,6 +153,10 @@ export interface PushResult {
   metafields: number;
   warnings: string[];
   adminUrl: string;
+  /** Set when a product we thought was new turned out to already exist. */
+  adopted?: AdoptionRoute;
+  /** Per-variant identity recorded from the response. */
+  variantRefs?: VariantRefResult;
 }
 
 export async function pushColorwayToShopify(
@@ -155,14 +175,34 @@ export async function pushColorwayToShopify(
    * anyone re-pushed a product. Clearing a field live is a deliberate act, so it
    * takes a deliberate flag.
    */
-  clearEmptied = false
+  clearEmptied = false,
+  /**
+   * Force the customs write on or off for this call, overriding
+   * SHOPIFY_CUSTOMS_WRITE. The backfill and the dry-run preview need to ask for
+   * it explicitly; nothing else should.
+   */
+  allowCustoms?: boolean
 ): Promise<PushResult> {
   const cw = await getColorwayForPublish(id, seasonCode);
   if (!cw) throw new Error("Colorway not found");
   const preview = buildShopifyPreview(cw);
 
-  const existing = cw.publications.find((p) => p.channel === "SHOPIFY");
-  const action: "create" | "update" = existing?.externalId ? "update" : "create";
+  // Never create blind. ChannelPublication is OUR record of what Shopify holds,
+  // and a crash between productSet returning and the publication write leaves
+  // Shopify with a product we have no row for — at which point this branch would
+  // say "create" and make a second one. Ask Shopify instead.
+  const publication = cw.publications.find((p) => p.channel === "SHOPIFY");
+  let externalId = publication?.externalId ?? null;
+  let adopted: AdoptionRoute | undefined;
+  if (!externalId) {
+    const found = await adoptExistingShopifyProduct(id);
+    if (found) {
+      externalId = found.productGid;
+      adopted = found.via;
+    }
+  }
+  const existing = externalId ? { externalId } : null;
+  const action: "create" | "update" = externalId ? "update" : "create";
 
   // --- Readiness gate: never push a product that can't publish correctly. ---
   const hasVariants = preview.variants.length > 0;
@@ -193,6 +233,11 @@ export async function pushColorwayToShopify(
     );
 
   const warnings: string[] = [];
+  if (adopted)
+    warnings.push(
+      `Shopify already held this product (found by ${adopted}) — updated it instead of creating a second one. ` +
+        `The master's publication record was missing; it has been repaired.`
+    );
   if (!seasonCode)
     warnings.push("Pushed without a season — price is not season-scoped; verify it's correct.");
   const metafields = await buildMetafields(cw, warnings);
@@ -223,6 +268,30 @@ export async function pushColorwayToShopify(
         { name: "Size", position: 1, values: dedupe(preview.variants.map((v) => v.size)).map((name) => ({ name })) },
       ];
 
+  // Customs. Shopify has never received any of this — `sku` was the only
+  // inventoryItem field ever written — so it ships behind a flag and is inert
+  // until SHOPIFY_CUSTOMS_WRITE=on. Every flow funnels through this function
+  // (single push, bulk push, the orchestrator), so turning it on covers them all.
+  //
+  // Nothing is emitted for a value we do not have: omission leaves Shopify's
+  // value alone, the same policy clearEmptied applies to metafields, and
+  // productSet is declarative enough that a null would blank a merchant's data.
+  const customsEnabled = allowCustoms ?? process.env.SHOPIFY_CUSTOMS_WRITE === "on";
+  const customs = resolveCustoms(cw);
+  const customsInput = customsEnabled ? toInventoryItemInput(customs) : {};
+  if (customsEnabled && customs.countryUnresolved)
+    warnings.push(
+      `Country of origin "${customs.countryUnresolved}" is not a country code Shopify ` +
+        `recognises, so it was omitted. A wrong code would reject the whole product.`
+    );
+
+  // Track inventory on everything we stock. Shopify creates variants untracked
+  // unless told otherwise, and an untracked item ignores the stock Pio, Loom and
+  // Sitoo sync onto it — every product Origio created before this landed
+  // untracked. Services (gift wrap) carry no stock and are left as they are. On
+  // an update this is a no-op for an item that is already tracked.
+  const tracked = cw.kind !== "SERVICE";
+
   const variants = preview.variants.map((v) => ({
     optionValues: is2D
       ? [
@@ -231,7 +300,7 @@ export async function pushColorwayToShopify(
         ]
       : [{ optionName: "Size", name: v.size }],
     ...(v.price ? { price: v.price } : {}),
-    inventoryItem: { sku: v.sku },
+    inventoryItem: { sku: v.sku, ...(tracked ? { tracked: true } : {}), ...customsInput },
     ...(v.barcode ? { barcode: v.barcode } : {}),
   }));
 
@@ -448,10 +517,39 @@ export async function pushColorwayToShopify(
   const product = res.productSet?.product;
   if (!product) throw new Error("productSet returned no product");
 
-  // Clear metafields the user emptied in master (productSet only upserts the
-  // keys it's given; it never removes omitted ones). Skip keys we just set.
-  // Only meaningful on update — a fresh create has nothing to delete — and only
-  // when the caller asked for it: see clearEmptied.
+  // Identity first, before the metafield tidy-up below — a failure there must
+  // not cost us the variant and inventory-item ids. Until now these rows came
+  // only from the linker, so a freshly created product had no InventoryItem gid
+  // until someone remembered to run it, and Loom's registry joins on that gid.
+  let variantRefs: VariantRefResult | undefined;
+  try {
+    variantRefs = await recordShopifyVariantRefs(
+      id,
+      product.variants.edges.map((e) => e.node)
+    );
+    if (variantRefs.unmatched.length)
+      warnings.push(
+        `Shopify returned ${variantRefs.unmatched.length} variant SKU(s) the master does not hold: ${variantRefs.unmatched.join(", ")}.`
+      );
+    if (variantRefs.missing.length)
+      warnings.push(
+        `Shopify did not return ${variantRefs.missing.length} master variant(s): ${variantRefs.missing.join(", ")}.`
+      );
+    if (variantRefs.linked && !variantRefs.inventoryLinked)
+      warnings.push(
+        "No InventoryItem ids came back — Loom's stock registry has nothing to join on for this product."
+      );
+  } catch (err) {
+    warnings.push(
+      `Could not record Shopify variant identity: ${err instanceof Error ? err.message : String(err)}. Run the Shopify linker.`
+    );
+  }
+
+  // Clear metafields the user emptied in master. productSet does delete a key
+  // it is not given, but the carry-forward above deliberately keeps every key
+  // the master does not manage, so an emptied managed key needs an explicit
+  // delete. Skip keys we just set. Only meaningful on update — a fresh create
+  // has nothing to delete — and only when the caller asked for it.
   if (action === "update" && clearEmptied) {
     const setKeys = new Set(metafields.map((m) => m.key));
     const toDelete = preview.emptyMetafieldKeys.filter((k) => !setKeys.has(k));
@@ -498,6 +596,8 @@ export async function pushColorwayToShopify(
     metafields: metafields.length,
     warnings,
     adminUrl: `https://${store}/admin/products/${numericId}`,
+    ...(adopted ? { adopted } : {}),
+    ...(variantRefs ? { variantRefs } : {}),
   };
 }
 

@@ -4,6 +4,7 @@
 // NOT write to Shopify — the live push is wired separately and run deliberately.
 import { prisma } from "@/lib/db";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
+import { channelProductTitle } from "./channel-title";
 
 // seasonCode scopes the price to the season the user is pushing FROM, so we
 // never send another season's price. Omitted -> all prices (legacy behaviour,
@@ -12,7 +13,11 @@ export async function getColorwayForPublish(id: string, seasonCode?: string) {
   return prisma.colorway.findUnique({
     where: { id },
     include: {
-      style: true,
+      // The modelled category, at both levels — `shopifyProductType` on it is
+      // the deliberate spelling, and without the join the free-text column is
+      // the only thing this can send.
+      categoryRef: true,
+      style: { include: { categoryRef: true } },
       brand: true,
       channelContent: true,
       variants: { orderBy: { sizeLabel: "asc" } },
@@ -98,28 +103,6 @@ const SINGLE_REFERENCE_FIELDS: Array<{ key: string; type: string; get: (c: Publi
   { key: "recommended_product_from_collection", type: "collection_reference", get: (c) => c.recommendedCollectionId },
   { key: "model_info", type: "metaobject_reference", get: (c) => c.modelInfoId },
 ];
-
-/**
- * The customer-facing product title: style then colourway — "Barnes Japan Dawn",
- * not "Japan Dawn".
- *
- * `Colorway.name` holds the colourway alone ("Japan Dawn"), because the style is
- * a separate record. Shopify has no style/colourway split — the product IS the
- * colourway — so the title has to be composed, and 117 of the 128 FW26 products
- * live on Shopify are titled that way already. Sending the bare colourway name
- * renamed them on every update.
- *
- * Skipped when the name already leads with the style, so an imported colorway
- * named "Barnes Japan Dawn" does not become "Barnes Barnes Japan Dawn".
- */
-export function shopifyTitle(styleName: string, colorwayName: string): string {
-  const style = styleName.trim();
-  const name = colorwayName.trim();
-  if (!style) return name;
-  if (!name) return style;
-  if (name.toLowerCase().startsWith(style.toLowerCase())) return name;
-  return `${style} ${name}`;
-}
 
 export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
   const warnings: string[] = [];
@@ -221,10 +204,16 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
     externalId: shopifyPub?.externalId ?? null,
     unisex,
     product: {
-      title: shopifyTitle(cw.style.styleName, cw.name),
+      title: channelProductTitle(cw),
       handle: cw.colorwaySku.toLowerCase(),
       vendor: cw.vendor,
-      productType: cw.productType,
+      // A mapped category wins over the free text: someone chose the Shopify
+      // spelling on the categories screen, and the text column is 76 values of
+      // Cin7 history. Blank mapping falls through, so nothing regresses.
+      productType:
+        cw.categoryRef?.shopifyProductType ??
+        cw.style.categoryRef?.shopifyProductType ??
+        cw.productType,
       status: cw.status,
       tags,
     },

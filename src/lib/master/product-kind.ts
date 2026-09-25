@@ -20,7 +20,7 @@
 
 import type { ProductKind } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import { recordDecisions } from "./provenance";
+import { recordDecisions, lockedFields } from "./provenance";
 
 export interface KindRule {
   kind: ProductKind;
@@ -119,6 +119,8 @@ export interface KindBackfillResult {
   /** Rows a rule actively decided — attribution written for each. */
   attributed: number;
   changed: number;
+  /** Rows a rule WOULD have changed but a human had settled. Left alone. */
+  locked: number;
   byKind: Array<{ kind: ProductKind; count: number; reason: string | null }>;
   examples: Array<{ colorwaySku: string; name: string; from: ProductKind; to: ProductKind; reason: string }>;
   dryRun: boolean;
@@ -130,6 +132,13 @@ export interface KindBackfillResult {
  * Safe to re-run: it only writes rows whose classification differs from what is
  * stored, and it attributes each write so a later reviewer can see the rule that
  * produced it rather than guessing.
+ *
+ * A MANUAL lock on `kind` wins over every rule here. Without that, a person's
+ * decision has a shelf life of "until the next classifier run" — and the case
+ * is not hypothetical: an individual vintage garment created as MERCHANDISE
+ * carries an `EXT-VN-…` SKU, which KIND_RULES classifies as AGGREGATE (the
+ * store-vintage bulk buckets). It would flip back silently, days later, with
+ * nothing to connect the change to its cause.
  */
 export async function backfillProductKind(
   opts: { dryRun?: boolean } = {}
@@ -137,13 +146,26 @@ export async function backfillProductKind(
   const colorways = await prisma.colorway.findMany({
     select: { id: true, colorwaySku: true, name: true, productType: true, kind: true },
   });
+  const locks = await lockedFields(
+    "colorway",
+    colorways.map((c) => c.id)
+  );
 
   const counts = new Map<string, { kind: ProductKind; count: number; reason: string | null }>();
   const examples: KindBackfillResult["examples"] = [];
   const updates = new Map<ProductKind, string[]>();
   const decisions: Parameters<typeof recordDecisions>[0] = [];
 
+  let locked = 0;
+
   for (const cw of colorways) {
+    // A human settled this one. Rules do not overrule a decision; they fill in
+    // where nobody has decided. Skipped before classification so a locked row
+    // does not even get a fresh rule attribution written over the human's.
+    if (locks.get(cw.id)?.has("kind")) {
+      locked++;
+      continue;
+    }
     const { kind, reason } = classifyKind({
       sku: cw.colorwaySku,
       name: cw.name,
@@ -202,6 +224,7 @@ export async function backfillProductKind(
     scanned: colorways.length,
     attributed: decisions.length,
     changed,
+    locked,
     byKind: [...counts.values()].sort((a, b) => b.count - a.count),
     examples,
     dryRun: Boolean(opts.dryRun),

@@ -18,67 +18,323 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model Brand {
-  id        String         @id @default(cuid())
-  name      String         @unique // "Livid", external brand names
-  isLivid   Boolean        @default(false)
-  gender    String? // default gender for the brand's styles
-  styles    Style[]
-  colorways Colorway[]
-  template  BrandTemplate?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id             String            @id @default(cuid())
+  name           String            @unique // "Livid", external brand names
+  isLivid        Boolean           @default(false)
+  gender         String? // default gender for the brand's styles
+  // The token this brand uses in SKUs, when the abbreviation rule does not
+  // produce it. Required, not decorative: abbreviate("Vintage", 4) gives VNTG,
+  // but the corpus writes EXT-VN-; Paraboot is PB in every one of its rows
+  // while the rule gives PRBT. Null means derive. Seed it from what a brand
+  // already uses, never a guess — a new style SKU is never rewritten
+  // (roadmap 2.2), so a wrong token diverges that brand permanently.
+  skuToken       String?
+  styles         Style[]
+  colorways      Colorway[]
+  template       BrandTemplate?
+  drafts         ProductDraft[]
+  /// Duplicate guard: lowercased, punctuation and whitespace stripped, "&" spelled
+  /// out. NOT unique yet — `P.F. Candle` and `P.F. Candles` both exist, with 27
+  /// and 32 colorways. The unique index waits until the merges are done.
+  normalizedName String?
+  archived       Boolean           @default(false)
+  mergedIntoId   String?
+  mergedInto     Brand?            @relation("BrandMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom     Brand[]           @relation("BrandMerge")
+  channelRefs    BrandChannelRef[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 }
 
 model Manufacturer {
-  id           String          @id @default(cuid())
-  threadflowId String?         @unique // Threadflow manufacturer_id (stable external key)
-  name         String
-  addrLine1    String?
-  addrLine2    String?
-  zip          String?
-  city         String?
-  country      String?
-  colorways    Colorway[]
-  templates    BrandTemplate[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  id                  String            @id @default(cuid())
+  threadflowId        String?           @unique // Threadflow manufacturer_id (stable external key)
+  name                String
+  addrLine1           String?
+  addrLine2           String?
+  zip                 String?
+  city                String?
+  country             String?
+  /// Sitoo manufacturerid. threadflowId was the only external key a manufacturer
+  /// had; scripts/reconcile/fetch.py already pulls manufacturerid into snapshots
+  /// and nothing consumed it.
+  sitooManufacturerId String?           @unique
+  colorways           Colorway[]
+  templates           BrandTemplate[]
+  channelRefs         BrandChannelRef[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 }
 
 // Defaults for creating new products under a brand (plan §6). External brands
 // (footwear, accessories, scents, home…) reuse a saved template so only the
 // per-product bits are entered; customs defaults here flow to Loom.
 model BrandTemplate {
-  id                 String        @id @default(cuid())
-  brandId            String        @unique
-  brand              Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  category           String?
-  gender             String?
-  unisex             Boolean       @default(false)
-  channels           Channel[]     @default([])
-  hsCode             String?
-  customsDescription String?
-  weightKg           Decimal?      @db.Decimal(8, 3)
-  fiberComposition   String?
-  countryOfOrigin    String?
-  manufacturerId     String?
-  manufacturer       Manufacturer? @relation(fields: [manufacturerId], references: [id])
-  sizes              String[]      @default([]) // default size set, e.g. XS,S,M,L,XL or 39-45
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                  String        @id @default(cuid())
+  brandId             String        @unique
+  brand               Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category            String?
+  gender              String?
+  unisex              Boolean       @default(false)
+  channels            Channel[]     @default([])
+  hsCode              String?
+  customsDescription  String?
+  weightKg            Decimal?      @db.Decimal(8, 3)
+  fiberComposition    String?
+  countryOfOrigin     String?
+  manufacturerId      String?
+  manufacturer        Manufacturer? @relation(fields: [manufacturerId], references: [id])
+  // DEPRECATED — superseded by defaultSizeSystem. Kept populated so the old
+  // brand-product-builder and buildProductsForBrand keep working through the
+  // cutover; read through resolveBrandSizes(). Drop the column only once every
+  // row is empty.
+  sizes               String[]      @default([]) // default size set, e.g. XS,S,M,L,XL or 39-45
+  defaultSizeSystemId String?
+  defaultSizeSystem   SizeSystem?   @relation(fields: [defaultSizeSystemId], references: [id])
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Size systems
+// ---------------------------------------------------------------------------
+
+/// A named, ordered size run — "EU shoes 39-46", "Alpha", "One size",
+/// "Jeans W/L". Editable after creation: a size is ARCHIVED, never deleted, and
+/// `Variant` stores plain strings with no FK here, so neither archiving nor
+/// deleting an entry can orphan a garment that was minted from it.
+model SizeSystem {
+  id        String            @id @default(cuid())
+  name      String            @unique
+  kind      SizeSystemKind    @default(ONE_D)
+  note      String?
+  archived  Boolean           @default(false)
+  entries   SizeSystemEntry[]
+  templates BrandTemplate[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+enum SizeSystemKind {
+  ONE_D // S/M/L, 39..46, 9..12.5
+  TWO_D // waist x length
+  ONE_SIZE // exactly one entry, OS
+}
+
+/// One size. Carries exactly what a Variant would, PLUS the token the SKU uses —
+/// and the difference is load-bearing:
+///
+///   sizeLabel "W32/L34"  dim1 "32"  dim2 "34"  skuToken "3234"
+///   sizeLabel "9.5"      dim1 "9.5" dim2 null  skuToken "9.5"
+///
+/// 2-D sizes MUST spell as a trailing four-digit token. Both importers parse
+/// `/^\d{4}$/` as waist+length (threadflow/sync.ts deriveSize, cin7/import.ts)
+/// and parseSku treats it as a size; `-W32-L32` would make a new 2-D garment
+/// invisible to duplicate detection and to both importers. The token is stored
+/// rather than derived because abbreviate("9.5") returns "95", so a size must
+/// never pass through it, and because one odd size can then be corrected
+/// without a code change.
+model SizeSystemEntry {
+  id           String     @id @default(cuid())
+  sizeSystemId String
+  sizeSystem   SizeSystem @relation(fields: [sizeSystemId], references: [id], onDelete: Cascade)
+  sizeLabel    String
+  dim1         String
+  dim2         String?
+  skuToken     String
+  position     Int
+  archived     Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@unique([sizeSystemId, sizeLabel])
+  @@index([sizeSystemId, position])
+}
+
+// ---------------------------------------------------------------------------
+// Categories — one vocabulary, mapped outward
+// ---------------------------------------------------------------------------
+
+/// What a product IS, as one controlled list.
+///
+/// The master carries 76 distinct `Style.category` strings because Cin7's
+/// category field flowed straight through, and the only mapping that ever
+/// existed is TO_LOOM in loom-category.ts. Sitoo has real category ids and a
+/// hierarchy; Shopify has a free `productType` string and no id at all. So the
+/// master has to hold the vocabulary and map outward, rather than hope three
+/// systems spell things the same way.
+///
+/// `active` and `archived` are different states on purpose: "not offered in the
+/// builder yet" is not the same as "retired, but historic products still point
+/// at it".
+model Category {
+  id        String     @id @default(cuid())
+  slug      String     @unique // normalised name: lowercase, hyphenated
+  name      String
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  /// Materialised ancestry ("outerwear/jackets") so the tree renders and sorts
+  /// without a recursive query.
+  path      String
+  depth     Int        @default(0)
+  sortOrder Int        @default(0)
+
+  active   Boolean @default(true)
+  archived Boolean @default(false)
+
+  mergedIntoId String?
+  mergedInto   Category?  @relation("CategoryMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom   Category[] @relation("CategoryMerge")
+
+  /// OUTBOUND values — what we write to each channel. Null means "not decided",
+  /// and the push falls back (Shopify: Colorway.productType; Loom:
+  /// toLoomCategory()). Never send an empty string.
+  shopifyProductType String?
+  loomCategory       String? // must be one of LOOM_CATEGORIES
+  sitooCategoryId    String? // Sitoo defaultcategoryid
+
+  channelMaps CategoryChannelMap[]
+  styles      Style[]
+  colorways   Colorway[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([active, archived])
+  @@index([path])
+}
+
+/// One row per external category value we have OBSERVED, and which Category it
+/// resolves to. `categoryId` null means pulled but not yet reviewed.
+model CategoryChannelMap {
+  id           String    @id @default(cuid())
+  /// SHOPIFY | SITOO | LOOM | ORIGIO. A plain string, not the Channel enum:
+  /// ORIGIO is not a push target, and Channel gates eligibility elsewhere.
+  system       String
+  /// Normalised match key, so Shopify's "T-Shirt" and "t-shirt" collapse to one
+  /// row. Sitoo uses its numeric categoryid verbatim — already canonical.
+  externalKey  String
+  /// The raw spelling, as the channel holds it. Shown in the review UI.
+  externalName String
+  /// Sitoo's hierarchy, "Clothing > Tops > T-shirts". Null elsewhere.
+  externalPath String?
+  categoryId   String?
+  category     Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// How many products carry this value. Drives the order of the review queue.
+  productCount Int       @default(0)
+  firstSeenAt  DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+
+  @@unique([system, externalKey])
+  @@index([categoryId])
+  @@index([system, categoryId])
+}
+
+/// Every spelling of a brand we have OBSERVED in a channel, and which Brand it
+/// resolves to. Inbound only — the outbound value lives on Brand.
+///
+/// @@unique([system, externalKey]) is the duplicate guard: two Brands cannot
+/// both claim one Shopify vendor string.
+model BrandChannelRef {
+  id             String        @id @default(cuid())
+  system         String // SHOPIFY | SITOO | LOOM
+  /// Normalised match key. Sitoo: the numeric manufacturerid. Shopify and Loom:
+  /// the normalised name, because neither has an id for a brand.
+  externalKey    String
+  externalName   String
+  /// Sitoo manufacturerid. ALWAYS null for Shopify — vendor is a free string
+  /// with no id — and for Loom, where brand is a name we assert, not fetch.
+  externalId     String?
+  brandId        String?
+  brand          Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  /// Sitoo's "manufacturer" is used for both brands and factories, so the review
+  /// UI has to ask which this is rather than guess.
+  role           String        @default("BRAND") // BRAND | MANUFACTURER | IGNORE
+  manufacturerId String?
+  manufacturer   Manufacturer? @relation(fields: [manufacturerId], references: [id], onDelete: SetNull)
+  productCount   Int           @default(0)
+  firstSeenAt    DateTime      @default(now())
+  lastSeenAt     DateTime      @default(now())
+
+  @@unique([system, externalKey])
+  @@index([brandId])
+  @@index([system, externalId])
+}
+
+// ---------------------------------------------------------------------------
+// Product drafts — the creation wizard's state
+// ---------------------------------------------------------------------------
+
+/// A creation session that survives a crash, a deploy or a closed laptop.
+///
+/// The payload is ONE JSON document rather than a normalised shadow of
+/// Style/Colorway/Variant, because a half-entered product is not a product: it
+/// has no SKU yet, sometimes no style, sometimes no brand. Normalising it would
+/// mean nullable everything plus a second set of unique indexes fighting the
+/// real ones. The real indexes on styleSku / colorwaySku / variantSku / barcode
+/// stay the only idempotency backstop; see finalize.ts.
+model ProductDraft {
+  id            String             @id @default(cuid())
+  title         String // "Paraboot — 3 colourways", for the drafts list
+  status        ProductDraftStatus @default(DRAFT)
+  /// Which step to reopen on: brand | style | colorways | sizes | prices |
+  /// barcodes | review.
+  step          String             @default("brand")
+  /// Payload shape version. Drafts outlive deploys, so parseDraftPayload()
+  /// migrates forward or refuses rather than crashing on a field that moved.
+  schemaVersion Int                @default(1)
+  /// Compare-and-swap token for autosave. A PUT carrying a stale revision is
+  /// rejected, so a second tab cannot silently overwrite the first.
+  revision      Int                @default(0)
+  payload       Json
+
+  brandId  String?
+  brand    Brand?    @relation(fields: [brandId], references: [id])
+  seasonId String?
+  season   Season?   @relation(fields: [seasonId], references: [id])
+  /// What this draft will publish to. Per-channel push OUTCOME is not stored
+  /// here — ChannelPublication and VariantChannelRef already model it, and a
+  /// retry reads them back through createdColorwayIds. A second record of one
+  /// fact is how the two drift.
+  channels Channel[] @default([])
+
+  /// Every id minted at the DRAFT -> FINALIZING claim, so a retry reuses them
+  /// and the resume probe has something definite to look for.
+  reservedIds        Json?
+  finalizeAttempts   Int       @default(0)
+  startedFinalizeAt  DateTime?
+  finalizeError      String?
+  completedAt        DateTime?
+  createdStyleIds    String[]  @default([])
+  createdColorwayIds String[]  @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, updatedAt])
+}
+
+enum ProductDraftStatus {
+  DRAFT // being edited
+  FINALIZING // claimed; ids reserved; the transaction may or may not have committed
+  COMPLETED // rows exist in the master
+  DISCARDED // abandoned. Never deleted — an allocated barcode needs a paper trail
 }
 
 model Season {
-  id           String        @id @default(cuid())
-  code         String        @unique // "SS27", "FW26"
+  id           String         @id @default(cuid())
+  code         String         @unique // "SS27", "FW26"
   name         String?
-  threadflowId String?       @unique // maps to TF seasonId
-  kind         SeasonKind    @default(REGULAR) // REGULAR | CONTINUITY (carry-over / season-less)
-  sortOrder    Int           @default(0)
+  threadflowId String?        @unique // maps to TF seasonId
+  kind         SeasonKind     @default(REGULAR) // REGULAR | CONTINUITY (carry-over / season-less)
+  sortOrder    Int            @default(0)
   entries      SeasonEntry[]
   prices       Price[]
   seasonImages SeasonImage[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  drafts       ProductDraft[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +350,11 @@ model Style {
   gender             String?
   unisex             Boolean    @default(false)
   category           String     @default("Uncategorized")
+  /// The modelled category. `category` (String) stays and is dual-written:
+  /// every existing consumer reads it, and retiring the text column is a
+  /// separate decision from introducing the model.
+  categoryId         String?
+  categoryRef        Category?  @relation(fields: [categoryId], references: [id])
   brandId            String?
   brand              Brand?     @relation(fields: [brandId], references: [id])
   // Customs block (TF exposes these at style level; Loom wants them per
@@ -107,6 +368,7 @@ model Style {
   updatedAt          DateTime   @updatedAt
 
   @@index([brandId])
+  @@index([categoryId])
 }
 
 model Colorway {
@@ -119,6 +381,8 @@ model Colorway {
   swatchHex       String?
   swatchImageUrl  String?
   productType     String?
+  categoryId      String?
+  categoryRef     Category?     @relation(fields: [categoryId], references: [id])
   styleId         String
   style           Style         @relation(fields: [styleId], references: [id])
   brandId         String? // Loom needs brand per product (externals)
@@ -176,12 +440,14 @@ model Colorway {
   channelContent ChannelContent[]
   seasonImages   SeasonImage[]
 
-  archived  Boolean  @default(false) // whole-channel archive (plan §8)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  archived       Boolean         @default(false) // whole-channel archive (plan §8)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  pushBatchItems PushBatchItem[]
 
   @@index([styleId])
   @@index([brandId])
+  @@index([categoryId])
   @@index([manufacturerId])
 }
 
@@ -291,16 +557,76 @@ model MediaAsset {
 // ---------------------------------------------------------------------------
 
 model ChannelPublication {
-  id             String    @id @default(cuid())
-  colorwayId     String
-  colorway       Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
-  channel        Channel // SHOPIFY | LOOM
-  published      Boolean   @default(false)
-  externalId     String? // Shopify product GID / Loom key once pushed
-  lastPushedAt   DateTime?
-  lastPushStatus String?
+  id                   String    @id @default(cuid())
+  colorwayId           String
+  colorway             Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  channel              Channel // SHOPIFY | LOOM
+  published            Boolean   @default(false)
+  externalId           String? // Shopify product GID / Loom key once pushed
+  lastPushedAt         DateTime?
+  lastPushStatus       String?
+  /// When this colorway's CHANNEL IDS (shopify_inventory_item_id,
+  /// shopify_variant_id, sitoo_product_id) were last TRANSMITTED to Loom.
+  /// Separate from lastPushedAt because a push that predates the ids carried
+  /// none. It records SENT, never STORED: Loom answered `updated: 0` to all 355
+  /// identity rows sent so far (WORK-DECK A2), so storage is unproven.
+  loomIdentityPushedAt DateTime?
 
   @@unique([colorwayId, channel])
+}
+
+/// One finalize or backfill run — the unit of "retry", "resume" and "what
+/// happened". There is no job queue in this app and maxDuration is 300s, while
+/// waitForLoomJob budgets 600s, so no push may be a single long loop. These two
+/// tables ARE the queue: each invocation takes a time budget, does what it can,
+/// persists, and returns.
+model PushBatch {
+  id              String          @id @default(cuid())
+  kind            String // create | bulk | backfill-customs | identity-repush
+  seasonCode      String?
+  channels        Channel[]       @default([])
+  status          String          @default("pending") // pending | running | partial | ok | failed
+  /// Waive the merchandising half of the Shopify readiness gate for this batch.
+  /// A recorded decision, never a default — a candle has no care page or fit
+  /// guide, and publishing without one should take a decision.
+  allowIncomplete Boolean         @default(false)
+  note            String?
+  draftId         String?
+  items           PushBatchItem[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([status])
+  @@index([kind, createdAt])
+  @@index([draftId])
+}
+
+/// One (colorway, channel) unit of work.
+model PushBatchItem {
+  id         String    @id @default(cuid())
+  batchId    String
+  batch      PushBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  colorwayId String
+  colorway   Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  channel    Channel
+  /// PENDING RUNNING AWAITING_JOB OK FAILED BLOCKED SKIPPED UNCONFIRMED
+  state      String    @default("PENDING")
+  attempts   Int       @default(0)
+  /// Shopify product gid / Sitoo parent productid. Written the moment the
+  /// channel answers, before anything else.
+  externalId String?
+  /// Loom only, and persisted BEFORE waiting: a crash mid-poll then resumes by
+  /// asking Loom about this job rather than re-sending the whole delivery.
+  eventId    String?
+  jobId      String?
+  error      String?
+  detail     Json?
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@unique([batchId, colorwayId, channel])
+  @@index([batchId, channel, state])
+  @@index([colorwayId])
 }
 
 model ChannelContent {
@@ -388,11 +714,11 @@ model BarcodeAllocation {
 // (one record per SKU) or for the Loom stock registry (movements are per
 // variant). Seeded by matching, never by creating.
 model VariantChannelRef {
-  id             String    @id @default(cuid())
-  variantId      String
-  variant        Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  channel        Channel
-  externalId     String // Sitoo productid, Loom variant key
+  id                  String    @id @default(cuid())
+  variantId           String
+  variant             Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  channel             Channel
+  externalId          String // Sitoo productid, Loom variant key
   /**
    * What the channel calls this garment, when that differs from the master.
    * Null means the spellings agree. A value is an ALIAS, not a second identity:
@@ -403,28 +729,30 @@ model VariantChannelRef {
    * the name the channel uses has to stay known until the master asserts its
    * own and the alias becomes history.
    */
-  externalSku    String?
+  externalSku         String?
   /**
    * A SECOND id the channel uses for the same garment, when identity and stock
    * are different objects there.
-   *
    * Shopify is the case this exists for. `externalId` holds the ProductVariant
    * gid, which is what a listing is; inventory moves against an InventoryItem,
    * which is a different gid entirely:
-   *   externalId          gid://shopify/ProductVariant/42591569969401
-   *   externalInventoryId gid://shopify/InventoryItem/44686936178937
+   * externalId          gid://shopify/ProductVariant/42591569969401
+   * externalInventoryId gid://shopify/InventoryItem/44686936178937
    * Loom's stock registry joins on the inventory object, so a registry that
    * carried only the ProductVariant would be reconciling against the wrong one.
-   *
    * Null where the channel has no such split (Sitoo), or where we simply have
    * no link — the registry falls back to barcode there.
    */
   externalInventoryId String?
-  lastPushedAt   DateTime?
-  lastPushStatus String?
+  lastPushedAt        DateTime?
+  lastPushStatus      String?
 
   @@unique([variantId, channel])
   @@index([channel, externalId])
+  // Declared to match reality: migration 20260911160000 created this index and
+  // the model never named it, so every `migrate diff` since has reported drift
+  // and would have offered to DROP it. No DDL — the index already exists.
+  @@index([externalSku])
 }
 
 enum Source {
@@ -447,6 +775,8 @@ enum EntryOrigin {
 enum PriceType {
   MSRP
   WHOLESALE
+  COST // what Livid pays. Entered in the builder; season-scoped like the rest,
+  //      because a re-buy can land at a different cost.
 }
 
 enum ImageSlot {
@@ -493,4 +823,33 @@ enum MediaRole {
   MEN // custom.men_images (unisex)
   WOMEN // custom.women_images (unisex)
   SWATCH // colour swatch
+}
+
+/// Names that must not be re-grouped by their leading word.
+///
+/// "Barnes Japan Gravel" is a colour of Barnes, but "Keri Surf" is a short and
+/// not the Keri jeans, and "Hayes Suit Jacket" is not "Hayes Suit Pant". No rule
+/// separates the two cases, so the decisions are recorded here as they are made
+/// and every later report starts from them. This replaces the hand-edited
+/// NEW_STYLE_GROUPS / PARENT_OVERRIDE constants in master/regroup-styles.ts,
+/// which a review screen cannot append to.
+model StyleNameRule {
+  id        String            @id @default(cuid())
+  /// Normalised (lower-cased, whitespace-collapsed) style or colorway name.
+  name      String            @unique
+  kind      StyleNameRuleKind
+  /// For PARENT_OVERRIDE: the style name this must nest under instead.
+  parent    String?
+  note      String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+enum StyleNameRuleKind {
+  /// A garment in its own right — never absorb it into its leading word.
+  COMPOUND
+  /// Nest under `parent`, whatever the name suggests.
+  PARENT_OVERRIDE
+  /// Reviewed and deliberately left alone.
+  KEEP_SEPARATE
 }
