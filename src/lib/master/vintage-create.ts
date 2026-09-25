@@ -8,20 +8,24 @@
 //
 // Where it diverges from the wizard, and why:
 //
-//   SKU. The wizard's invariant is `variantSku = colorwaySku + "-" + size`.
-//   Vintage sets style, colourway and variant SKU all to `VN-ONLN-<n>` — no
-//   size suffix — because that is what all 2,086 existing rows carry and what
-//   the live Shopify variants carry. Live wins over the invariant.
+//   SKU. Style and colourway are `VN-ONLN-<n>`; the variant is
+//   `VN-ONLN-<n>-OS`. That is the wizard's invariant
+//   (`variantSku = colorwaySku + "-" + sizeToken`) rather than an exception to
+//   it, and it is what the spreadsheet writes
+//   (`1. EXPORT SHOPIFY`!N: `CONCATENATE("VN-ONLN-", A, "-OS")`), what 1,695 of
+//   the 2,086 master rows carry, and what every recent live variant carries.
+//   The 391 without the suffix are legacy, all below item 1112 — the same band
+//   whose barcodes predate the deterministic pairing.
 //
-//   Size. `sizeLabel` is the real size (L, M, W29), never "OS". The Shopify
-//   option value is what identifies a variant to `productSet`, so a garment
-//   pushed as "OS" when the store has "L" would delete and recreate the
-//   variant and detach its unit of stock.
+//   Size. `sizeLabel` is "OS" on all 2,086: there is one of each garment, so
+//   the master's size axis carries nothing. The size a CUSTOMER picks is the
+//   garment's own, and it lives on VintageDetail — see `vintageOptionSize`,
+//   which the Shopify preview uses for the option value.
 import { prisma } from "@/lib/db";
 import { normalizeSku } from "./sku";
 import { storedForm, barcodeKey, barcodeSpellings } from "./barcode";
 import { buildVintageBody, vintageBodyShape, REQUIRED_MEASUREMENTS } from "./vintage-body";
-import { VINTAGE_BRAND_NAME, VINTAGE_CUSTOMS } from "./vintage";
+import { VINTAGE_BRAND_NAME, VINTAGE_CUSTOMS, VINTAGE_SIZE_TOKEN } from "./vintage";
 
 export class VintageError extends Error {}
 
@@ -324,10 +328,12 @@ export async function createVintageItems(
     variantRows.push({
       id: variantId,
       colorwayId,
-      variantSku: sku,
+      variantSku: `${sku}-${VINTAGE_SIZE_TOKEN}`,
       barcode: storedForm(i.barcode),
-      sizeLabel: size,
-      dim1: size,
+      // The axis, not the garment's size. One of each means there is nothing
+      // to choose between, and every existing row says OS.
+      sizeLabel: VINTAGE_SIZE_TOKEN,
+      dim1: VINTAGE_SIZE_TOKEN,
       dim2: null,
     });
 

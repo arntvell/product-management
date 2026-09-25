@@ -10,6 +10,14 @@
 export const VINTAGE_BRAND_NAME = "Vintage";
 
 /**
+ * The size token on a vintage variant SKU and in `Variant.sizeLabel`.
+ *
+ * "One size", in the sense that there is exactly one of the garment — not a
+ * claim that it fits everyone. The customer-facing size is `vintageOptionSize`.
+ */
+export const VINTAGE_SIZE_TOKEN = "OS";
+
+/**
  * Where a vintage garment's single unit lives on Shopify.
  *
  * Read off `inventoryItem.inventoryLevels` of existing `VN-ONLN-*` variants on
@@ -38,6 +46,26 @@ export const VINTAGE_CUSTOMS = {
 /** True for the vintage brand, however it is cased. */
 export function isVintageBrand(brandName: string | null | undefined): boolean {
   return brandName?.trim().toLowerCase() === VINTAGE_BRAND_NAME.toLowerCase();
+}
+
+/**
+ * The size a customer picks on Shopify — which is NOT `Variant.sizeLabel`.
+ *
+ * Every one of the 2,086 online-vintage variants has `sizeLabel = "OS"`: there
+ * is one of each garment, so the master's size axis carries no information. The
+ * size a customer needs is the garment's own — "L", "XL", "W29" — and the
+ * spreadsheet takes it from Approx size, falling back to Størrelse
+ * (`1. EXPORT SHOPIFY`!I: `if(isblank(N), J, N)`).
+ *
+ * This matters more than it looks. `productSet` identifies a variant by its
+ * OPTION VALUES, so pushing "OS" at a product live as "XL" would delete the
+ * variant and recreate it, detaching the unit of stock.
+ */
+export function vintageOptionSize(
+  d: { approxSize: string | null; taggedSize: string | null },
+  fallback = "OS"
+): string {
+  return d.approxSize?.trim() || d.taggedSize?.trim() || fallback;
 }
 
 /**

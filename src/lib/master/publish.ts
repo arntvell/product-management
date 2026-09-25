@@ -5,7 +5,7 @@
 import { prisma } from "@/lib/db";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { channelProductTitle } from "./channel-title";
-import { isVintageBrand, vintageHandle } from "./vintage";
+import { isVintageBrand, vintageHandle, vintageOptionSize } from "./vintage";
 import { buildVintageBody } from "./vintage-body";
 
 // seasonCode scopes the price to the season the user is pushing FROM, so we
@@ -242,14 +242,21 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
     },
     metafields: mf,
     emptyMetafieldKeys,
-    variants: cw.variants.map((v) => ({
-      sku: v.variantSku,
-      barcode: v.barcode,
-      size: v.sizeLabel,
-      dim1: v.dim1,
-      dim2: v.dim2,
-      price,
-    })),
+    variants: cw.variants.map((v) => {
+      // Vintage stores "OS" as its size axis — one of each garment, nothing to
+      // choose between — while the storefront shows the garment's own size.
+      // The option value is what productSet identifies a variant BY, so this
+      // has to be the customer-facing size or a re-push rebuilds the variant.
+      const size = isVintage && cw.vintage ? vintageOptionSize(cw.vintage, v.sizeLabel) : v.sizeLabel;
+      return {
+        sku: v.variantSku,
+        barcode: v.barcode,
+        size,
+        dim1: isVintage && cw.vintage ? size : v.dim1,
+        dim2: v.dim2,
+        price,
+      };
+    }),
     media,
     roleMedia,
     warnings,
