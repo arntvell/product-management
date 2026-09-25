@@ -15,6 +15,16 @@
 // question that matters most — "is there a photo here with no row in the
 // drop?" — because probing can only confirm photos for rows you already have.
 // A photo with no row means a garment the shoot captured and nobody entered.
+//
+// THE SHARE ROTATES. It is a working area for the drop being prepared, not an
+// archive: on 2026-09-25 it held items 13643-13722, while 13760-13762 — pushed
+// live a week earlier — were already gone. So a photo URL here has a limited
+// life, and the order of operations matters: push to Shopify BEFORE the share
+// is cleared. Once pushed it is safe, because `fileCreate` copies the bytes to
+// Shopify's own CDN rather than hotlinking, and the cached file GID on
+// `MediaAsset.shopifyMediaId` is what later pushes reuse. A MediaAsset whose
+// URL has rotated away but which has a `shopifyMediaId` is still fine; one
+// without has lost its image.
 import SftpClient from "ssh2-sftp-client";
 
 /** `13762-2.jpg` -> { itemNumber: "13762", index: 2 }. Base photo is index 0. */
@@ -44,13 +54,36 @@ export interface SftpConfig {
 export class VintagePhotoError extends Error {}
 
 /**
+ * `sftp://ssh.lividjeans.com/some/path` -> `ssh.lividjeans.com`.
+ *
+ * Accepts what a person would copy out of Cyberduck: a scheme, a trailing
+ * slash, a path, a `user@` prefix, or a bare hostname already.
+ */
+function bareHost(raw: string | undefined): string | undefined {
+  const v = raw?.trim();
+  if (!v) return undefined;
+  return (
+    v
+      .replace(/^[a-z0-9+.-]+:\/\//i, "") // scheme
+      .replace(/^[^/@]*@/, "") // user@
+      .split("/")[0] // path
+      .split(":")[0] // :port — VINTAGE_SFTP_PORT owns that
+      .trim() || undefined
+  );
+}
+
+/**
  * Config from the environment. Nothing is defaulted except the port and the
  * one.com path recorded in `docs/vintage-workflow.md`, because a wrong guess
  * at a credential fails confusingly and a wrong guess at a host can reach
  * something else entirely.
  */
 export function sftpConfigFromEnv(): SftpConfig {
-  const host = process.env.VINTAGE_SFTP_HOST;
+  // Cyberduck shows the server as `sftp://ssh.lividjeans.com/...`, so that is
+  // what gets pasted into the variable. ssh2 wants a bare hostname and fails
+  // with ENOTFOUND on anything else. Same treatment `shopify/client.ts` gives
+  // SHOPIFY_STORE_URL.
+  const host = bareHost(process.env.VINTAGE_SFTP_HOST);
   const username = process.env.VINTAGE_SFTP_USER;
   const password = process.env.VINTAGE_SFTP_PASSWORD;
   const privateKey = process.env.VINTAGE_SFTP_PRIVATE_KEY;
