@@ -20,26 +20,43 @@ flag and the flat-lays are in place.
 Uploads nothing without --apply. Re-running is safe: a colorway that already has
 MediaAsset rows is skipped unless --replace is given.
 """
-import argparse, json, mimetypes, os, re, subprocess, sys, urllib.parse, urllib.request
+import argparse, json, mimetypes, os, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 from collections import OrderedDict, defaultdict
 
 BLOB_API = "https://blob.vercel-storage.com"
 
 
-def blob_put(pathname, data, content_type, token):
+def blob_put(pathname, data, content_type, token, attempts=5):
+    """PUT one object, retrying the transient failures.
+
+    Blob returns a 503 often enough over a run of several hundred files that
+    one of them ending the whole upload is not acceptable — a crash halfway
+    leaves the objects uploaded with no MediaAsset rows pointing at them."""
     # The shoot's filenames contain spaces ("… LIVID71261.jpg"), which are not
     # legal in a request line — quote the path, and Blob stores the decoded name.
-    req = urllib.request.Request(
-        f"{BLOB_API}/{urllib.parse.quote(pathname)}", data=data, method="PUT",
-        headers={
-            "authorization": f"Bearer {token}",
-            "x-api-version": "7",
-            "x-content-type": content_type,
-            "x-add-random-suffix": "1",
-            "x-cache-control-max-age": "31536000",
-        })
-    with urllib.request.urlopen(req, timeout=180) as r:
-        return json.load(r)
+    req_url = f"{BLOB_API}/{urllib.parse.quote(pathname)}"
+    last = None
+    for attempt in range(attempts):
+        req = urllib.request.Request(
+            req_url, data=data, method="PUT",
+            headers={
+                "authorization": f"Bearer {token}",
+                "x-api-version": "7",
+                "x-content-type": content_type,
+                "x-add-random-suffix": "1",
+                "x-cache-control-max-age": "31536000",
+            })
+        try:
+            with urllib.request.urlopen(req, timeout=180) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code not in (429, 500, 502, 503, 504):
+                raise
+            last = e
+        except (urllib.error.URLError, TimeoutError) as e:
+            last = e
+        time.sleep(2 ** attempt)
+    raise RuntimeError(f"Blob PUT failed after {attempts} attempts: {last}")
 
 
 def psql(sql, db):
