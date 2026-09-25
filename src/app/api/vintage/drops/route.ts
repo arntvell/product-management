@@ -29,18 +29,20 @@ export async function POST(req: Request) {
   if (!drop) return NextResponse.json({ error: "drop is required" }, { status: 400 });
   if (!items.length) return NextResponse.json({ error: "No items" }, { status: 400 });
 
-  if (body.dryRun) {
-    const problems = validateVintageItems(items);
-    return NextResponse.json({
-      ok: problems.length === 0,
-      dryRun: true,
-      wouldCreate: problems.length ? 0 : items.length,
-      problems,
-    });
-  }
-
   try {
-    const result = await createVintageItems(drop, items);
+    // The dry run goes through `createVintageItems` rather than calling the
+    // validator alone, because the validator cannot see the database. "This
+    // item number is already in the master" is the one failure an operator
+    // cannot spot from the sheet in front of them, and a dry run that misses
+    // it only reports at the moment the real create fails.
+    const result = await createVintageItems(drop, items, { dryRun: body.dryRun });
+    if (body.dryRun)
+      return NextResponse.json({
+        ok: true,
+        dryRun: true,
+        wouldCreate: result.created,
+        problems: [],
+      });
     return NextResponse.json({ ok: true, ...result }, { status: 201 });
   } catch (err) {
     if (err instanceof VintageError)

@@ -19,7 +19,7 @@
 //   variant and detach its unit of stock.
 import { prisma } from "@/lib/db";
 import { normalizeSku } from "./sku";
-import { storedForm } from "./barcode";
+import { storedForm, barcodeKey, barcodeSpellings } from "./barcode";
 import { buildVintageBody, vintageBodyShape, REQUIRED_MEASUREMENTS } from "./vintage-body";
 import { VINTAGE_BRAND_NAME, VINTAGE_CUSTOMS } from "./vintage";
 
@@ -78,6 +78,15 @@ export function validateVintageItems(items: VintageItemInput[]): VintageItemProb
   const seen = new Map<string, number>();
   for (const i of items) seen.set(i.itemNumber, (seen.get(i.itemNumber) ?? 0) + 1);
 
+  // Two spellings of one barcode are one barcode, so compare by key rather
+  // than by string — `Variant.barcode` is unique and the insert would fail on
+  // the whole drop, naming a constraint rather than the two garments.
+  const barcodeSeen = new Map<string, number>();
+  for (const i of items) {
+    const k = barcodeKey(i.barcode);
+    if (k) barcodeSeen.set(k, (barcodeSeen.get(k) ?? 0) + 1);
+  }
+
   for (const i of items) {
     const p: string[] = [];
     const n = i.itemNumber?.trim();
@@ -89,8 +98,17 @@ export function validateVintageItems(items: VintageItemInput[]): VintageItemProb
     if (!i.title?.trim()) p.push("no title");
     if (!i.description?.trim()) p.push("no description");
     if (!i.category?.trim()) p.push("no category");
-    if (!i.barcode?.trim()) p.push("no barcode");
     if (!i.price?.trim()) p.push("no price");
+
+    // A barcode has to be a barcode, not merely present. `storedForm` returns
+    // null for a bad check digit or a wrong length, and the row would then be
+    // written with no barcode at all — a silent loss, and the till cannot ring
+    // up what it cannot scan.
+    if (!i.barcode?.trim()) p.push("no barcode");
+    else if (!storedForm(i.barcode))
+      p.push(`barcode "${i.barcode.trim()}" is not a valid EAN-13 or UPC-A`);
+    else if ((barcodeSeen.get(barcodeKey(i.barcode)!) ?? 0) > 1)
+      p.push(`barcode ${i.barcode.trim()} is on more than one garment in this drop`);
     if (!i.taggedSize?.trim() && !i.approxSize?.trim()) p.push("no size");
 
     // The measurements the body template will print. A blank one does not
@@ -217,6 +235,23 @@ export async function createVintageItems(
         existing.map((e) => e.colorwaySku).join(", ")
     );
 
+  // Same for barcodes. `Variant.barcode` is unique, so a collision fails the
+  // whole transaction naming a constraint; catching it here names the garment
+  // and the code instead. Checked in both spellings, because a 12-digit UPC-A
+  // and its zero-prefixed form are one barcode and the index is on the string.
+  const spellings = items.flatMap((i) => barcodeSpellings(i.barcode));
+  if (spellings.length) {
+    const taken = await prisma.variant.findMany({
+      where: { barcode: { in: spellings } },
+      select: { barcode: true, variantSku: true },
+    });
+    if (taken.length)
+      throw new VintageError(
+        `${taken.length} barcode(s) are already on another garment: ` +
+          taken.map((t) => `${t.barcode} (${t.variantSku})`).join(", ")
+      );
+  }
+
   const styleRows: Array<Record<string, unknown>> = [];
   const colorwayRows: Array<Record<string, unknown>> = [];
   const variantRows: Array<Record<string, unknown>> = [];
@@ -225,8 +260,10 @@ export async function createVintageItems(
   const priceRows: Array<Record<string, unknown>> = [];
   const pubRows: Array<Record<string, unknown>> = [];
   const detailRows: Array<Record<string, unknown>> = [];
+  const ownerRows: Array<Record<string, unknown>> = [];
   const mediaRows: Array<Record<string, unknown>> = [];
   const colorwayIds: string[] = [];
+  const now = new Date();
 
   for (const i of items) {
     const sku = vintageSku(i.itemNumber);
@@ -245,7 +282,12 @@ export async function createVintageItems(
       styleSku: sku,
       styleName: name,
       brandId: brand.id,
-      source: "CIN7_IMPORT",
+      // MANUAL, not CIN7_IMPORT. The 2,086 existing rows say CIN7_IMPORT
+      // because that is genuinely how they arrived; a garment typed into this
+      // screen arrived by hand. `Source` records provenance, and claiming an
+      // importer wrote this would be false — and would invite the Cin7
+      // importer to treat it as its own on a later run.
+      source: "MANUAL",
       hsCode: VINTAGE_CUSTOMS.hsCode,
       customsDescription: VINTAGE_CUSTOMS.customsDescription,
       weightKg: VINTAGE_CUSTOMS.weightKg,
@@ -258,10 +300,19 @@ export async function createVintageItems(
       colorwaySku: sku,
       name,
       styleName: name,
-      source: "CIN7_IMPORT",
+      source: "MANUAL",
       kind: "MERCHANDISE",
-      // DRAFT until pushed, like every other create path.
-      status: "DRAFT",
+      // ACTIVE, unlike every other create path, which defaults to DRAFT.
+      //
+      // `status` is the master's INTENT for the product, and the intent of a
+      // drop is that it goes on sale — the flow ends by putting it at the top
+      // of the collection, which is meaningless for a product customers
+      // cannot see. Every live vintage product on the store is ACTIVE.
+      //
+      // Nothing is exposed by this on its own: the row reaches Shopify only
+      // when someone presses Push, and DRAFT here would instead create an
+      // invisible product and quietly make that last step a no-op.
+      status: "ACTIVE",
       vendor: VINTAGE_BRAND_NAME,
       productType: i.category.trim(),
       countryOfOrigin: VINTAGE_CUSTOMS.countryOfOrigin,
@@ -318,6 +369,30 @@ export async function createVintageItems(
       sourceProduct: i.sourceProduct?.trim() || null,
     });
 
+    // Lock every field this screen writes. `normalize` is NOT source-scoped —
+    // it selects on the column being non-null and would recase a vendor or a
+    // product type — and its only protection is a MANUAL FieldOwner row. Hand
+    // written copy losing its capitals to a nightly pass is exactly the kind
+    // of silent drift this master exists to stop.
+    for (const field of [
+      "name",
+      "styleName",
+      "vendor",
+      "productType",
+      "tags",
+      "fullDescription",
+      "shortDescription",
+      "countryOfOrigin",
+    ])
+      ownerRows.push({
+        entityType: "colorway",
+        entityId: colorwayId,
+        field,
+        owner: "MANUAL",
+        lockedAt: now,
+        authority: `manual:vintage-drop-${drop}`,
+      });
+
     // Position follows the caller's order, which `photos.ts` has already
     // sorted so the base photo leads — position 0 is the featured image.
     i.photoUrls.forEach((url, position) => {
@@ -345,6 +420,7 @@ export async function createVintageItems(
       if (priceRows.length) await tx.price.createMany({ data: priceRows as never });
       await tx.channelPublication.createMany({ data: pubRows as never });
       await tx.vintageDetail.createMany({ data: detailRows as never });
+      await tx.fieldOwner.createMany({ data: ownerRows as never });
       if (mediaRows.length) await tx.mediaAsset.createMany({ data: mediaRows as never });
     },
     { timeout: 30_000, maxWait: 5_000 }
