@@ -147,9 +147,11 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       has(cw.fiberCompositionOverride) ?? cw.style.fiberComposition ?? null,
     country_of_origin: cw.countryOfOrigin ?? null,
   };
-  // External brands send MSRP and nothing else. They are bought in, not
-  // wholesaled, so Loom has no use for a wholesale price and should not be
-  // holding what Livid paid for them — decided by Kristoffer 2026-09-23. Livid's
+  // External brands send MSRP in `prices` and nothing else. They are bought in,
+  // not wholesaled, so Loom has no use for a wholesale price, and their cost is
+  // built in Loom from PO receipts rather than sent from here (Kristoffer,
+  // 2026-09-23 and 2026-09-26). The season's buy price travels on its own, as
+  // `buy_prices` below. Livid's
   // own production keeps all three: the wholesale catalogue prices from WS, and
   // COST is its own figure.
   //
@@ -157,7 +159,18 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
   // Source or the SKU prefix: an external is external however it arrived.
   const msrpOnly = cw.brand?.isLivid !== true;
   const prices: Record<string, { msrp?: number; ws?: number; cost?: number }> = {};
+  // What Livid expects to pay the supplier this season, keyed by ISO 4217
+  // currency code, not a Loom price-list code. External brands only. It is a
+  // PO default so a buyer does not retype it. It is NOT a cost: Loom's average
+  // cost for externals comes from real PO receipts (Kristoffer, 2026-09-26), so
+  // this must never reach `prices[].cost` or a variant's average_cost.
+  //
+  // Loom drops a key it does not know without saying so, so sending this before
+  // Loom has a `buy_prices` field costs nothing. It is omitted when the season
+  // has no COST row: a missing key tells Loom to keep what it has.
+  const buyPrices: Record<string, number> = {};
   for (const p of cw.prices) {
+    if (msrpOnly && p.priceType === "COST") buyPrices[p.currency] = Number(p.amount);
     if (msrpOnly && p.priceType !== "MSRP") continue;
     const slot = (prices[p.currency] ??= {});
     if (p.priceType === "MSRP") slot.msrp = Number(p.amount);
@@ -179,6 +192,7 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       ? (cw.manufacturer.threadflowId ?? cw.manufacturer.id)
       : null,
     prices,
+    ...(Object.keys(buyPrices).length ? { buy_prices: buyPrices } : {}),
     // Registry rows are stock-bearing records, not catalogue listings. loom:false
     // still means withdraw, so the archive signal has to survive. The channel
     // flags must report the product's REAL state here exactly as they do in the
