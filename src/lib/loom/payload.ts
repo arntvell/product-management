@@ -125,11 +125,14 @@ function channelsFor(cw: LoomColorway, archive?: Set<string>) {
  *
  * A link we hold wins: the channel's own spelling where it differs
  * (`externalSku`), the master SKU where it agrees. Failing that, a colourway
- * declared for Sitoo gets the variant SKU — the Sitoo create uses exactly that,
- * and in a push batch Loom runs BEFORE Sitoo, so a new product has its
- * declaration but not yet its link. If that create then fails, Loom holds a SKU
- * Sitoo does not have until the retry succeeds; a second Loom job per batch to
- * avoid it would cost more than it saves.
+ * declared for Sitoo with NO Sitoo link on any size gets the variant SKU — the
+ * Sitoo create uses exactly that, and in a push batch Loom runs BEFORE Sitoo, so
+ * a new product has its declaration but not yet its links. If that create then
+ * fails, Loom holds a SKU Sitoo does not have until the retry succeeds; a second
+ * Loom job per batch to avoid it would cost more than it saves. A colourway that
+ * IS linked but lacks a size gets nothing for that size: 94 such sizes in 55
+ * colourways (2026-09-27) are simply not in Sitoo, and asserting a SKU for them
+ * would point Loom at products that do not exist.
  *
  * Undefined, never null, when neither applies: Loom already holds a correct
  * sitoo_sku it matched itself on ~8 000 variants, and an explicit null would
@@ -138,7 +141,9 @@ function channelsFor(cw: LoomColorway, archive?: Set<string>) {
 function sitooSkuFor(cw: LoomColorway, v: LoomColorway["variants"][number]): string | undefined {
   const ref = v.channelRefs.find((r) => r.channel === "SITOO");
   if (ref) return ref.externalSku?.trim() || v.variantSku;
-  if (cw.publications.some((p) => p.channel === "SITOO")) return v.variantSku;
+  const declared = cw.publications.some((p) => p.channel === "SITOO");
+  const linked = cw.variants.some((x) => x.channelRefs.some((r) => r.channel === "SITOO"));
+  if (declared && !linked) return v.variantSku;
   return undefined;
 }
 
