@@ -116,6 +116,33 @@ function channelsFor(cw: LoomColorway, archive?: Set<string>) {
 }
 
 /**
+ * The SKU Sitoo holds this garment under, for Loom's `sitoo_sku` — sent even
+ * when it is the variant SKU, because Loom only records a Sitoo link we assert
+ * (`sitoo_sku_source: "feed"`) or one it guesses itself by barcode or SKU. We
+ * used to send `sitoo_product_id` alone, which Loom ignores, so 245 Sitoo-linked
+ * variants read `sitoo_sku: null` there on 2026-09-27 — nearly all recent
+ * imports, whose barcodes Loom had not matched yet.
+ *
+ * A link we hold wins: the channel's own spelling where it differs
+ * (`externalSku`), the master SKU where it agrees. Failing that, a colourway
+ * declared for Sitoo gets the variant SKU — the Sitoo create uses exactly that,
+ * and in a push batch Loom runs BEFORE Sitoo, so a new product has its
+ * declaration but not yet its link. If that create then fails, Loom holds a SKU
+ * Sitoo does not have until the retry succeeds; a second Loom job per batch to
+ * avoid it would cost more than it saves.
+ *
+ * Undefined, never null, when neither applies: Loom already holds a correct
+ * sitoo_sku it matched itself on ~8 000 variants, and an explicit null would
+ * wipe them — the same rule as the channel flags above.
+ */
+function sitooSkuFor(cw: LoomColorway, v: LoomColorway["variants"][number]): string | undefined {
+  const ref = v.channelRefs.find((r) => r.channel === "SITOO");
+  if (ref) return ref.externalSku?.trim() || v.variantSku;
+  if (cw.publications.some((p) => p.channel === "SITOO")) return v.variantSku;
+  return undefined;
+}
+
+/**
  * Registry payload — identity only.
  *
  * The stock registry needs to know *which garment* a movement refers to, and
@@ -225,6 +252,7 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
       .map((v) => {
       const shopify = v.channelRefs.find((r) => r.channel === "SHOPIFY");
       const sitoo = v.channelRefs.find((r) => r.channel === "SITOO");
+      const sitooSku = sitooSkuFor(cw, v);
       return {
         variant_id: v.id,
         // Loom derives `{colorway_sku}-{suffix}` when `sku` is absent and treats
@@ -251,7 +279,9 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
           "InventoryItem",
         ),
         shopify_variant_id: shopifyNumericId(shopify?.externalId, "ProductVariant"),
+        // Ignored by Loom (it keys Sitoo on the SKU below); kept for the record.
         sitoo_product_id: sitoo?.externalId ?? null,
+        ...(sitooSku ? { sitoo_sku: sitooSku } : {}),
       };
       }),
   };
@@ -315,16 +345,20 @@ function buildColorway(cw: LoomColorway, archive?: Set<string>) {
     dropped: entry?.cancelled ?? false,
     approved_for_production: entry?.approvedForProduction ?? false,
     prices,
-    variants: cw.variants.map((v) => ({
-      variant_id: v.id,
-      // See the note in buildRegistryColorway: `sku` is what Loom reads.
-      sku: v.variantSku,
-      variant_sku: v.variantSku,
-      barcode: v.barcode ?? null,
-      dimensions: v.dim2
-        ? { waist: v.dim1, length: v.dim2 }
-        : { size: v.dim1 },
-    })),
+    variants: cw.variants.map((v) => {
+      const sitooSku = sitooSkuFor(cw, v);
+      return {
+        variant_id: v.id,
+        // See the note in buildRegistryColorway: `sku` is what Loom reads.
+        sku: v.variantSku,
+        variant_sku: v.variantSku,
+        barcode: v.barcode ?? null,
+        dimensions: v.dim2
+          ? { waist: v.dim1, length: v.dim2 }
+          : { size: v.dim1 },
+        ...(sitooSku ? { sitoo_sku: sitooSku } : {}),
+      };
+    }),
   };
 }
 
