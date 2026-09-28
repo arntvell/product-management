@@ -521,7 +521,12 @@ export function VintageDropSheet({
       colorwayIds: created,
       seasonCode: "CONTINUITY",
     });
-    if (json) toast.success("Pushed to Shopify.");
+    if (!json) return;
+    const failed = (json.results ?? []).filter((r: { ok: boolean }) => !r.ok).length;
+    const warned = (json.results ?? []).flatMap((r: { warnings?: string[] }) => r.warnings ?? []);
+    if (failed) toast.error(`Pushed ${json.ok}/${json.total} to Shopify — ${failed} failed.`);
+    else if (warned.length) toast.warning(`Pushed to Shopify with ${warned.length} warning(s): ${warned.slice(0, 3).join(" · ")}`);
+    else toast.success("Pushed to Shopify.");
   }
 
   async function onMoveToTop() {

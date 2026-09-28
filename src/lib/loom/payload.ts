@@ -126,10 +126,12 @@ function channelsFor(cw: LoomColorway, archive?: Set<string>) {
  * A link we hold wins: the channel's own spelling where it differs
  * (`externalSku`), the master SKU where it agrees. Failing that, a colourway
  * declared for Sitoo with NO Sitoo link on any size gets the variant SKU — the
- * Sitoo create uses exactly that, and in a push batch Loom runs BEFORE Sitoo, so
- * a new product has its declaration but not yet its links. If that create then
- * fails, Loom holds a SKU Sitoo does not have until the retry succeeds; a second
- * Loom job per batch to avoid it would cost more than it saves. A colourway that
+ * Sitoo create uses exactly that. A push batch now runs Sitoo BEFORE Loom, so
+ * this matters for the pushes that still reach Loom first: a Loom-only send, or
+ * a Sitoo phase that failed or ran out of time, where the product has its
+ * declaration but not yet its links. If that create never succeeds, Loom holds
+ * a SKU Sitoo does not have; a retry that does create it re-sends Loom with the
+ * real link (loom-follow-up.ts). A colourway that
  * IS linked but lacks a size gets nothing for that size: 94 such sizes in 55
  * colourways (2026-09-27) are simply not in Sitoo, and asserting a SKU for them
  * would point Loom at products that do not exist.

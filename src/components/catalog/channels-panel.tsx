@@ -112,7 +112,11 @@ export function ChannelsPanel({
           p.channel === "SHOPIFY" ? { ...p, published: true } : p
         )
       );
-      toast.success(`Pushed (${data.action}) — ${data.variants} variants`);
+      // Warnings include a Loom follow-up that failed — the one sign the stock
+      // registry did not get this product's Shopify ids.
+      const w = (data.warnings ?? []) as string[];
+      if (w.length) toast.warning(`Pushed (${data.action}) — ${data.variants} variants. ${w.join(" · ")}`);
+      else toast.success(`Pushed (${data.action}) — ${data.variants} variants`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Push failed");
     } finally {

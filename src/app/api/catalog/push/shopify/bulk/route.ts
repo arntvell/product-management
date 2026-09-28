@@ -39,5 +39,18 @@ export async function POST(req: Request) {
     results.filter((r) => r.ok && r.inventoryLinked).map((r) => r.colorwayId),
     { preferSeason: body.seasonCode }
   );
+  // Onto the rows, because that is what the callers show — a failure left only
+  // in `loom` would reach nobody, which is how this gap went unseen.
+  const loomNote = new Map<string, string>();
+  for (const s of loom.sends) {
+    if (!s.ok)
+      for (const id of s.colorwayIds)
+        loomNote.set(id, `Loom did not take the Shopify ids (${s.seasonCode}): ${s.error}`);
+    for (const k of s.skipped) loomNote.set(k.colorwayId, `Loom skipped the Shopify ids: ${k.reason}`);
+  }
+  for (const r of results) {
+    const note = loomNote.get(r.colorwayId);
+    if (note) r.warnings = [...(r.warnings ?? []), note];
+  }
   return NextResponse.json({ total: results.length, ok, failed: results.length - ok, results, loom });
 }
