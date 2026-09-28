@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { bulkPushToShopify } from "@/lib/master/push-shopify";
+import { sendChannelIdsToLoom } from "@/lib/master/loom-follow-up";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -7,7 +8,9 @@ export const maxDuration = 300;
 // POST /api/catalog/push/shopify/bulk
 //   { colorwayIds: string[], seasonCode?, allowIncomplete?, clearEmptied? }
 // LIVE write: create/update each colorway's Shopify product. Per-product
-// results; one failure never blocks the rest.
+// results; one failure never blocks the rest. Then every pushed colourway that
+// is already in Loom is re-sent to its registry, so Loom learns the
+// InventoryItem ids — see loom-follow-up.ts.
 //
 // clearEmptied defaults to false: a field left blank in the master is left
 // alone on Shopify rather than deleted. See pushColorwayToShopify.
@@ -32,5 +35,9 @@ export async function POST(req: Request) {
     clearEmptied: body.clearEmptied,
   });
   const ok = results.filter((r) => r.ok).length;
-  return NextResponse.json({ total: results.length, ok, failed: results.length - ok, results });
+  const loom = await sendChannelIdsToLoom(
+    results.filter((r) => r.ok && r.inventoryLinked).map((r) => r.colorwayId),
+    { preferSeason: body.seasonCode }
+  );
+  return NextResponse.json({ total: results.length, ok, failed: results.length - ok, results, loom });
 }

@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { pushColorwayToShopify } from "@/lib/master/push-shopify";
+import { describeLoomFollowUp, sendChannelIdsToLoom } from "@/lib/master/loom-follow-up";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// The Shopify push, then one Loom submit (not waited on).
+export const maxDuration = 120;
 
 // POST /api/catalog/colorways/[id]/push — LIVE write: create/update the Shopify
-// product from this colorway.
+// product from this colorway, then re-send it to Loom's registry if it is
+// already there, so Loom learns the InventoryItem ids this push returned.
 //
 // clearEmptied defaults to false: a field left blank in the master is left alone
 // on Shopify rather than deleted. See pushColorwayToShopify.
@@ -31,7 +34,16 @@ export async function POST(
   }
   try {
     const result = await pushColorwayToShopify(id, seasonCode, allowIncomplete, clearEmptied);
-    return NextResponse.json(result);
+    // Only when ids were actually recorded: a failed recording is already a
+    // warning, and re-sending would carry the same gap.
+    if (!result.variantRefs?.inventoryLinked) return NextResponse.json(result);
+    const loom = await sendChannelIdsToLoom([id], { preferSeason: seasonCode });
+    const note = describeLoomFollowUp(loom);
+    return NextResponse.json({
+      ...result,
+      warnings: note ? [...result.warnings, note] : result.warnings,
+      loom,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Push failed" },

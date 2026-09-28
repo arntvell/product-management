@@ -1,4 +1,4 @@
-// Pushing a batch of colorways to Shopify, Loom and Sitoo — in that order, and
+// Pushing a batch of colorways to Shopify, Sitoo and Loom — in that order, and
 // without ever being a long loop.
 //
 // THE CONSTRAINT THAT SHAPES ALL OF THIS
@@ -10,11 +10,19 @@
 // persists, and returns `done: false`. A crash loses at most one in-flight item,
 // and that item's own state says what the resume has to do.
 //
-// WHY SHOPIFY FIRST
+// WHY LOOM LAST
 //
-// Loom's stock registry joins on Shopify's InventoryItem gid, which only exists
-// once the product is in Shopify. Pushing Loom first would send nulls and need a
-// second pass — so the order is Shopify, capture the ids, then Loom, then Sitoo.
+// Loom's stock registry joins on Shopify's InventoryItem gid and on Sitoo's SKU,
+// and both only exist once the channel has the product. Pushing Loom before
+// either sends nothing for it and needs a second pass — so the order is Shopify,
+// capture the ids, then Sitoo, then Loom with both. Sitoo used to run after
+// Loom, which left Loom holding a declared-only guess at the Sitoo SKU; nothing
+// the Sitoo phase reads is written by the Loom phase, so the order is free.
+//
+// A run that writes a channel id when Loom has already been sent — a retry of
+// one channel, `only`, a batch without LOOM — re-sends the colourway to Loom
+// itself if it is live there (followUpLoom). Stock stopped reconciling for
+// product that reached Loom before Shopify, and nothing ever went back.
 
 import { prisma } from "@/lib/db";
 import { pushColorwayToShopify } from "./push-shopify";
@@ -26,6 +34,7 @@ import type { SitooTarget } from "@/lib/sitoo/client";
 import type { Channel } from "@/generated/prisma/enums";
 import { declareChannel } from "./channel-membership";
 import { channelProductTitle } from "./channel-title";
+import { sendChannelIdsToLoom } from "./loom-follow-up";
 
 export type PushChannel = "SHOPIFY" | "LOOM" | "SITOO";
 
@@ -39,8 +48,12 @@ export type ItemState =
   | "SKIPPED"
   | "UNCONFIRMED";
 
-/** Shopify first — see the note at the top. */
-const PHASES: PushChannel[] = ["SHOPIFY", "LOOM", "SITOO"];
+/** Why a Loom item is BLOCKED until its Shopify push lands — followUpLoom
+ *  releases exactly these, so the text is the key. */
+const WAITING_ON_SHOPIFY = "waiting on the Shopify push for its inventory ids";
+
+/** Loom last — see the note at the top. */
+const PHASES: PushChannel[] = ["SHOPIFY", "SITOO", "LOOM"];
 
 export interface CreatePushBatchInput {
   colorwayIds: string[];
@@ -170,11 +183,11 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
   // Declare the channels BEFORE any phase runs, because the Loom phase reads
   // them and the phase order would otherwise lie to it.
   //
-  // PHASES is SHOPIFY -> LOOM -> SITOO. Shopify writes its own publication and so
-  // reaches Loom correctly by luck of ordering; Sitoo is created AFTER the Loom
-  // push, so a batch that creates a product in both would tell Loom `sitoo:
-  // false` — "deliberately not carried in store" — for a garment it was about to
-  // put in five stores, and Loom would suppress that product's stock errors.
+  // PHASES is SHOPIFY -> SITOO -> LOOM, but a Loom item can still go out before
+  // a Sitoo one: a retry of one channel, or a Sitoo phase that ran out of time.
+  // Without the declaration that Loom push would tell Loom `sitoo: false` —
+  // "deliberately not carried in store" — for a garment about to go in five
+  // stores, and Loom would suppress that product's stock errors.
   //
   // Declaring intent up front is also the honest reading of these rows: presence
   // means TARGETED, not "confirmed live". If the Sitoo phase then fails, `sitoo:
@@ -235,12 +248,12 @@ export async function runPushBatch(
 
     if (phase === "SHOPIFY")
       await stepShopify(batchId, deadline, batch.seasonCode, batch.allowIncomplete, opts);
+    if (phase === "SITOO") await stepSitoo(batchId, deadline, batch.seasonCode, opts);
     if (phase === "LOOM") {
       await submitLoom(batchId, batch.seasonCode, opts);
       const poll = await confirmLoom(batchId);
       if (poll) nextPollAfterMs = poll;
     }
-    if (phase === "SITOO") await stepSitoo(batchId, deadline, opts);
   }
 
   return finish(batchId, nextPollAfterMs);
@@ -317,9 +330,10 @@ async function stepShopify(
   const items = await prisma.pushBatchItem.findMany({
     where: { batchId, channel: "SHOPIFY", state: "PENDING" },
   });
+  const linked: string[] = [];
 
   for (const item of items) {
-    if (Date.now() > deadline) return;
+    if (Date.now() > deadline) break;
     await prisma.pushBatchItem.update({
       where: { id: item.id },
       data: { state: "RUNNING", startedAt: new Date(), attempts: { increment: 1 } },
@@ -356,6 +370,7 @@ async function stepShopify(
           finishedAt: new Date(),
         },
       });
+      if (res.variantRefs?.inventoryLinked) linked.push(item.colorwayId);
     } catch (err) {
       await prisma.pushBatchItem.update({
         where: { id: item.id },
@@ -367,6 +382,68 @@ async function stepShopify(
       });
     }
   }
+
+  await followUpLoom(batchId, "SHOPIFY", linked, seasonCode);
+}
+
+/**
+ * After a phase wrote channel ids, make sure Loom hears them.
+ *
+ * A Loom item still PENDING in this batch will carry them — the Loom phase runs
+ * last. So will one BLOCKED only because it was waiting on this Shopify push:
+ * it goes back to PENDING here, which the retry otherwise had to be asked for.
+ * Anything else — Loom already sent in this batch, or not in it at all — is
+ * re-sent now, if it is live in Loom. The outcome is kept on the item that
+ * wrote the ids, since no Loom item may exist to hold it.
+ */
+async function followUpLoom(
+  batchId: string,
+  channel: "SHOPIFY" | "SITOO",
+  colorwayIds: string[],
+  seasonCode: string | null
+): Promise<void> {
+  if (!colorwayIds.length) return;
+  if (channel === "SHOPIFY")
+    await prisma.pushBatchItem.updateMany({
+      where: {
+        batchId,
+        channel: "LOOM",
+        state: "BLOCKED",
+        colorwayId: { in: colorwayIds },
+        error: WAITING_ON_SHOPIFY,
+      },
+      data: { state: "PENDING", error: null },
+    });
+  const queued = await prisma.pushBatchItem.findMany({
+    where: { batchId, channel: "LOOM", state: "PENDING", colorwayId: { in: colorwayIds } },
+    select: { colorwayId: true },
+  });
+  const ahead = new Set(queued.map((q) => q.colorwayId));
+  const rest = colorwayIds.filter((id) => !ahead.has(id));
+  if (!rest.length) return;
+
+  let followUp: unknown;
+  try {
+    followUp = await sendChannelIdsToLoom(rest, { preferSeason: seasonCode });
+  } catch (err) {
+    followUp = { error: err instanceof Error ? err.message : String(err) };
+  }
+  const items = await prisma.pushBatchItem.findMany({
+    where: { batchId, channel, colorwayId: { in: rest } },
+    select: { id: true, detail: true },
+  });
+  for (const it of items)
+    await prisma.pushBatchItem.update({
+      where: { id: it.id },
+      data: {
+        detail: JSON.parse(
+          JSON.stringify({
+            ...(it.detail && typeof it.detail === "object" ? it.detail : {}),
+            loomFollowUp: followUp,
+          })
+        ),
+      },
+    });
 }
 
 /**
@@ -415,7 +492,7 @@ async function submitLoom(
   for (const w of waiting)
     await prisma.pushBatchItem.update({
       where: { id: w.id },
-      data: { state: "BLOCKED", error: "waiting on the Shopify push for its inventory ids" },
+      data: { state: "BLOCKED", error: WAITING_ON_SHOPIFY },
     });
 
   if (!sendable.length || opts.dryRun) {
@@ -567,7 +644,12 @@ function sitooManufacturerId(
   };
 }
 
-async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): Promise<void> {
+async function stepSitoo(
+  batchId: string,
+  deadline: number,
+  seasonCode: string | null,
+  opts: RunOptions
+): Promise<void> {
   const sitooTarget: SitooTarget = opts.sitooTarget ?? "production";
   const items = await prisma.pushBatchItem.findMany({
     where: { batchId, channel: "SITOO", state: "PENDING" },
@@ -644,13 +726,14 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
   // A batch is production work by construction. Rehearsing against the sandbox
   // stays possible, but only by asking for it.
   const creator = getSitooCreator();
+  const linked: string[] = [];
   try {
     const outcomes = await creator.apply(inputs, {
       dryRun: opts.dryRun,
       target: sitooTarget,
     });
     for (const item of items) {
-      if (Date.now() > deadline) return;
+      if (Date.now() > deadline) break;
       const o = outcomes.find((x) => x.colorwayId === item.colorwayId);
       if (!o) continue;
 
@@ -678,7 +761,7 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
       // rehearsal still reports what it created in `detail`.
       if (o.mode === "api" && o.created.length && sitooTarget === "production") {
         // No declareChannel here: createPushBatch already declared SITOO for
-        // every item it queued, precisely so the Loom phase above could see it.
+        // every item it queued, precisely so any Loom push could see it.
         for (const c of o.created)
           await prisma.variantChannelRef.upsert({
             where: { variantId_channel: { variantId: c.variantId, channel: "SITOO" } },
@@ -695,6 +778,7 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
               lastPushStatus: "created",
             },
           });
+        linked.push(item.colorwayId);
       }
     }
   } catch (err) {
@@ -708,6 +792,10 @@ async function stepSitoo(batchId: string, deadline: number, opts: RunOptions): P
         },
       });
   }
+
+  // Before the Loom phase, so a queued Loom item carries the new Sitoo SKUs;
+  // this only sends colourways whose Loom delivery is not still ahead of them.
+  await followUpLoom(batchId, "SITOO", linked, seasonCode);
 }
 
 // ---------------------------------------------------------------------------

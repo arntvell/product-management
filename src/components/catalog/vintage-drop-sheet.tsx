@@ -992,15 +992,9 @@ export function VintageDropSheet({
             {busy === "Create" ? "Creating…" : `Create ${included.length} in Origio`}
           </button>
           <span className="text-muted-foreground">→</span>
-          <button
-            type="button"
-            disabled={!created?.length || busy !== null}
-            onClick={onPushLoom}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
-          >
-            {busy === "Push to Loom" ? "Sending…" : "Push to Loom"}
-          </button>
-          <span className="text-muted-foreground">→</span>
+          {/* Shopify before Loom: Loom's registry needs the InventoryItem ids the
+              Shopify push returns. The bulk push re-sends anything already in
+              Loom, so the other order heals too — this one just needs no second trip. */}
           <button
             type="button"
             disabled={!created?.length || busy !== null}
@@ -1008,6 +1002,15 @@ export function VintageDropSheet({
             className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
           >
             {busy === "Push to Shopify" ? "Pushing…" : "Push to Shopify"}
+          </button>
+          <span className="text-muted-foreground">→</span>
+          <button
+            type="button"
+            disabled={!created?.length || busy !== null}
+            onClick={onPushLoom}
+            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+          >
+            {busy === "Push to Loom" ? "Sending…" : "Push to Loom"}
           </button>
           <span className="text-muted-foreground">→</span>
           <button

@@ -82,8 +82,8 @@ export default async function VintageDropPage() {
           Pick the drop and how many garments are in it. Item numbers, SKUs, handles and
           barcodes follow from that — none is typed, and the barcodes are the ones already
           assigned to those numbers, so they match the printed labels. Write the garments up,
-          load the photographs whenever the shoot has uploaded them, then send the stock to
-          Loom, push to Shopify and move the drop to the top of the collection. Choosing the
+          load the photographs whenever the shoot has uploaded them, then push to Shopify,
+          send the stock to Loom and move the drop to the top of the collection. Choosing the
           store product a garment came out of fills its price and cost from what that
           category sells at — both as defaults, since about a third get priced up.
         </p>

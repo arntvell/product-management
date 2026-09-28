@@ -629,6 +629,8 @@ export interface BulkPushRow {
   ok: boolean;
   action?: "create" | "update";
   variants?: number;
+  /** Variants whose InventoryItem id this push recorded — what Loom joins on. */
+  inventoryLinked?: number;
   warnings?: string[];
   error?: string;
 }
@@ -653,7 +655,14 @@ export async function bulkPushToShopify(
             opts.allowIncomplete ?? false,
             opts.clearEmptied ?? false
           );
-          return { colorwayId, ok: true, action: r.action, variants: r.variants, warnings: r.warnings };
+          return {
+            colorwayId,
+            ok: true,
+            action: r.action,
+            variants: r.variants,
+            inventoryLinked: r.variantRefs?.inventoryLinked ?? 0,
+            warnings: r.warnings,
+          };
         } catch (err) {
           return { colorwayId, ok: false, error: err instanceof Error ? err.message : "Push failed" };
         }
