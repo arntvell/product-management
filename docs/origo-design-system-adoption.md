@@ -239,9 +239,40 @@ without losing the visual half.
   dense grid you have to see which cell you just clicked. It is cyan, which is
   the one use §3 allows.
 
-### Phase 5 — screens
+## Phase 5 — screens (three done)
 
-Highest-traffic first, following §7 as a pattern library rather than a blueprint.
+Collections, Bulk editor and Publishing — the three that carry the work.
+One commit each, following §7 as a pattern library rather than a blueprint.
+
+- **Publishing.** `PageHeader` with the season as tabs; table flush in a
+  `Panel`. Channel state is shape and word — filled published, half targeted,
+  open ready. **The inverted ink badge is reserved for targeted-and-not-ready**,
+  which is the only state that actually blocks a push; untargeted and unready
+  is merely unfinished and says `Needs 3` quietly. The two-stage Loom gate is a
+  `Notice`; the all-clear beside it is a plain sentence, because §9 raises a
+  notice when something is in the way.
+- **Collections.** Buckets become tabs with counts — a product belongs to one
+  line. Carry-over and New are metadata badges; Core is a toggled state, ink
+  when set; **No price is inverted**, because a product with no season price
+  fails at the moment you push it. The unpriced warning is a `Notice` carrying
+  the filter that shows them.
+- **Bulk editor.** An edited cell is marked with an **ink outline, not a
+  fill**: §7 gives an edited row the `selected` ground, so a fill would be the
+  same ground a ticked row already has and the edit would vanish inside its own
+  selection. An outline costs no layout. Seasons keep the pill §5 reserves for
+  filters. `N unsaved` is ink — it used to be the same amber as the cells it
+  was counting. The grid, autosave and copy-down are untouched.
+
+All three dropped their hand-made `← Catalog` links; the sidebar has said where
+you are since phase 3. Two of them were sized `h-[calc(100vh-56px)]` or
+`h-[calc(100vh-1px)]` and now use `h-full` — `main` is already the viewport
+less the top bar, and one of them had been overflowing its own scroll container.
+
+**Zero off-palette colours remain in these three screens' components.**
+
+### Remaining screens
+
+Everything else, highest-traffic first, same approach.
 
 ### Phase 6 — enforcement
 
