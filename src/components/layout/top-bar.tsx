@@ -38,7 +38,10 @@ export function TopBar() {
       </div>
       <Link
         href={NEW_PRODUCT_HREF}
-        className={buttonVariants({ variant: "default", size: "sm" })}
+        // Outline, not primary: §5 allows one primary action per view and
+        // that belongs to the page header. This is the always-available route
+        // to it, not the view's own call to action.
+        className={buttonVariants({ variant: "outline", size: "sm" })}
       >
         <PlusIcon />
         New product
