@@ -11,6 +11,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { gridHead, gridRow, gridRowSelected } from "@/components/ui/grid";
 import {
   CHANNELS,
   CHANNEL_LABELS,
@@ -1032,7 +1033,7 @@ export function CatalogGrid({
         <div style={{ width: totalWidth, position: "relative" }}>
           {/* Header */}
           <div
-            className="sticky top-0 z-10 flex border-b bg-muted/60 text-xs font-medium text-muted-foreground backdrop-blur"
+            className={cn(gridHead, "flex")}
             style={{ width: totalWidth }}
           >
             <div
@@ -1085,8 +1086,9 @@ export function CatalogGrid({
                 <div
                   key={row.id}
                   className={cn(
-                    "absolute left-0 flex border-b hover:bg-muted/20",
-                    isSel && "bg-blue-500/10 hover:bg-blue-500/15"
+                    gridRow,
+                    "absolute left-0 flex",
+                    isSel && gridRowSelected
                   )}
                   style={{
                     top: vi.start,
@@ -1325,7 +1327,7 @@ export function CatalogGrid({
                                   : placeholder || "Click to write"
                               }
                               className={cn(
-                                "h-full w-full truncate px-2 text-left text-xs hover:bg-muted/60 focus:bg-background focus:outline focus:outline-1 disabled:opacity-40",
+                                "h-full w-full truncate px-2 text-left text-meta normal-case tracking-normal hover:bg-hover focus:bg-paper focus:outline focus:outline-2 focus:outline-cyan disabled:opacity-40",
                                 !value && "text-muted-foreground/50"
                               )}
                             >

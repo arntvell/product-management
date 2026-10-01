@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { catalogImageSrc } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
+import { gridHead, gridRow } from "@/components/ui/grid";
 import type { CollectionMember } from "@/lib/master/collections";
 
 // The Collections list.
@@ -309,8 +310,8 @@ export function CollectionsTable({
       {/* Table */}
       <div ref={scrollRef} className="mt-3 min-h-0 flex-1 overflow-auto rounded-lg border">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
-            <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <thead className={gridHead}>
+            <tr className="text-left">
               <th className="w-10 p-3">
                 <Checkbox
                   checked={allShown}
@@ -345,7 +346,7 @@ export function CollectionsTable({
                   data-index={vr.index}
                   ref={virtualizer.measureElement}
                   className={cn(
-                    "border-b last:border-0 hover:bg-muted/30",
+                    gridRow,
                     selected.has(m.id) && "bg-primary/5"
                   )}
                 >

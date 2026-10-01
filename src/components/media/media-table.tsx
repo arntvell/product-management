@@ -9,6 +9,7 @@ import { useFileNodes } from "@/hooks/use-file-nodes";
 import { useUploadMedia } from "@/hooks/use-product-media";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { parseGidList, serializeGidList, cn } from "@/lib/utils";
+import { gridHead, gridRow, gridRowSelected } from "@/components/ui/grid";
 import { UNISEX_VENDOR } from "@/lib/constants";
 import type { MediaColumnDef, MediaColumnKey } from "@/lib/media-columns";
 import type { Product } from "@/types";
@@ -54,8 +55,9 @@ const MediaRow = React.memo(function MediaRow({
     <tr
       style={style}
       className={cn(
-        "border-b hover:bg-muted/30 transition-colors flex",
-        isSelected && "bg-blue-50/50"
+        gridRow,
+        "flex",
+        isSelected && gridRowSelected
       )}
     >
       <td className="p-2 w-10 shrink-0 flex items-center">
@@ -267,7 +269,7 @@ export function MediaTable({
         className="h-full flex flex-col"
       >
         {/* Sticky header */}
-        <div className="bg-muted/80 backdrop-blur-sm z-10 flex border-b">
+        <div className={cn(gridHead, "flex")}>
           <div className="w-10 p-2 shrink-0">
             <Checkbox
               checked={

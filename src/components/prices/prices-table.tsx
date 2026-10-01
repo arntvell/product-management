@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
+import { gridHead, gridRow } from "@/components/ui/grid";
 import { Button } from "@/components/ui/button";
 import type { Product, DirtyPrice } from "@/types";
 
@@ -50,7 +51,7 @@ function PriceCell({ value, isDirty, onChange }: PriceCellProps) {
   return (
     <div
       className={cn(
-        "px-2 h-full flex items-center text-sm cursor-pointer select-none hover:bg-muted/40 transition-colors font-mono",
+        "px-2 h-full flex items-center text-body tabular-nums cursor-pointer select-none hover:bg-hover transition-colors duration-150 ease-origo",
         isDirty && "bg-yellow-50"
       )}
       onClick={() => {
@@ -129,7 +130,7 @@ export function PricesTable({
       )}
 
       <div
-        className="flex border-b bg-muted/30 text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0"
+        className={cn(gridHead, "flex shrink-0")}
         style={{ height: ROW_HEIGHT }}
       >
         <div
@@ -182,7 +183,8 @@ export function PricesTable({
                   height: ROW_HEIGHT,
                 }}
                 className={cn(
-                  "flex border-b hover:bg-muted/10",
+                  gridRow,
+                  "flex",
                   isDirty && "bg-yellow-50/50"
                 )}
               >
