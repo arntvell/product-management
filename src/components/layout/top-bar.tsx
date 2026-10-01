@@ -10,6 +10,7 @@ import {
   NEW_PRODUCT_HREF,
 } from "@/components/layout/nav-model";
 import { activeHref } from "@/components/layout/sidebar";
+import { LiveDot } from "@/components/layout/live-dot";
 
 const ALL_ITEMS = NAV_SECTIONS.flatMap((s) => s.items);
 
@@ -35,6 +36,14 @@ export function TopBar() {
         {section && <span>{section.label}</span>}
         {section && item && <span aria-hidden="true">/</span>}
         {item && <span className="text-ink">{item.label}</span>}
+        {section?.live && (
+          // Says it on the screen itself, not only in the nav you have
+          // already walked past.
+          <span className="ml-2 inline-flex items-center gap-1.5 text-ink">
+            <LiveDot />
+            Live store
+          </span>
+        )}
       </div>
       <Link
         href={NEW_PRODUCT_HREF}

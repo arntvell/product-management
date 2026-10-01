@@ -44,6 +44,10 @@ export interface NavLink {
 export interface NavSection {
   id: string;
   label: string;
+  /** One line under the section label. Used to say what a section touches. */
+  note?: string;
+  /** Marks a section whose screens write to a live external system. */
+  live?: boolean;
   items: NavLink[];
 }
 
@@ -52,7 +56,6 @@ export const NAV_SECTIONS: NavSection[] = [
     id: "work",
     label: "Catalogue",
     items: [
-      { href: "/", label: "Products", icon: Package },
       { href: "/catalog", label: "Overview", icon: LayoutGrid },
       { href: "/catalog/collections", label: "Collections", icon: Layers },
       { href: "/catalog/drops", label: "Drops", icon: CalendarRange },
@@ -61,15 +64,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/catalog/variants", label: "Variant editor", icon: Rows3 },
       { href: "/catalog/products/drafts", label: "Drafts", icon: FilePen },
       { href: "/catalog/publishing", label: "Publishing", icon: Share2 },
-    ],
-  },
-  {
-    id: "library",
-    label: "Library",
-    items: [
-      { href: "/groups", label: "Groups", icon: Boxes },
-      { href: "/models", label: "Models", icon: User },
-      { href: "/media", label: "Media", icon: Image },
     ],
   },
   {
@@ -98,6 +92,26 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/catalog/style-splits", label: "Style splits", icon: Split },
       { href: "/catalog/cutover", label: "Cutover", icon: ArrowRightLeft },
       { href: "/catalog/identity", label: "Identity", icon: BadgeCheck },
+    ],
+  },
+  {
+    id: "shopify",
+    label: "Shopify",
+    note: "Writes to the live store",
+    live: true,
+    // What the product master replaced: the metafield manager this app grew
+    // out of. These screens are still useful, but they read and write the
+    // Shopify store directly rather than the master — editing here changes
+    // the live store immediately, with no push step in between.
+    //
+    // That includes Models. It writes metaobjects rather than products, so it
+    // changes reference data instead of a listing, but it is a live write all
+    // the same.
+    items: [
+      { href: "/", label: "Products", icon: Package },
+      { href: "/groups", label: "Groups", icon: Boxes },
+      { href: "/media", label: "Media", icon: Image },
+      { href: "/models", label: "Models", icon: User },
     ],
   },
 ];

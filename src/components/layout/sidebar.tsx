@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_SECTIONS, type NavLink } from "@/components/layout/nav-model";
 import { LividMark } from "@/components/layout/livid-mark";
+import { LiveDot } from "@/components/layout/live-dot";
 
 /**
  * The active item is the longest href the current path sits under, so a nested
@@ -45,8 +46,16 @@ export function Sidebar() {
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3" aria-label="Main">
         {NAV_SECTIONS.map((section) => (
           <div key={section.id} className="flex flex-col gap-0.5">
-            <div className="px-3 pb-1 text-meta uppercase text-muted-foreground">
-              {section.label}
+            <div className="flex flex-col gap-0.5 px-3 pb-1">
+              <div className="flex items-center gap-1.5 text-meta uppercase text-muted-foreground">
+                {section.label}
+                {section.live && <LiveDot className="text-ink" />}
+              </div>
+              {section.note && (
+                <div className="text-meta normal-case tracking-normal text-subtle">
+                  {section.note}
+                </div>
+              )}
             </div>
             {section.items.map((item) => {
               const on = item.href === active;
