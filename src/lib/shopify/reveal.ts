@@ -11,6 +11,13 @@
 //
 // Reveal does both, in that order, so a product never appears in a listing
 // before it is actually purchasable.
+//
+// Publishing SHOULD already have happened at push time — see
+// `/api/vintage/channels`, which stages a drop on the channels while the tags
+// still hide it. Reveal keeps doing it as a backstop because it is idempotent
+// and because a garment that missed staging would otherwise be untagged and
+// still invisible, which looks like the drop working and is not. The expensive
+// half belongs hours before the drop opens, not during it.
 import { shopifyGraphQL } from "./client";
 
 /** The tags that hide a vintage product from the storefront. */
