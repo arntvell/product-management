@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { catalogImageSrc } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Notice } from "@/components/ui/notice";
 import { gridHead, gridRow } from "@/components/ui/grid";
 import type { CollectionMember } from "@/lib/master/collections";
 
@@ -262,20 +264,24 @@ export function CollectionsTable({
       </div>
 
       {unpricedInSeason > 0 && needs !== "unpriced" && (
-        <button
-          type="button"
-          onClick={() => setNeeds("unpriced")}
-          className="mt-2 w-fit rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700 hover:bg-amber-500/20 dark:text-amber-500"
+        <Notice
+          className="mt-2"
+          title={`${unpricedInSeason} will fail at push`}
+          action={
+            <Button size="sm" variant="outline" onClick={() => setNeeds("unpriced")}>
+              Show them
+            </Button>
+          }
         >
-          {unpricedInSeason} product{unpricedInSeason !== 1 ? "s are" : " is"} in {initialSeason}{" "}
-          with no {initialSeason} price — they will fail at push. Show them →
-        </button>
+          {unpricedInSeason} product{unpricedInSeason !== 1 ? "s are" : " is"} in{" "}
+          {initialSeason} with no {initialSeason} price.
+        </Notice>
       )}
 
       {/* Selection action bar */}
       {selected.size > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
-          <span className="text-xs font-medium tabular-nums">{selected.size} selected</span>
+        <div className="mt-2 flex flex-wrap items-center gap-2 bg-ink px-4 py-2 text-offwhite">
+          <span className="text-meta uppercase tabular-nums">{selected.size} selected</span>
           <select
             className={selectCls}
             value={season}
@@ -308,7 +314,7 @@ export function CollectionsTable({
       )}
 
       {/* Table */}
-      <div ref={scrollRef} className="mt-3 min-h-0 flex-1 overflow-auto rounded-lg border">
+      <div ref={scrollRef} className="mt-3 min-h-0 flex-1 overflow-auto border border-line bg-paper">
         <table className="w-full text-sm">
           <thead className={gridHead}>
             <tr className="text-left">
@@ -381,26 +387,21 @@ export function CollectionsTable({
                         onClick={() => toggleCore(m)}
                         title={isCore(m) ? "Core line — click to unset" : "Mark as Core line"}
                         className={cn(
-                          "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase transition-colors",
+                          "inline-flex h-6 items-center px-2 text-meta uppercase transition-colors duration-150 ease-origo",
                           isCore(m)
-                            ? "bg-foreground text-background"
-                            : "border text-muted-foreground hover:bg-muted"
+                            ? "bg-ink text-offwhite"
+                            : "border border-line text-muted-foreground hover:bg-hover"
                         )}
                       >
                         ★ Core
                       </button>
                       {inSeason && (
-                        <span
+                        <Badge
                           title={`In ${m.targetSeason}`}
-                          className={cn(
-                            "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-                            m.origin === "CARRYOVER"
-                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-500"
-                              : "bg-green-500/15 text-green-700 dark:text-green-500"
-                          )}
+                          variant={m.origin === "CARRYOVER" ? "outline" : "secondary"}
                         >
                           {m.origin === "CARRYOVER" ? "Carry-over" : "New"}
-                        </span>
+                        </Badge>
                       )}
                       {needsPrice && (
                         <span
@@ -409,15 +410,13 @@ export function CollectionsTable({
                               ? `No ${m.targetSeason} price — priced in another season, so carry-forward can fill it`
                               : `No ${m.targetSeason} price, and not priced in any season`
                           }
-                          className="rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700 dark:text-rose-400"
+                          className="inline-flex h-6 items-center gap-1.5 whitespace-nowrap bg-ink px-2 text-meta uppercase text-offwhite"
                         >
                           No price
                         </span>
                       )}
                       {m.onSale && (
-                        <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700/80 dark:text-rose-400/80">
-                          Sale
-                        </span>
+                        <Badge variant="outline">Sale</Badge>
                       )}
                     </div>
                   </td>
