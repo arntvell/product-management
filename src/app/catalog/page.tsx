@@ -3,7 +3,6 @@ import { getCatalogCounts, type CatalogCounts } from "@/lib/master/counts";
 import { listImportedVendors } from "@/lib/master/import-shopify";
 import { SyncPanel } from "@/components/catalog/sync-panel";
 import { ImportPanel } from "@/components/catalog/import-panel";
-import { CatalogNav } from "@/components/catalog/catalog-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +38,6 @@ export default async function CatalogPage() {
             Product Master
           </span>
         </div>
-        <CatalogNav />
       </div>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         The single source of truth for product data — Livid products synced from

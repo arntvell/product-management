@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
-import { Header } from "@/components/layout/header";
+import { AppShell } from "@/components/layout/app-shell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -41,8 +41,7 @@ export default function RootLayout({
       >
         <QueryProvider>
           <TooltipProvider>
-            <Header />
-            {children}
+            <AppShell>{children}</AppShell>
             <Toaster />
           </TooltipProvider>
         </QueryProvider>
