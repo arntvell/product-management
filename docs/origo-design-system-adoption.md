@@ -171,12 +171,35 @@ draws its five glyphs inline (they are the status language, not decoration),
 and `Drawer` is built on our `Sheet` so Radix provides the focus trap, scroll
 lock and aria wiring their hand-rolled panel lacks.
 
-### Phase 3 — shell
+## Phase 3 — shell (done)
 
-`AppShell` = 232px ecru sidebar + 56px top bar + scrolling main. Fold the two
-nav systems (`layout/header.tsx` and `catalog/catalog-nav.tsx`) into one sidebar,
-keeping catalog-nav's existing grouping as the sections: primary work, product
-settings, data repair. Counts on nav items show work waiting.
+`AppShell` is a 232px ecru sidebar, a 56px top bar and a scrolling `main`.
+`layout/header.tsx` and `catalog/catalog-nav.tsx` are gone; `nav-model.ts` is
+now the single list of destinations.
+
+- The catalogue nav's grouping survives as the sidebar sections — primary work,
+  product settings, data repair — with the old header's five pages folded in
+  as Catalogue and Library. **All 25 destinations are preserved**, asserted by
+  diffing the href sets rather than by eye. Before this, a catalogue sub-page
+  showed neither its siblings nor any way back.
+- **The top bar is 56px for a reason.** Nine pages are sized
+  `h-[calc(100vh-56px)]` against the old header. Any other height would have
+  left every one of them off by the difference. Keep it at 56px, or change
+  those nine in the same commit.
+- `main` scrolls rather than the document. All five virtualized tables scroll
+  their own inner container and measure it by ref — none uses
+  `useWindowVirtualizer` — so none is affected. **Check this again before
+  adding a sixth grid.**
+- `New product` moves to the top bar, reachable from every screen; it used to
+  exist only on `/catalog`.
+- `/login` renders without chrome.
+- Nav `count` is reserved for work waiting (missing data, sync errors) per §6.
+  It is deliberately unset until there is a real figure behind it.
+- The Livid mark is an inline component, not `next/image`. An external SVG
+  renders in its own document and cannot inherit colour, so `currentColor` was
+  resolving to black by luck — and `next/image` sets `color:transparent` on the
+  element besides. Inline, it takes ink on ecru and offwhite on ink.
+  `public/livid-mark.svg` stays as the source asset.
 
 ### Phase 4 — grids
 
