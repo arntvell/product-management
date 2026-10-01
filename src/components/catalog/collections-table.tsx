@@ -469,8 +469,8 @@ export function CollectionsTable({
                       )}
                     </ul>
                     {preview.wouldLackPrice > 0 && (
-                      <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-amber-800 dark:text-amber-400">
-                        <b className="tabular-nums">{preview.wouldLackPrice}</b> will have no{" "}
+                      <div className="border border-ink bg-paper p-3 text-ink">
+                        <span className="tabular-nums">{preview.wouldLackPrice}</span> will have no{" "}
                         {season} price and cannot be pushed until priced.
                         {preview.pricedElsewhere > 0 && (
                           <>
