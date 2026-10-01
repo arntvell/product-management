@@ -7,15 +7,19 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
 } from "lucide-react"
-import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 
+// Toasts report asynchronous outcomes that land after you have moved on —
+// a channel push finishing, an import completing. Work you are watching happen
+// confirms itself inline instead; see the feedback policy in
+// docs/origo-design-system-adoption.md.
+//
+// Light only, so there is no theme to read. This was the last place
+// next-themes was imported.
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
-
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme="light"
       className="toaster group"
       icons={{
         success: <CircleCheckIcon className="size-4" />,
@@ -26,10 +30,10 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }}
       style={
         {
-          "--normal-bg": "var(--popover)",
-          "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
-          "--border-radius": "var(--radius)",
+          "--normal-bg": "var(--paper)",
+          "--normal-text": "var(--ink)",
+          "--normal-border": "var(--line)",
+          "--border-radius": "0",
         } as React.CSSProperties
       }
       {...props}

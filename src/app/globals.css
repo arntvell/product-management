@@ -171,6 +171,15 @@
   a:hover {
     text-decoration-color: var(--cyan);
   }
+  /* Icons are thin line work: 1.5 stroke, square caps, mitred joins. §6
+     lucide ships 2px and round, so correct it once here rather than passing
+     strokeWidth at every call site. */
+  svg.lucide {
+    stroke-width: 1.5;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+  }
+
   /* Numbers are always tabular. §4 */
   table,
   [role="table"],
