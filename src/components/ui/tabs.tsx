@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { tabItemClass, tabListClass } from "@/components/ui/tab-styles";
 
 // §6: underline tabs with counts — status filters on lists, sections on a
 // detail page, seasons on pricing. They sit flush at the bottom of PageHeader.
@@ -26,7 +27,7 @@ export function Tabs({
   return (
     <div
       role="tablist"
-      className={cn("flex gap-6 overflow-x-auto border-b border-line", className)}
+      className={cn(tabListClass, className)}
     >
       {tabs.map((t) => {
         const on = t.id === value;
@@ -37,12 +38,7 @@ export function Tabs({
             type="button"
             aria-selected={on}
             onClick={() => onChange(t.id)}
-            className={cn(
-              "-mb-px flex h-10 shrink-0 items-center gap-2 border-b-2 text-meta uppercase transition-colors duration-150 ease-origo",
-              on
-                ? "border-ink text-ink"
-                : "border-transparent text-muted-foreground hover:text-ink"
-            )}
+            className={tabItemClass(on)}
           >
             {t.label}
             {t.count != null && (
