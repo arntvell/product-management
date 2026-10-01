@@ -212,19 +212,32 @@ now the single list of destinations.
   element besides. Inline, it takes ink on ecru and offwhite on ink.
   `public/livid-mark.svg` stays as the source asset.
 
-### Phase 4 — grids
+## Phase 4 — grids (done)
 
-Our tables are hand-rolled flex rows with `role="row"`/`role="cell"` plus
-`@tanstack/react-virtual` (`products/product-table.tsx` is canonical, 5 grids
-total). **Keep the virtualization** — the spec's `<table>` cannot replace it.
-Adopt the visual rules only: ink rule under the header, hairline between rows,
-no zebra, no vertical rules, `bg-hover` on hover, `bg-selected` on selected and
-edited rows, `tabular-nums`, numeric columns right-aligned, `ProductCell` as the
-standard first column.
+The five grids — products, bulk editor, prices, collections, media — keep their
+structure entirely: still hand-rolled flex rows with ARIA roles, still
+virtualized against their own scroll container. Only class strings and row
+heights changed, in two separate commits so the density half can be reverted
+without losing the visual half.
 
-**Density:** 48px rows and 40px header rows on list and detail screens; a
-documented **36px compact variant for the bulk and variant editors only**, where
-rows-per-screen is the point of the tool. Nothing else about those grids differs.
+- `src/components/ui/grid.ts` holds the shared vocabulary: `gridHead`,
+  `gridRow`, `gridRowSelected`, `gridNumeric`, and the two row heights. **Use
+  these in a new grid rather than restyling one by hand** — the selected row
+  had been three different blues in three files before this.
+- The look is §6's: ink rule closing the header, hairline between rows, no
+  zebra, no vertical rules, ground change rather than colour on hover and
+  selection.
+- Density: **48px** on reading screens (products, prices, media), **36px** in
+  the bulk editor, where rows per screen is the point of the tool. Both come
+  from `grid.ts`.
+- Products and media had 32px thumbnails inside 8px padding — 48px of content
+  in a 40px row. The new height fixes a clip that predates this work.
+- **Collections keeps its 63px.** It is a semantic `<table>` whose rows are
+  content-sized, and the virtualizer's `estimateSize` must match what they
+  actually measure. Do not change that number alone.
+- The bulk editor's cell keeps an outline on `focus`, not `focus-visible`: in a
+  dense grid you have to see which cell you just clicked. It is cyan, which is
+  the one use §3 allows.
 
 ### Phase 5 — screens
 
