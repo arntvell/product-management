@@ -18,7 +18,7 @@ export function Header() {
   return (
     <header className="border-b bg-background sticky top-0 z-50">
       <div className="flex h-14 items-center px-6 gap-6">
-        <h1 className="text-lg font-semibold">Metafield Manager</h1>
+        <h1 className="font-display text-section uppercase">Origo</h1>
         <nav className="flex gap-4">
           {NAV_ITEMS.map((item) => (
             <Link

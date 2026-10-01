@@ -41,7 +41,7 @@ export default function LoginPage() {
     <div className="flex items-center justify-center min-h-screen">
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 p-6">
         <div className="text-center mb-6">
-          <h1 className="text-xl font-semibold">Metafield Manager</h1>
+          <h1 className="font-display text-page uppercase">Origo</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Enter password to continue
           </p>
