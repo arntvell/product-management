@@ -130,21 +130,46 @@ the same values.
 
 ## What remains
 
-### Phase 2 — primitives
+## Phase 2 — primitives (done)
 
-Restyle the 17 shadcn primitives in `src/components/ui` to the spec, keeping
-Radix behaviour. The design-system `ui/*.tsx` files are the **visual reference**,
-not a drop-in replacement: they have no focus trap, no combobox, no multi-select
-and a native `<select>`, all of which our grids depend on.
+All 17 shadcn primitives restyled, class strings only — no props, no Radix
+wiring — so every menu, dialog, combobox and multi-select behaves as before.
+One commit per primitive or coherent group, so a regression bisects. The single
+exception to "class strings only" is the checkbox reading `checked` to choose
+between a tick and the indeterminate minus: a prop read, not a prop change.
 
-Then port the components shadcn does not have, from `_front-end-design-system/ui`:
-`Panel`, `PageHeader`, `Page`, `StatGroup`/`Stat`, `KeyValue`, `StatusBadge`,
-`Stepper`, `FilterChip`, `Breadcrumb`, `BulkBar`, `Notice`, `Progress`,
-`Completeness`, `ChannelStatus`, `EmptyState`, `Drawer`, `ProductCell`, `Thumb`,
-plus `formatNOK` / `formatPercent` into `src/lib/format.ts`.
+- **Button** keeps every variant and size name (53 files import it) and maps
+  each onto a system appearance. `destructive` renders as the ink-outlined
+  secondary: §9 puts the weight of a destructive action on the confirmation
+  that follows, and §3 leaves no red to use. Case is applied in CSS so call
+  sites keep their sentence-case strings. `inverse` is new, for `BulkBar`.
+- **Form controls** — paper ground, hairline that goes ink on hover and focus,
+  labels as meta caps, square checkbox with the indeterminate minus from §6.
+  Invalid is an ink border.
+- **Badge** is metadata only — season, category, channel — and lost the pill.
+  Status belongs to `StatusBadge`.
+- **Overlays** lost radius, shadows, `font-medium`, the stray type sizes, the
+  `zoom-in-95` bounce §9 rules out, and their `dark:` utilities. The only
+  surviving shadow is `shadow-overlay`, on surfaces that float.
+- **Focus** is declared once, in the base layer, in cyan. Every component's own
+  ring is gone — eleven declarations of one rule is how it eventually differs
+  in one of them.
+- **Icons**: `lucide-react` stays (larger set, already a dependency). The §6
+  line quality — 1.5 stroke, square caps, mitred joins — is one rule in
+  `globals.css` keyed off the `lucide` class, not a prop at every call site.
+- **Toaster** takes the palette and drops `next-themes`, which was the last
+  file importing it.
 
-Icons: keep `lucide-react` (far larger set, already a dependency) but wrap it so
-every icon renders at `strokeWidth={1.5}`, square caps, 16px inline / 18px in nav.
+Added, as new files that nothing yet imports: `Panel`, `PageHeader`, `Page`,
+`Stat`/`StatGroup`, `KeyValue`, `StatusBadge`, `Notice`, `Progress`,
+`Completeness`, `EmptyState`, `Tabs`, `Stepper`, `FilterChip`, `Breadcrumb`,
+`BulkBar`, `ProductCell`/`Thumb`, `ChannelStatus`, `Drawer`, and
+`src/lib/format.ts`.
+
+Two deliberately depart from the design system's own sources: `StatusBadge`
+draws its five glyphs inline (they are the status language, not decoration),
+and `Drawer` is built on our `Sheet` so Radix provides the focus trap, scroll
+lock and aria wiring their hand-rolled panel lacks.
 
 ### Phase 3 — shell
 
