@@ -177,11 +177,22 @@ lock and aria wiring their hand-rolled panel lacks.
 `layout/header.tsx` and `catalog/catalog-nav.tsx` are gone; `nav-model.ts` is
 now the single list of destinations.
 
-- The catalogue nav's grouping survives as the sidebar sections — primary work,
-  product settings, data repair — with the old header's five pages folded in
-  as Catalogue and Library. **All 25 destinations are preserved**, asserted by
+- The catalogue nav's grouping survives as the sidebar sections — Catalogue,
+  Product settings, Data repair — with a fourth, **Shopify**, for the screens
+  this app used to be. **All 25 destinations are preserved**, asserted by
   diffing the href sets rather than by eye. Before this, a catalogue sub-page
   showed neither its siblings nor any way back.
+- **The Shopify section is a safety boundary, not a tidy-up.** `/` (Products),
+  `/groups`, `/media` and `/models` read and write the Shopify store directly:
+  an edit there is live immediately, with no push step. The section carries
+  "Writes to the live store" and the filled dot that means *live* in
+  `StatusBadge`, and the top bar repeats the marker so it sits on the screen
+  being edited, not only in the nav.
+
+  **Models belongs in that section.** It writes Shopify metaobjects
+  (`METAOBJECT_CREATE`/`UPDATE`/`DELETE`) — reference data rather than a
+  listing, so the blast radius differs, but it is a live write. Do not carve it
+  out as local.
 - **The top bar is 56px for a reason.** Nine pages are sized
   `h-[calc(100vh-56px)]` against the old header. Any other height would have
   left every one of them off by the difference. Keep it at 56px, or change
