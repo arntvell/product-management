@@ -11,7 +11,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { gridHead, gridRow, gridRowSelected } from "@/components/ui/grid";
+import {
+  gridHead,
+  gridRow,
+  gridRowSelected,
+  GRID_ROW_HEIGHT_COMPACT,
+} from "@/components/ui/grid";
 import {
   CHANNELS,
   CHANNEL_LABELS,
@@ -87,7 +92,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
-const ROW_H = 40;
+const ROW_H = GRID_ROW_HEIGHT_COMPACT;
 
 /** How long the grid waits after the last edit before autosaving. */
 const AUTOSAVE_IDLE_MS = 1500;

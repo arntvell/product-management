@@ -24,7 +24,6 @@ export const gridRowSelected = "bg-selected hover:bg-selected";
 export const gridNumeric = "tabular-nums text-right";
 
 /** §5: 48px rows where you are reading, 36px where you are editing in bulk
- *  and rows-per-screen is the point of the tool. Header rows are 40px. */
+ *  and rows-per-screen is the point of the tool. */
 export const GRID_ROW_HEIGHT = 48;
 export const GRID_ROW_HEIGHT_COMPACT = 36;
-export const GRID_HEAD_HEIGHT = 40;

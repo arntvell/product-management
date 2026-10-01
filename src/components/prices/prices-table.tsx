@@ -3,11 +3,11 @@
 import { useState, useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
-import { gridHead, gridRow } from "@/components/ui/grid";
+import { gridHead, gridRow, GRID_ROW_HEIGHT } from "@/components/ui/grid";
 import { Button } from "@/components/ui/button";
 import type { Product, DirtyPrice } from "@/types";
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = GRID_ROW_HEIGHT;
 const COL_TITLE = 300;
 const COL_VENDOR = 160;
 const COL_TYPE = 130;

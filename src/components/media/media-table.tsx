@@ -9,12 +9,17 @@ import { useFileNodes } from "@/hooks/use-file-nodes";
 import { useUploadMedia } from "@/hooks/use-product-media";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { parseGidList, serializeGidList, cn } from "@/lib/utils";
-import { gridHead, gridRow, gridRowSelected } from "@/components/ui/grid";
+import {
+  gridHead,
+  gridRow,
+  gridRowSelected,
+  GRID_ROW_HEIGHT,
+} from "@/components/ui/grid";
 import { UNISEX_VENDOR } from "@/lib/constants";
 import type { MediaColumnDef, MediaColumnKey } from "@/lib/media-columns";
 import type { Product } from "@/types";
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = GRID_ROW_HEIGHT;
 
 interface MediaTableProps {
   products: Product[];

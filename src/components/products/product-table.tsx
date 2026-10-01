@@ -23,7 +23,12 @@ import { COLUMN_DEFINITIONS } from "@/lib/columns";
 import type { ColumnDef } from "@/lib/columns";
 import type { SortKey } from "@/hooks/use-product-search";
 import { parseGidList, serializeGidList, cn } from "@/lib/utils";
-import { gridHead, gridRow, gridRowSelected } from "@/components/ui/grid";
+import {
+  gridHead,
+  gridRow,
+  gridRowSelected,
+  GRID_ROW_HEIGHT,
+} from "@/components/ui/grid";
 import type {
   DirtyCell,
   DirtyProductProp,
@@ -34,7 +39,9 @@ import type {
   Model,
 } from "@/types";
 
-const ROW_HEIGHT = 40;
+// 48px: the §5 list height, and what a 32px thumbnail inside 8px padding
+// always needed — the old 40 was clipping it.
+const ROW_HEIGHT = GRID_ROW_HEIGHT;
 
 type PickerType =
   | "product"
