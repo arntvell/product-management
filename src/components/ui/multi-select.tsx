@@ -71,12 +71,12 @@ export function MultiSelect({
               <span className="text-muted-foreground">{placeholder}</span>
             ) : selected.length <= 2 ? (
               selected.map((s) => (
-                <Badge key={s} variant="secondary" className="text-xs px-1">
+                <Badge key={s} variant="secondary" className="text-meta px-1">
                   {s}
                 </Badge>
               ))
             ) : (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-meta">
                 {selected.length} selected
               </Badge>
             )}
@@ -88,7 +88,7 @@ export function MultiSelect({
                 tabIndex={-1}
                 aria-label="Clear selection"
                 title="Clear"
-                className="inline-flex items-center rounded-sm p-0.5 opacity-50 hover:bg-muted hover:opacity-100"
+                className="inline-flex items-center p-0.5 opacity-50 hover:bg-muted hover:opacity-100"
                 // Stop the pointer-down so Radix doesn't open the popover before
                 // the click clears the selection.
                 onPointerDown={(e) => e.stopPropagation()}
@@ -119,7 +119,7 @@ export function MultiSelect({
                 >
                   <div
                     className={cn(
-                      "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                      "mr-2 flex h-4 w-4 items-center justify-center border border-primary",
                       selected.includes(option)
                         ? "bg-primary text-primary-foreground"
                         : "opacity-50"
