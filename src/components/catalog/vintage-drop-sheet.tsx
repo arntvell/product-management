@@ -660,7 +660,7 @@ export function VintageDropSheet({
       )}
 
       {numbering && (
-        <p className="rounded-lg border border-sky-500/40 bg-sky-500/5 p-3 text-sm text-muted-foreground">
+        <p className="border border-line bg-paper p-3 text-body text-muted-foreground">
           {numbering}
         </p>
       )}
