@@ -25,7 +25,7 @@ function Seasons({ codes }: { codes: string[] }) {
 
 function TargetLine({ style, renameTo }: { style: SplitStyle; renameTo?: string }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-muted/50 px-3 py-2 text-body">
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 bg-muted/50 px-3 py-2 text-body">
       <Badge>keep</Badge>
       <span>
         {renameTo && renameTo !== style.styleName ? (
@@ -114,7 +114,7 @@ function Outcome({
 
   return (
     <div
-      className={`mt-3 rounded-md border p-3 text-fine ${
+      className={`mt-3 border p-3 text-fine ${
         pushFailed
           ? "border-ink bg-paper"
           : "border-line bg-paper"
@@ -437,7 +437,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
       <div className="mt-3">
         <TargetLine style={p.target} renameTo={p.targetRename} />
         {rename && p.targetColorways?.length ? (
-          <div className="mt-1.5 space-y-1 rounded-md border border-dashed px-3 py-2">
+          <div className="mt-1.5 space-y-1 border border-dashed px-3 py-2">
             <p className="text-fine text-muted-foreground">
               The promoted style&rsquo;s own colourways need the same strip, or it
               reads &ldquo;{p.targetColorways[0].name}&rdquo; beside &ldquo;
@@ -467,7 +467,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
         {p.absorb.map((a) => (
           <div
             key={a.styleId}
-            className={`rounded-md border px-3 py-2 ${dismissed.has(a.styleSku) ? "opacity-40" : ""}`}
+            className={` border px-3 py-2 ${dismissed.has(a.styleSku) ? "opacity-40" : ""}`}
           >
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-body">
               <Badge variant="outline">move out of</Badge>
@@ -547,7 +547,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
       {p.blockers.map((b) => (
         <p
           key={b}
-          className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-fine"
+          className="mt-3 border border-destructive/40 bg-destructive/5 p-2 text-fine"
         >
           {b}
         </p>
@@ -586,7 +586,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
           <summary className="cursor-pointer text-fine text-muted-foreground">
             Raw response
           </summary>
-          <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-muted p-3 text-fine">
+          <pre className="mt-2 max-h-64 overflow-auto bg-muted p-3 text-fine">
             {JSON.stringify(raw, null, 2)}
           </pre>
         </details>

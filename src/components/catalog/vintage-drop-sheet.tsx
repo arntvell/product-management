@@ -109,7 +109,7 @@ function rowProblems(r: Row): string[] {
 }
 
 const INPUT =
-  "w-full rounded border bg-background px-2 py-1 text-body outline-none focus:ring-1 focus:ring-ring";
+  "w-full border bg-background px-2 py-1 text-body outline-none focus:ring-1 focus:ring-ring";
 const MONO = "font-mono text-fine text-muted-foreground";
 
 const STORAGE_KEY = "vintage-drop-sheet";
@@ -544,7 +544,7 @@ export function VintageDropSheet({
   return (
     <div className="space-y-6">
       {/* --- Start a drop ------------------------------------------------ */}
-      <div className="flex flex-wrap items-end gap-4 rounded-lg border p-4">
+      <div className="flex flex-wrap items-end gap-4 border p-4">
         <label className="text-body">
           <span className="mb-1 block">Drop</span>
           <input
@@ -567,7 +567,7 @@ export function VintageDropSheet({
           type="button"
           onClick={onStart}
           disabled={busy !== null}
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
         >
           {busy === "Start" ? "Reserving…" : rows.length ? "Start over" : "Start drop"}
         </button>
@@ -575,7 +575,7 @@ export function VintageDropSheet({
           type="button"
           onClick={onLoadDrop}
           disabled={busy !== null}
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
           title="Pull back garments already created for this drop, to push or fix them"
         >
           {busy === "Load drop" ? "Loading…" : "Load existing drop"}
@@ -586,7 +586,7 @@ export function VintageDropSheet({
               type="button"
               onClick={onLoadPhotos}
               disabled={busy !== null}
-              className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
+              className="border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
             >
               {busy === "Load photos" ? "Reading share…" : "Load photos from share"}
             </button>
@@ -599,7 +599,7 @@ export function VintageDropSheet({
       </div>
 
       {existing && existing.length > 0 && (
-        <div className="rounded-lg border p-4">
+        <div className="border p-4">
           <p className="mb-3 text-body">
             {existing.length} garment(s) already created in {drop.trim()}
           </p>
@@ -607,7 +607,7 @@ export function VintageDropSheet({
             {existing.map((g) => (
               <div
                 key={g.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border px-2 py-1.5 text-body"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 border px-2 py-1.5 text-body"
               >
                 <span className="font-mono text-fine">{g.itemNumber}</span>
                 <span className="min-w-0 flex-1 truncate">{g.name}</span>
@@ -632,7 +632,7 @@ export function VintageDropSheet({
                       ? "Live on Shopify — archive it there first"
                       : "Delete so it can be entered again"
                   }
-                  className="rounded border px-2 py-0.5 text-fine transition-colors hover:bg-muted disabled:opacity-40"
+                  className="border px-2 py-0.5 text-fine transition-colors hover:bg-muted disabled:opacity-40"
                 >
                   Delete
                 </button>
@@ -644,7 +644,7 @@ export function VintageDropSheet({
               type="button"
               onClick={onAttachPhotos}
               disabled={busy !== null}
-              className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
+              className="border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
             >
               {busy === "Attach photos" ? "Reading share…" : "Attach photos from share"}
             </button>
@@ -690,7 +690,7 @@ export function VintageDropSheet({
       )}
 
       {rows.length > 0 && (
-        <details className="rounded-lg border p-3">
+        <details className="border p-3">
           <summary className="cursor-pointer text-body">
             Paste from the INPUT sheet
           </summary>
@@ -723,14 +723,14 @@ export function VintageDropSheet({
           <button
             type="button"
             onClick={() => selectAll(true)}
-            className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
+            className="border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
           >
             Select all
           </button>
           <button
             type="button"
             onClick={() => selectAll(false)}
-            className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
+            className="border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
           >
             Select none
           </button>
@@ -738,7 +738,7 @@ export function VintageDropSheet({
             type="button"
             onClick={selectPhotographed}
             disabled={!rows.some((r) => r.photos.length)}
-            className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted disabled:opacity-40"
+            className="border px-2.5 py-1 text-fine transition-colors hover:bg-muted disabled:opacity-40"
             title="Keep only the garments the shoot has uploaded"
           >
             Select photographed
@@ -761,7 +761,7 @@ export function VintageDropSheet({
               key={field}
               type="button"
               onClick={() => fillDown(field)}
-              className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
+              className="border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
             >
               Fill {label} down
             </button>
@@ -793,11 +793,11 @@ export function VintageDropSheet({
                         src={p.url}
                         alt={p.filename}
                         title={p.filename}
-                        className="size-24 rounded border object-cover"
+                        className="size-24 border object-cover"
                       />
                     ))
                   ) : (
-                    <div className="grid size-24 place-items-center rounded border border-dashed text-center text-fine leading-tight text-muted-foreground">
+                    <div className="grid size-24 place-items-center border border-dashed text-center text-fine leading-tight text-muted-foreground">
                       waiting for
                       <br />
                       the shoot
@@ -989,7 +989,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!ready || busy !== null || created !== null || rows.length === 0}
             onClick={onCreate}
-            className="rounded-md border bg-foreground px-3 py-1.5 text-body text-background disabled:opacity-40"
+            className="border bg-foreground px-3 py-1.5 text-body text-background disabled:opacity-40"
           >
             {busy === "Create" ? "Creating…" : `Create ${included.length} in Origio`}
           </button>
@@ -1001,7 +1001,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!created?.length || busy !== null}
             onClick={onPushShopify}
-            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
+            className="border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Push to Shopify" ? "Pushing…" : "Push to Shopify"}
           </button>
@@ -1010,7 +1010,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!created?.length || busy !== null}
             onClick={onPushLoom}
-            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
+            className="border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Push to Loom" ? "Sending…" : "Push to Loom"}
           </button>
@@ -1019,7 +1019,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!created?.length || busy !== null}
             onClick={onMoveToTop}
-            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
+            className="border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Move to top" ? "Moving…" : "Move to top of collection"}
           </button>
@@ -1029,7 +1029,7 @@ export function VintageDropSheet({
             disabled={!created?.length || busy !== null}
             onClick={onReveal}
             title="Drop the hide tags and publish to every sales channel"
-            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
+            className="border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Reveal" ? "Revealing…" : "Reveal now"}
           </button>
@@ -1038,7 +1038,7 @@ export function VintageDropSheet({
             disabled={busy !== null || !drop.trim()}
             onClick={onSchedule}
             title="Reveal automatically at a set time"
-            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
+            className="border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Schedule" ? "Scheduling…" : "Schedule reveal"}
           </button>

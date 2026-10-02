@@ -46,7 +46,7 @@ export default async function LookupPage({
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
@@ -58,9 +58,9 @@ export default async function LookupPage({
           defaultValue={q}
           autoFocus
           placeholder="SKU, barcode, or product name  —  e.g. LIV-CN-BCHK, 7072536068642, Connely"
-          className="w-full rounded-md border bg-background px-3 py-2 text-body"
+          className="w-full border bg-background px-3 py-2 text-body"
         />
-        <button className="shrink-0 rounded-md border bg-foreground px-4 py-2 text-body text-background">
+        <button className="shrink-0 border bg-foreground px-4 py-2 text-body text-background">
           Search
         </button>
       </form>
@@ -74,12 +74,12 @@ export default async function LookupPage({
       {report ? (
         report.results.length === 0 ? (
           <p className="mt-8 text-body text-muted-foreground">
-            Nothing matches <code className="rounded bg-muted px-1">{report.query}</code>.
+            Nothing matches <code className="bg-muted px-1">{report.query}</code>.
           </p>
         ) : (
           <div className="mt-8 space-y-6">
             {report.results.map((r) => (
-              <section key={r.colorwaySku} className="rounded-lg border">
+              <section key={r.colorwaySku} className="border">
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b bg-muted/40 px-4 py-3">
                   <span>{r.name}</span>
                   <code className="text-fine">{r.colorwaySku}</code>
@@ -142,7 +142,7 @@ export default async function LookupPage({
             {report.channelSnapshot ? (
               <p className="text-fine text-muted-foreground">
                 Origio is live. Channel columns are from{" "}
-                <code className="rounded bg-muted px-1">{report.channelSnapshot}</code>.
+                <code className="bg-muted px-1">{report.channelSnapshot}</code>.
               </p>
             ) : null}
           </div>

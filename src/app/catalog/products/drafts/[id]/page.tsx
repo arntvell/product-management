@@ -51,7 +51,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
         </div>
         <Link
           href="/catalog/products/drafts"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           All drafts
         </Link>

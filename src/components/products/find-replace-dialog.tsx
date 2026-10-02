@@ -213,7 +213,7 @@ export function FindReplaceDialog({
               </p>
 
               {matches.length > 0 && (
-                <div className="border rounded divide-y max-h-72 overflow-auto text-fine">
+                <div className="border divide-y max-h-72 overflow-auto text-fine">
                   {matches.map((m, i) => (
                     <div key={i} className="px-3 py-2 space-y-1">
                       <div className="flex items-center gap-2">

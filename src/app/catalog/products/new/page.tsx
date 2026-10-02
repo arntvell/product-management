@@ -68,7 +68,7 @@ function Choice({
   return (
     <Link
       href={href}
-      className="group flex flex-col rounded-lg border p-5 transition-colors hover:bg-muted/50"
+      className="group flex flex-col border p-5 transition-colors hover:bg-muted/50"
     >
       <h2 className="text-body">{title}</h2>
       <p className="mt-1 text-body">{lead}</p>

@@ -49,7 +49,7 @@ export function SizeSystemManager({ initial }: { initial: SizeSystemView[] }) {
       ) : null}
 
       {live.length === 0 && !creating ? (
-        <p className="rounded-md border border-dashed p-6 text-center text-body text-muted-foreground">
+        <p className="border border-dashed p-6 text-center text-body text-muted-foreground">
           No size systems yet. The builder needs at least one before it can create variants.
         </p>
       ) : null}
@@ -74,7 +74,7 @@ export function SizeSystemManager({ initial }: { initial: SizeSystemView[] }) {
       </div>
 
       {archived.length ? (
-        <details className="rounded-md border p-4">
+        <details className="border p-4">
           <summary className="cursor-pointer text-body">
             {archived.length} archived
           </summary>
@@ -125,7 +125,7 @@ function SystemRow({
   const retired = system.entries.filter((e) => e.archived);
 
   return (
-    <div className="rounded-md border">
+    <div className="border">
       <button
         type="button"
         onClick={onToggle}
@@ -162,7 +162,7 @@ function SystemRow({
               {activeEntries.map((e) => (
                 <span
                   key={e.id}
-                  className="rounded border px-2 py-1 text-fine"
+                  className="border px-2 py-1 text-fine"
                   title={`SKU token: ${e.skuToken}`}
                 >
                   {e.sizeLabel}
@@ -285,7 +285,7 @@ function CreateForm({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="space-y-3 rounded-md border p-4">
+    <div className="space-y-3 border p-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="ss-name" className="text-fine">
@@ -305,7 +305,7 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           </Label>
           <select
             id="ss-kind"
-            className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
+            className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
             value={kind}
             onChange={(e) => setKind(e.target.value as Kind)}
           >

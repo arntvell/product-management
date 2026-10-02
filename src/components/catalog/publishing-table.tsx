@@ -472,7 +472,7 @@ export function PublishingTable({
       )}
 
       {/* Bulk toolbar */}
-      <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2 border bg-muted/30 p-2">
         <span className="px-1 text-fine text-muted-foreground tabular-nums">
           {selected.size} selected
         </span>
@@ -546,7 +546,7 @@ export function PublishingTable({
       </div>
 
       {report && (
-        <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-fine">
+        <div className="mt-3 border bg-muted/20 p-3 text-fine">
           <div className="flex items-center justify-between">
             <span>
               {report.channel} push: {report.ok}/{report.total} pushed
@@ -569,7 +569,7 @@ export function PublishingTable({
         </div>
       )}
 
-      <div className="mt-4 overflow-hidden rounded-lg border">
+      <div className="mt-4 overflow-hidden border">
         <table className="w-full text-body">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">
@@ -592,7 +592,7 @@ export function PublishingTable({
                     <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} />
                   </td>
                   <td className="p-2">
-                    <div className="h-9 w-9 overflow-hidden rounded bg-muted">
+                    <div className="h-9 w-9 overflow-hidden bg-muted">
                       {src && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={src} alt="" className="h-full w-full object-cover" />

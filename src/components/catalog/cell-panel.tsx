@@ -120,7 +120,7 @@ export function CellPanel({
               className="min-h-[240px] flex-1 text-body"
             />
             {channel && target.inherited && (
-              <div className="mt-2 rounded-md border bg-muted/30 p-2">
+              <div className="mt-2 border bg-muted/30 p-2">
                 <p className="text-fine uppercase text-muted-foreground">
                   Base value
                 </p>

@@ -173,7 +173,7 @@ export function MediaManager({
       <div
         {...getRootProps()}
         className={cn(
-          "mt-6 cursor-pointer rounded-lg border-2 border-dashed p-8 text-center text-body transition-colors",
+          "mt-6 cursor-pointer border-2 border-dashed p-8 text-center text-body transition-colors",
           isDragActive ? "border-foreground bg-muted/50" : "border-muted-foreground/30",
           uploading && "pointer-events-none opacity-60"
         )}
@@ -245,7 +245,7 @@ function SortableTile({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group relative overflow-hidden rounded-lg border bg-muted",
+        "group relative overflow-hidden border bg-muted",
         isDragging && "z-10 opacity-80 shadow-lg"
       )}
     >
@@ -260,7 +260,7 @@ function SortableTile({
         )}
         <span
           className={cn(
-            "absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-fine",
+            "absolute left-1.5 top-1.5 px-1.5 py-0.5 text-fine",
             item.source === "BLOB"
               ? "bg-ink text-offwhite"
               : "bg-background/90 text-muted-foreground"
@@ -269,7 +269,7 @@ function SortableTile({
           {SOURCE_LABEL[item.source]}
         </span>
         {item.role !== "GALLERY" && (
-          <span className="absolute bottom-1.5 left-1.5 rounded bg-foreground/90 px-1.5 py-0.5 text-fine text-background">
+          <span className="absolute bottom-1.5 left-1.5 bg-foreground/90 px-1.5 py-0.5 text-fine text-background">
             {item.role}
           </span>
         )}
@@ -278,7 +278,7 @@ function SortableTile({
             <button
               onClick={onAdopt}
               title="Adopt into Blob"
-              className="rounded bg-background/90 px-1.5 py-0.5 text-fine hover:bg-background"
+              className="bg-background/90 px-1.5 py-0.5 text-fine hover:bg-background"
             >
               Adopt
             </button>
@@ -286,7 +286,7 @@ function SortableTile({
           <button
             onClick={onRemove}
             title="Remove"
-            className="rounded bg-background/90 px-1.5 py-0.5 text-fine text-destructive hover:bg-background"
+            className="bg-background/90 px-1.5 py-0.5 text-fine text-destructive hover:bg-background"
           >
             ✕
           </button>

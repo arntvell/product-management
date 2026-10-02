@@ -41,7 +41,7 @@ export function GroupCard({ group, onAutoLink, isLinking }: GroupCardProps) {
   };
 
   return (
-    <div className="border rounded-lg p-4 space-y-3">
+    <div className="border p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div>
           <h3>{group.baseName}</h3>
@@ -110,7 +110,7 @@ function ProductChip({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded border text-body",
+        "flex items-center gap-1.5 px-2 py-1 border text-body",
         excluded && "opacity-40 line-through"
       )}
     >
@@ -121,7 +121,7 @@ function ProductChip({
         <img
           src={product.featuredImage}
           alt=""
-          className="w-6 h-6 rounded object-cover"
+          className="w-6 h-6 object-cover"
         />
       )}
       <span className="max-w-[180px] truncate">{product.title}</span>

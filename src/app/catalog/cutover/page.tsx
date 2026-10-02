@@ -18,7 +18,7 @@ export default async function CutoverPage() {
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
@@ -27,18 +27,18 @@ export default async function CutoverPage() {
       <p className="mt-3 max-w-2xl text-body text-muted-foreground">
         Making Sitoo, Shopify and Loom receive identity from Origio instead of
         holding their own. Full sequence in{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-fine">docs/cutover-runbook.md</code>.
+        <code className="bg-muted px-1 py-0.5 text-fine">docs/cutover-runbook.md</code>.
       </p>
 
       {status.migrationError ? (
-        <div className="mt-6 rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+        <div className="mt-6 border border-destructive/40 bg-destructive/5 p-4">
           <div className="text-destructive">Migrations not applied</div>
           <p className="mt-1 text-body text-muted-foreground">
             The Prisma client is generated against a schema the database does not
             have yet, so this page cannot read its own state. Run migrations 1–4
             first — step 0 of the runbook.
           </p>
-          <pre className="mt-3 overflow-auto rounded-md bg-muted p-3 text-fine">
+          <pre className="mt-3 overflow-auto bg-muted p-3 text-fine">
             {status.migrationError}
           </pre>
         </div>
@@ -50,7 +50,7 @@ export default async function CutoverPage() {
             </h2>
             <div className="mt-3 space-y-2">
               {status.steps.map((s) => (
-                <div key={s.key} className="rounded-lg border p-4">
+                <div key={s.key} className="border p-4">
                   <div className="flex items-start gap-3">
                     <span
                       className={`mt-1 size-2 shrink-0 rounded-full ${

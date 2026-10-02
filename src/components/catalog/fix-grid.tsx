@@ -260,7 +260,7 @@ export function FixGrid({
       )}
 
       {/* Bulk bar */}
-      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2 border bg-muted/30 px-3 py-2">
         <span className="text-fine">
           {selected.size} selected
         </span>
@@ -270,7 +270,7 @@ export function FixGrid({
             setBulkField(e.target.value as Field);
             setBulkValue("");
           }}
-          className="rounded border bg-background px-2 py-1 text-fine"
+          className="border bg-background px-2 py-1 text-fine"
         >
           {BULK_FIELDS.map((b) => (
             <option key={b.field} value={b.field}>
@@ -282,7 +282,7 @@ export function FixGrid({
           <select
             value={bulkValue}
             onChange={(e) => setBulkValue(e.target.value)}
-            className="min-w-44 rounded border bg-background px-2 py-1 text-fine"
+            className="min-w-44 border bg-background px-2 py-1 text-fine"
           >
             <option value="">— pick —</option>
             {manufacturers.map((m) => (
@@ -297,14 +297,14 @@ export function FixGrid({
             value={bulkValue}
             onChange={(e) => setBulkValue(e.target.value)}
             placeholder="value"
-            className="min-w-44 rounded border bg-background px-2 py-1 text-fine"
+            className="min-w-44 border bg-background px-2 py-1 text-fine"
           />
         )}
         <button
           type="button"
           onClick={applyBulk}
           disabled={busy || !selected.size || !bulkValue.trim()}
-          className="rounded bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
+          className="bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
         >
           Apply to selected
         </button>
@@ -314,7 +314,7 @@ export function FixGrid({
       </div>
 
       {/* Grid */}
-      <div className="mt-3 overflow-x-auto rounded-lg border">
+      <div className="mt-3 overflow-x-auto border">
         <table className="w-full min-w-[1100px] text-body">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">
@@ -415,7 +415,7 @@ function Row({
           disabled={busy}
           onChange={(e) => onSave(row, "manufacturerId", e.target.value)}
           className={cn(
-            "w-full rounded border bg-background px-1.5 py-1 text-fine",
+            "w-full border bg-background px-1.5 py-1 text-fine",
             needs("manufacturerId") && "border-ink",
             didFail("manufacturerId") && "border-ink bg-selected"
           )}
@@ -508,7 +508,7 @@ function Cell({
           if (!(await onSave(row, field, next))) setDraft(persisted);
         }}
         className={cn(
-          "w-full rounded border bg-background px-1.5 py-1 text-fine",
+          "w-full border bg-background px-1.5 py-1 text-fine",
           needs && "border-ink",
           failed && "border-ink bg-selected"
         )}

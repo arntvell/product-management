@@ -60,7 +60,7 @@ export function ReferencesPanel({
 
   return (
     <div className="mx-auto mt-6 max-w-3xl px-6">
-      <section className="rounded-lg border p-5">
+      <section className="border p-5">
         <h2 className="text-body">References</h2>
         <p className="mt-1 text-fine text-muted-foreground">
           Care / fit guide / collection / model point at Shopify resources.
@@ -121,7 +121,7 @@ function SingleRef({
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
+        className="h-9 w-full border bg-transparent px-3 text-body"
       >
         <option value="">—</option>
         {options.map((o) => (
@@ -185,7 +185,7 @@ function ProductMulti({
           className="h-8"
         />
         {matches.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-md border bg-background shadow-md">
+          <div className="absolute z-10 mt-1 w-full overflow-hidden border bg-background shadow-md">
             {matches.map((o) => (
               <button
                 key={o.id}

@@ -69,7 +69,7 @@ export function CollectionPicker({
                   <img
                     src={selectedCollection.image.url}
                     alt=""
-                    className="w-8 h-8 object-cover rounded"
+                    className="w-8 h-8 object-cover"
                   />
                 )}
                 <div className="flex-1 min-w-0">
@@ -98,7 +98,7 @@ export function CollectionPicker({
                     <img
                       src={collection.image.url}
                       alt=""
-                      className="w-8 h-8 object-cover rounded"
+                      className="w-8 h-8 object-cover"
                     />
                   )}
                   <div className="flex-1 min-w-0">

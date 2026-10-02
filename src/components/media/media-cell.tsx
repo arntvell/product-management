@@ -70,10 +70,10 @@ export function MediaCell({
         <img
           src={thumbnailUrl}
           alt=""
-          className="w-8 h-8 object-cover rounded shrink-0"
+          className="w-8 h-8 object-cover shrink-0"
         />
       ) : (
-        <div className="w-8 h-8 bg-muted rounded shrink-0 flex items-center justify-center text-muted-foreground text-fine">
+        <div className="w-8 h-8 bg-muted shrink-0 flex items-center justify-center text-muted-foreground text-fine">
           —
         </div>
       )}

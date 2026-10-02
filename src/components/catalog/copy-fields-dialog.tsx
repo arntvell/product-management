@@ -153,7 +153,7 @@ export function CopyFieldsDialog({
             reset();
           }}
           placeholder="Search by product name, handle or SKU — e.g. Brass"
-          className="w-full rounded-md border bg-transparent px-3 py-2 text-body"
+          className="w-full border bg-transparent px-3 py-2 text-body"
         />
 
         {warnings.map((w) => (
@@ -186,7 +186,7 @@ export function CopyFieldsDialog({
               >
                 <span
                   className={cn(
-                    "mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-fine uppercase",
+                    "mt-0.5 shrink-0 px-1.5 py-0.5 text-fine uppercase",
                     s.origin === "shopify"
                       ? "bg-hover text-muted-foreground"
                       : "bg-muted text-muted-foreground"

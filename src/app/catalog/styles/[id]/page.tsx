@@ -61,8 +61,8 @@ export default async function StyleDetailPage({
           const prices = nokPrices(cw);
           const entry = cw.entries[0];
           return (
-            <div key={cw.id} className="flex gap-4 rounded-lg border p-4">
-              <div className="h-24 w-24 shrink-0 overflow-hidden rounded bg-muted">
+            <div key={cw.id} className="flex gap-4 border p-4">
+              <div className="h-24 w-24 shrink-0 overflow-hidden bg-muted">
                 {src && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={src} alt="" className="h-full w-full object-cover" />
@@ -118,7 +118,7 @@ export default async function StyleDetailPage({
                   {cw.variants.map((v) => (
                     <span
                       key={v.id}
-                      className="rounded border px-2 py-0.5 text-fine"
+                      className="border px-2 py-0.5 text-fine"
                       title={`${v.variantSku}${
                         v.barcode ? ` · ${v.barcode}` : " · no barcode"
                       }`}

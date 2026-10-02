@@ -35,7 +35,7 @@ export function StepPrices({ payload, update, options }: StepProps) {
         chosen season, so a re-buy at a different landed cost does not overwrite history.
       </p>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto border">
         <div className="min-w-[34rem]">
           <div className="grid grid-cols-[1fr_9rem_9rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
             <div>Colourway</div>
@@ -94,7 +94,7 @@ export function StepPrices({ payload, update, options }: StepProps) {
         </div>
       </div>
 
-      <details className="rounded-md border p-4">
+      <details className="border p-4">
         <summary className="cursor-pointer text-body">
           Customs and classification
         </summary>
@@ -238,7 +238,7 @@ function CategoryField({ payload, update, options }: StepProps) {
         </div>
       ) : (
         <select
-          className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
+          className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
           value={payload.template.categoryId}
           onChange={(e) => {
             if (e.target.value === "__new__") {

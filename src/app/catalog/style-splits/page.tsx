@@ -72,14 +72,14 @@ export default async function StyleSplitsPage({
             one garment, several styles
           </span>
         </div>
-        <Link href="/catalog" className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted">
+        <Link href="/catalog" className="border px-3 py-1.5 text-body transition-colors hover:bg-muted">
           Catalog
         </Link>
       </div>
 
       <p className="mt-3 max-w-3xl text-body text-muted-foreground">
         Loom groups colourways by one thing: our{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-fine">Colorway.styleId</code>{" "}
+        <code className="bg-muted px-1 py-0.5 text-fine">Colorway.styleId</code>{" "}
         foreign key. A colourway has no style of its own over there — it belongs
         to whichever style block it arrives in, and every push rewrites the
         grouping from our structure. So a split here is a split there, and
@@ -89,7 +89,7 @@ export default async function StyleSplitsPage({
 
       <StyleSplitPending />
 
-      <ol className="mt-4 max-w-3xl list-decimal space-y-1 rounded-lg border p-4 pl-8 text-body text-muted-foreground">
+      <ol className="mt-4 max-w-3xl list-decimal space-y-1 border p-4 pl-8 text-body text-muted-foreground">
         <li>
           Work through a row: the ticked colourways are the ones that will move
           under the style marked <strong className="text-foreground">keep</strong>.
@@ -112,7 +112,7 @@ export default async function StyleSplitsPage({
         </li>
       </ol>
 
-      <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border p-4">
+      <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border p-4">
         {[
           { label: "styles scanned", value: report.scanned.toLocaleString("en-GB") },
           { label: "high confidence", value: String(report.counts.high) },
@@ -140,7 +140,7 @@ export default async function StyleSplitsPage({
         before running the rest.
       </p>
 
-      <p className="mt-2 rounded-lg border p-3 text-fine text-muted-foreground">
+      <p className="mt-2 border p-3 text-fine text-muted-foreground">
         <strong className="text-foreground">Vintage is excluded deliberately.</strong>{" "}
         {report.vintageSkipped.toLocaleString("en-GB")} styles are one-of-one{" "}
         <code>VN-</code>/<code>EXT-VN-</code> stock, where six second-hand shirts in
@@ -176,7 +176,7 @@ export default async function StyleSplitsPage({
           name="q"
           defaultValue={q ?? ""}
           placeholder="Filter by style name or SKU — Barnes, LIV-W-KR…"
-          className="w-full rounded-md border px-3 py-1.5 text-body"
+          className="w-full border px-3 py-1.5 text-body"
         />
       </form>
 

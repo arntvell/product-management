@@ -155,7 +155,7 @@ export function FitguideAutoLink({
           {matches.length === 0 ? (
             <p className="text-body text-muted-foreground py-4">
               No matches found. Ensure fitguide page handles follow the pattern{" "}
-              <code className="text-fine bg-muted px-1 py-0.5 rounded">
+              <code className="text-fine bg-muted px-1 py-0.5">
                 {"{product-name}"}-fitguide
               </code>
               {" "}(e.g. product &quot;nelson-slim-black&quot; matches &quot;nelson-fitguide&quot;)

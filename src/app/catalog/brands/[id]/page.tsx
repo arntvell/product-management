@@ -32,7 +32,7 @@ export default async function BrandSettingsPage({
         </div>
         <Link
           href="/catalog/brands"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           All brands
         </Link>

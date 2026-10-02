@@ -5,14 +5,14 @@ export const dynamic = "force-dynamic";
 
 function Group({ g }: { g: StemGroup }) {
   return (
-    <div className="rounded-lg border p-3">
+    <div className="border p-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span>{g.styleName}</span>
         <span className="flex flex-wrap gap-1.5">
           {g.stems.map((s) => (
             <code
               key={s}
-              className="rounded bg-muted px-1.5 py-0.5 text-fine"
+              className="bg-muted px-1.5 py-0.5 text-fine"
             >
               {s}
             </code>
@@ -33,7 +33,7 @@ function List({ items, empty }: { items: string[]; empty: string }) {
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1 text-fine">
       {items.map((s) => (
-        <code key={s} className="rounded bg-muted px-1.5 py-0.5">
+        <code key={s} className="bg-muted px-1.5 py-0.5">
           {s}
         </code>
       ))}
@@ -55,7 +55,7 @@ export default async function SkusPage() {
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
@@ -68,7 +68,7 @@ export default async function SkusPage() {
         this <em>does</em> settle is the convention new product should follow.
       </p>
 
-      <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border p-4">
+      <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border p-4">
         {[
           { label: "abbreviation drift", value: a.stemDrift.length },
           { label: "retired LIV-M-/LIV-W-", value: a.legacyScheme.length },
@@ -105,8 +105,8 @@ export default async function SkusPage() {
           Retired scheme — {a.legacyScheme.length} styles
         </h2>
         <p className="mt-1 max-w-3xl text-fine text-muted-foreground">
-          Carrying a <code className="rounded bg-muted px-1">LIV-M-</code> or{" "}
-          <code className="rounded bg-muted px-1">LIV-W-</code> gender-prefixed
+          Carrying a <code className="bg-muted px-1">LIV-M-</code> or{" "}
+          <code className="bg-muted px-1">LIV-W-</code> gender-prefixed
           SKU alongside a modern one. Most of these are the duplicate pairs on
           the{" "}
           <Link href="/catalog/duplicates" className="underline">
@@ -131,7 +131,7 @@ export default async function SkusPage() {
           something else. Recorded rather than merged — there is only one record
           to begin with.
         </p>
-        <div className="mt-3 overflow-x-auto rounded-lg border">
+        <div className="mt-3 overflow-x-auto border">
           <table className="w-full text-left text-fine">
             <thead className="border-b bg-muted/40">
               <tr>
@@ -160,8 +160,8 @@ export default async function SkusPage() {
           </h2>
           <p className="mt-1 text-fine text-muted-foreground">
             Compares unequal to the same SKU typed in capitals. This is how{" "}
-            <code className="rounded bg-muted px-1">LIV-Needle-W</code> and{" "}
-            <code className="rounded bg-muted px-1">LIV-NEEDLE-W</code> became
+            <code className="bg-muted px-1">LIV-Needle-W</code> and{" "}
+            <code className="bg-muted px-1">LIV-NEEDLE-W</code> became
             two records of one garment.
           </p>
           <div className="mt-2">
@@ -173,8 +173,8 @@ export default async function SkusPage() {
             Slashed sizes — {a.slashedSize.length}
           </h2>
           <p className="mt-1 text-fine text-muted-foreground">
-            <code className="rounded bg-muted px-1">28/34</code> where the rest
-            of the catalogue writes <code className="rounded bg-muted px-1">2834</code>.
+            <code className="bg-muted px-1">28/34</code> where the rest
+            of the catalogue writes <code className="bg-muted px-1">2834</code>.
             Matching normalises both, but the two spellings coexist in the data.
           </p>
           <div className="mt-2">

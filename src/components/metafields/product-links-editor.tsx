@@ -48,7 +48,7 @@ export function ProductLinksEditor({
                 <img
                   src={product.featuredImage}
                   alt=""
-                  className="w-4 h-4 rounded object-cover"
+                  className="w-4 h-4 object-cover"
                 />
               )}
               <span className="text-fine max-w-[150px] truncate">

@@ -81,7 +81,7 @@ export function StepBarcodes({
       <div className="flex flex-wrap items-center gap-3">
         <a
           href={`/api/catalog/drafts/${draftId}/barcodes`}
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Export CSV
         </a>
@@ -127,7 +127,7 @@ export function StepBarcodes({
 
       <div className="space-y-3">
         {payload.colorways.map((cw) => (
-          <div key={cw.key} className="rounded-md border">
+          <div key={cw.key} className="border">
             <div className="border-b bg-muted/40 px-3 py-2 text-fine">
               {cw.name || "Unnamed"} · <code>{cw.colorwaySku}</code>
             </div>

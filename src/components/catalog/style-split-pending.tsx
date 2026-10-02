@@ -282,7 +282,7 @@ export function StyleSplitPending() {
 
   if (error) {
     return (
-      <div className="mt-5 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-fine">
+      <div className="mt-5 border border-destructive/40 bg-destructive/5 p-4 text-fine">
         <strong className="text-foreground">
           Could not check what is waiting to go to Loom.
         </strong>{" "}
@@ -305,7 +305,7 @@ export function StyleSplitPending() {
   return (
     <div className="mt-5 space-y-3">
       {tasks.length ? (
-        <div className="rounded-lg border bg-background p-4">
+        <div className="border bg-background p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-body">
               Pushing to Loom
@@ -332,7 +332,7 @@ export function StyleSplitPending() {
               <div
                 key={t.styleId}
                 className={
-                  "rounded-md border px-3 py-2 text-body " +
+                  " border px-3 py-2 text-body " +
                   (t.state === "running"
                     ? "border-border bg-muted/40"
                     : t.state === "ok"
@@ -396,7 +396,7 @@ export function StyleSplitPending() {
             {waiting.map((s) => (
               <div
                 key={s.styleId}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-3 border bg-background px-3 py-2"
               >
                 <div className="min-w-0 text-body">
                   <span>{s.styleName}</span>{" "}

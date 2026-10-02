@@ -19,13 +19,13 @@ export default async function BrandsPage() {
         <div className="flex items-center gap-2">
           <Link
             href="/catalog/brands/identity"
-            className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+            className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
           >
             Brand identity
           </Link>
           <Link
             href="/catalog"
-            className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+            className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
           >
             Back to catalog
           </Link>

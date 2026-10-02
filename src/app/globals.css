@@ -194,16 +194,3 @@
     font-variant-numeric: tabular-nums;
   }
 }
-
-/* `rounded`, `rounded-l/r/t/b` are hardcoded in the shadcn compat layer rather
-   than driven by --radius, so they survive the token bridge. Flatten them here
-   until the enforcement phase removes the utilities from the components. */
-@layer utilities {
-  .rounded,
-  .rounded-t,
-  .rounded-b,
-  .rounded-l,
-  .rounded-r {
-    border-radius: 0;
-  }
-}

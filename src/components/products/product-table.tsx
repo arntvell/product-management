@@ -126,7 +126,7 @@ function StatusCell({
             key={s}
             type="button"
             className={cn(
-              "w-full text-left px-2 py-1.5 text-body rounded hover:bg-muted",
+              "w-full text-left px-2 py-1.5 text-body hover:bg-muted",
               s === status && ""
             )}
             onClick={() => {
@@ -181,7 +181,7 @@ function VendorCell({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2 space-y-2" align="start">
         <input
-          className="w-full border rounded px-2 py-1 text-body outline-none"
+          className="w-full border px-2 py-1 text-body outline-none"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -193,7 +193,7 @@ function VendorCell({
           autoFocus
         />
         {suggestions.length > 0 && (
-          <div className="border rounded text-fine divide-y max-h-40 overflow-auto">
+          <div className="border text-fine divide-y max-h-40 overflow-auto">
             {suggestions.map((v) => (
               <button
                 key={v}
@@ -294,10 +294,10 @@ const ProductRow = React.memo(function ProductRow({
           <img
             src={product.featuredImage}
             alt=""
-            className="w-8 h-8 object-cover rounded"
+            className="w-8 h-8 object-cover"
           />
         ) : (
-          <div className="w-8 h-8 bg-muted rounded" />
+          <div className="w-8 h-8 bg-muted" />
         )}
       </div>
       <div role="cell" className="p-2 min-w-[200px] flex-1 flex items-center">

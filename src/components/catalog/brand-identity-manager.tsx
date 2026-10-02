@@ -110,7 +110,7 @@ export function BrandIdentityManager({
             {duplicates.map((d, i) => (
               <div
                 key={i}
-                className="flex flex-wrap items-center gap-3 rounded-md border p-3 text-body"
+                className="flex flex-wrap items-center gap-3 border p-3 text-body"
               >
                 <span
                   className={
@@ -193,7 +193,7 @@ export function BrandIdentityManager({
           with no id at all, so the spelling is the only thing to join on. A Sitoo row may
           be a factory rather than a brand — say so rather than linking it.
         </p>
-        <div className="mt-3 overflow-hidden rounded-md border">
+        <div className="mt-3 overflow-hidden border">
           {(showAll ? unlinked : unlinked.slice(0, 30)).map((r) => (
             <div
               key={r.id}
@@ -214,7 +214,7 @@ export function BrandIdentityManager({
                 {r.productCount || "—"}
               </div>
               <select
-                className="h-8 rounded-md border bg-transparent px-2 text-fine"
+                className="h-8 border bg-transparent px-2 text-fine"
                 defaultValue=""
                 onChange={(e) => {
                   const brandId = e.target.value;
@@ -285,7 +285,7 @@ export function BrandIdentityManager({
 
       <section>
         <h2 className="text-body">Linked identity</h2>
-        <div className="mt-3 overflow-hidden rounded-md border">
+        <div className="mt-3 overflow-hidden border">
           {brands
             .filter((b) => b.refs.length)
             .map((b) => (
@@ -300,7 +300,7 @@ export function BrandIdentityManager({
                   {b.refs.map((r) => (
                     <span
                       key={r.id}
-                      className="rounded border px-2 py-0.5 text-fine text-muted-foreground"
+                      className="border px-2 py-0.5 text-fine text-muted-foreground"
                     >
                       {r.system}: {r.externalName}
                       {r.externalId ? ` (${r.externalId})` : ""}

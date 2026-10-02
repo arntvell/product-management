@@ -130,7 +130,7 @@ export function IdentityPanel({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto border">
         <div className="min-w-[52rem]">
           <div className="grid grid-cols-[2rem_minmax(14rem,2fr)_5rem_5rem_5rem_5rem_minmax(9rem,1fr)] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
             <div />
@@ -206,7 +206,7 @@ function Stat({
   warn?: boolean;
 }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="border p-3">
       <div className="text-fine text-muted-foreground">{label}</div>
       <div
         className={

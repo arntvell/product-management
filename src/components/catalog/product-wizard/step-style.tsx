@@ -102,7 +102,7 @@ export function StepStyle({ payload, update }: StepProps) {
       </div>
 
       {selected ? (
-        <div className="rounded-md border bg-muted/40 p-3 text-body">
+        <div className="border bg-muted/40 p-3 text-body">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div>
@@ -131,7 +131,7 @@ export function StepStyle({ payload, update }: StepProps) {
           </div>
         </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="border">
           {searching && hits.length === 0 ? (
             <p className="px-3 py-3 text-body text-muted-foreground">Searching…</p>
           ) : null}

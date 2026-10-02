@@ -76,10 +76,10 @@ const MediaRow = React.memo(function MediaRow({
           <img
             src={product.featuredImage}
             alt=""
-            className="w-8 h-8 object-cover rounded"
+            className="w-8 h-8 object-cover"
           />
         ) : (
-          <div className="w-8 h-8 bg-muted rounded" />
+          <div className="w-8 h-8 bg-muted" />
         )}
       </td>
       <td className="p-2 min-w-[200px] flex-1 flex items-center">
@@ -94,7 +94,7 @@ const MediaRow = React.memo(function MediaRow({
       <td className="p-2 w-[90px] shrink-0 text-body text-muted-foreground flex items-center">
         <span
           className={cn(
-            "text-fine px-1.5 py-0.5 rounded",
+            "text-fine px-1.5 py-0.5",
             product.status === "ACTIVE" && "bg-ink text-offwhite",
             product.status === "DRAFT" && "border border-ink text-ink",
             product.status === "ARCHIVED" && "bg-hover text-muted-foreground"

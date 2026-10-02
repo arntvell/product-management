@@ -5,7 +5,7 @@ import { ChevronDownIcon, XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-// The one rounded element in the system. §5 allows the pill here and nowhere
+// The one element in the system. §5 allows the pill here and nowhere
 // else, because a filter is the one control that detaches and is dismissed.
 export interface FilterChipProps {
   label: string;

@@ -229,7 +229,7 @@ function ReferenceList({
   }
 
   return (
-    <div className="max-h-[200px] overflow-auto rounded-md border">
+    <div className="max-h-[200px] overflow-auto border">
       {items.map((item) => (
         <button
           key={item.id}

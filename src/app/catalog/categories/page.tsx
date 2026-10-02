@@ -21,7 +21,7 @@ export default async function CategoriesPage() {
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Back to catalog
         </Link>

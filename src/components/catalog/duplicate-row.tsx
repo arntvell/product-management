@@ -95,7 +95,7 @@ export function DuplicateRow({ candidate: c }: { candidate: CandidateView }) {
   }, [c]);
 
   return (
-    <div className="rounded-lg border p-4">
+    <div className="border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div>
@@ -130,7 +130,7 @@ export function DuplicateRow({ candidate: c }: { candidate: CandidateView }) {
         <p className="mt-3 text-fine text-destructive">{error}</p>
       ) : null}
       {preview ? (
-        <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-muted p-3 text-fine">
+        <pre className="mt-3 max-h-64 overflow-auto bg-muted p-3 text-fine">
           {JSON.stringify(preview, null, 2)}
         </pre>
       ) : null}

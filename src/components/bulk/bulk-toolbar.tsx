@@ -121,7 +121,7 @@ export function BulkToolbar({
             </Button>
           </div>
           {tagSuggestions.length > 0 && (
-            <div className="border rounded text-fine divide-y max-h-32 overflow-auto">
+            <div className="border text-fine divide-y max-h-32 overflow-auto">
               {tagSuggestions.map((s) => (
                 <button
                   key={s}
@@ -153,7 +153,7 @@ export function BulkToolbar({
             {columns.map((col) => (
               <label
                 key={col.key}
-                className="flex items-center gap-2 px-1 py-1 text-body hover:bg-muted/50 rounded cursor-pointer"
+                className="flex items-center gap-2 px-1 py-1 text-body hover:bg-muted/50 cursor-pointer"
               >
                 <Checkbox
                   checked={selectedFields.has(col.key)}

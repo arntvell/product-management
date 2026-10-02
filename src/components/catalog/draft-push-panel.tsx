@@ -199,7 +199,7 @@ export function DraftPushPanel({
   }
 
   return (
-    <div className="mt-6 rounded-md border p-4">
+    <div className="mt-6 border p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-body">{title}</div>

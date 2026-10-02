@@ -27,7 +27,7 @@ export default async function VariantEditorPage({
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
@@ -39,12 +39,12 @@ export default async function VariantEditorPage({
           defaultValue={q}
           autoFocus
           placeholder="SKU, colourway, barcode or product name  —  e.g. EXT-PNT-BCK, 0884597246191"
-          className="w-full rounded-md border bg-background px-3 py-2 text-body"
+          className="w-full border bg-background px-3 py-2 text-body"
         />
         <select
           name="season"
           defaultValue={season}
-          className="rounded-md border bg-background px-3 py-2 text-body"
+          className="border bg-background px-3 py-2 text-body"
         >
           <option value="">All seasons</option>
           {seasons.map((s) => (
@@ -53,7 +53,7 @@ export default async function VariantEditorPage({
             </option>
           ))}
         </select>
-        <button className="shrink-0 rounded-md border bg-foreground px-4 py-2 text-body text-background">
+        <button className="shrink-0 border bg-foreground px-4 py-2 text-body text-background">
           Search
         </button>
       </form>

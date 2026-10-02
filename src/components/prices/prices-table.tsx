@@ -198,7 +198,7 @@ export function PricesTable({
                     {product.title}
                   </span>
                   {mixed && (
-                    <span className="text-fine text-muted-foreground bg-muted rounded px-1 shrink-0">
+                    <span className="text-fine text-muted-foreground bg-muted px-1 shrink-0">
                       mixed
                     </span>
                   )}

@@ -76,7 +76,7 @@ const MASTER_LABEL: Record<RowPlan["master"], string> = {
 function Live({ on, label }: { on: boolean; label: string }) {
   return (
     <span
-      className={`rounded border px-1 text-fine ${
+      className={` border px-1 text-fine ${
         on ? "border-foreground/30" : "border-dashed text-muted-foreground/60 line-through"
       }`}
       title={on ? `Live in ${label}` : `Not live in ${label}`}
@@ -313,7 +313,7 @@ export function VariantBarcodeEditor({
 
   return (
     <div className="mt-6 space-y-4">
-      <details className="rounded-md border p-3">
+      <details className="border p-3">
         <summary className="cursor-pointer text-body">Paste corrections</summary>
         <p className="mt-2 text-fine text-muted-foreground">
           One size per line: SKU, then the correct barcode — tab, comma or space
@@ -324,7 +324,7 @@ export function VariantBarcodeEditor({
           onChange={(e) => setPaste(e.target.value)}
           rows={5}
           placeholder={"EXT-PNT-BCK-ANTHR-M\t0884597246191\nEXT-PNT-BCK-ANTHR-L\t0884597246207"}
-          className="mt-2 w-full rounded-md border bg-background px-3 py-2 font-mono text-fine"
+          className="mt-2 w-full border bg-background px-3 py-2 font-mono text-fine"
         />
         <Button size="sm" variant="outline" onClick={applyPaste} disabled={!!busy || !paste.trim()}>
           Add to editor
@@ -336,7 +336,7 @@ export function VariantBarcodeEditor({
           {searched ? "Nothing matches." : "Search for a SKU, colourway or product — or paste corrections."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="overflow-x-auto border">
           <table className="w-full text-body">
             <thead className="bg-muted/50 text-left text-fine text-muted-foreground">
               <tr>
@@ -397,7 +397,7 @@ export function VariantBarcodeEditor({
                         onChange={(e) => setEdit(r.variantSku, e.target.value, r.barcode)}
                         placeholder={r.barcode ?? ""}
                         inputMode="numeric"
-                        className={`w-40 rounded border bg-background px-2 py-1 font-mono text-fine ${
+                        className={`w-40 border bg-background px-2 py-1 font-mono text-fine ${
                           invalid ? "border-destructive" : value ? "border-ink" : ""
                         }`}
                       />
@@ -441,7 +441,7 @@ export function VariantBarcodeEditor({
       ) : null}
 
       {Object.entries(errors).filter(([, v]) => v).length ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
+        <div className="border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
           {Object.entries(errors).map(([ch, msg]) =>
             msg ? (
               <div key={ch}>
@@ -465,7 +465,7 @@ export function VariantBarcodeEditor({
           value={evidence}
           onChange={(e) => setEvidence(e.target.value)}
           placeholder="Evidence (optional) — e.g. supplier sheet 23.09, scanned label"
-          className="w-80 rounded-md border bg-background px-3 py-1.5 text-body"
+          className="w-80 border bg-background px-3 py-1.5 text-body"
         />
         <Button variant="outline" onClick={preview} disabled={!!busy || !pending}>
           Preview
@@ -491,7 +491,7 @@ export function VariantBarcodeEditor({
           <span className="text-fine text-muted-foreground">{applyBlocked}</span>
         ) : null}
         {showConfirm && report ? (
-          <div className="flex basis-full flex-wrap items-center gap-2 rounded-md border border-ink bg-paper px-3 py-2 text-body">
+          <div className="flex basis-full flex-wrap items-center gap-2 border border-ink bg-paper px-3 py-2 text-body">
             <span>
               {writeSummary(report)} <span>These are live systems.</span>
             </span>

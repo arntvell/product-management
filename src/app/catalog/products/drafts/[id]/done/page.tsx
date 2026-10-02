@@ -67,7 +67,7 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
         unfinishedBatchId={unfinished?.id ?? null}
       />
 
-      <div className="mt-6 rounded-md border">
+      <div className="mt-6 border">
         {colorways.map((c) => (
           <div key={c.id} className="border-b px-4 py-3 text-body last:border-0">
             <div className="flex items-center justify-between gap-4">
@@ -96,19 +96,19 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
       <div className="mt-6 flex flex-wrap gap-2">
         <Link
           href="/catalog/products/new"
-          className="rounded-md border bg-foreground px-3 py-1.5 text-body text-background"
+          className="border bg-foreground px-3 py-1.5 text-body text-background"
         >
           + Another product
         </Link>
         <Link
           href="/catalog/publishing"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Publishing
         </Link>
         <Link
           href="/catalog/products/drafts"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           All drafts
         </Link>

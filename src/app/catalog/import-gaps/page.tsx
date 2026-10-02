@@ -28,7 +28,7 @@ export default async function ImportGapsPage() {
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
@@ -44,12 +44,12 @@ export default async function ImportGapsPage() {
       </p>
 
       {report.error ? (
-        <p className="mt-6 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-body">
+        <p className="mt-6 border border-destructive/40 bg-destructive/5 p-4 text-body">
           {report.error}
         </p>
       ) : (
         <>
-          <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border p-4">
+          <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border p-4">
             {[
               { label: "rows", value: report.rows.length },
               { label: "create from Sitoo", value: bySource.sitoo },
@@ -64,7 +64,7 @@ export default async function ImportGapsPage() {
             ))}
             <div className="flex items-baseline gap-1.5">
               <span className="text-fine text-muted-foreground">
-                from <code className="rounded bg-muted px-1">{report.snapshot}</code>
+                from <code className="bg-muted px-1">{report.snapshot}</code>
               </span>
             </div>
           </div>
@@ -78,7 +78,7 @@ export default async function ImportGapsPage() {
             </p>
           ) : null}
 
-          <div className="mt-6 overflow-x-auto rounded-lg border">
+          <div className="mt-6 overflow-x-auto border">
             <table className="w-full text-left text-fine">
               <thead className="sticky top-0 border-b bg-muted/60 backdrop-blur">
                 <tr>
@@ -119,7 +119,7 @@ export default async function ImportGapsPage() {
                         .join(" · ")}
                     </td>
                     <td className="px-3 py-1.5">
-                      <span className="rounded bg-muted px-1.5 py-0.5">{r.source}</span>
+                      <span className="bg-muted px-1.5 py-0.5">{r.source}</span>
                     </td>
                   </tr>
                 ))}

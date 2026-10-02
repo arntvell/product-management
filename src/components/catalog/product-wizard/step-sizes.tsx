@@ -17,7 +17,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
 
   if (!systems.length)
     return (
-      <p className="rounded-md border border-dashed p-6 text-center text-body text-muted-foreground">
+      <p className="border border-dashed p-6 text-center text-body text-muted-foreground">
         No size systems yet.{" "}
         <Link href="/catalog/size-systems" className="underline underline-offset-2">
           Create one
@@ -120,7 +120,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
         const system = systems.find((s) => s.id === systemId) ?? null;
         const active = system?.entries.filter((e) => !e.archived) ?? [];
         return (
-          <div key={cw.key} className="rounded-md border p-4">
+          <div key={cw.key} className="border p-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <div className="text-body">{cw.name || "Unnamed colourway"}</div>
@@ -129,7 +129,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
               <div>
                 <Label className="text-fine">Size system</Label>
                 <select
-                  className="mt-1.5 h-9 rounded-md border bg-transparent px-3 text-body"
+                  className="mt-1.5 h-9 border bg-transparent px-3 text-body"
                   value={systemId}
                   onChange={(e) => setSystem(cw.key, e.target.value)}
                 >
@@ -174,7 +174,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
                         onClick={() => toggle(cw.key, system, e.id)}
                         title={buildVariantSku(cw.colorwaySku, e.skuToken)}
                         className={
-                          "rounded border px-2.5 py-1 text-fine transition-colors " +
+                          " border px-2.5 py-1 text-fine transition-colors " +
                           (on
                             ? "border-foreground bg-foreground text-background"
                             : "hover:bg-muted")

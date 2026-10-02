@@ -39,7 +39,7 @@ export function MediaItemCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative group border rounded-lg overflow-hidden bg-muted/30",
+        "relative group border overflow-hidden bg-muted/30",
         isDragging && "opacity-50 z-50",
         isSelected && "outline outline-2 -outline-offset-2 outline-ink"
       )}
@@ -69,7 +69,7 @@ export function MediaItemCard({
         />
       </div>
       {item.image?.width && item.image?.height && (
-        <div className="absolute bottom-1 right-1 text-fine bg-ink/60 text-offwhite px-1 rounded">
+        <div className="absolute bottom-1 right-1 text-fine bg-ink/60 text-offwhite px-1">
           {item.image.width}x{item.image.height}
         </div>
       )}

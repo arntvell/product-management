@@ -103,7 +103,7 @@ export default async function ImportProductsPage({
         </div>
         <Link
           href="/catalog/products/drafts"
-          className="shrink-0 rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="shrink-0 border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           All drafts
         </Link>

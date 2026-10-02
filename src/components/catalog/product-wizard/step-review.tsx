@@ -29,7 +29,7 @@ export function StepReview({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-5">
+      <div className="grid gap-3 border p-4 sm:grid-cols-5">
         <Stat label="Brand" value={payload.brand.name || "—"} />
         <Stat label="Season" value={season?.code ?? "—"} />
         <Stat
@@ -49,7 +49,7 @@ export function StepReview({
         <Stat label="Will create" value={`${payload.colorways.length} × ${variants}`} sub="colourways × sizes" />
       </div>
 
-      <div className="rounded-md border p-4">
+      <div className="border p-4">
         <div className="text-fine text-muted-foreground">Publishing to</div>
         <div className="mt-1.5 flex flex-wrap gap-2">
           {payload.channels.length ? (
@@ -67,7 +67,7 @@ export function StepReview({
       {report ? (
         <div className="space-y-3">
           {report.collisions.length ? (
-            <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4">
+            <div className="border border-destructive/50 bg-destructive/5 p-4">
               <div className="text-body text-destructive">
                 {report.collisions.length} collision
                 {report.collisions.length === 1 ? "" : "s"} — nothing will be created
@@ -97,7 +97,7 @@ export function StepReview({
           ) : null}
 
           {report.errors.length ? (
-            <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4">
+            <div className="border border-destructive/50 bg-destructive/5 p-4">
               <div className="text-body text-destructive">Not ready</div>
               <ul className="mt-2 list-inside list-disc space-y-1 text-fine">
                 {report.errors.map((e) => (
@@ -130,7 +130,7 @@ export function StepReview({
         </div>
       ) : null}
 
-      <div className="rounded-md border">
+      <div className="border">
         <button
           type="button"
           className="flex w-full items-center justify-between px-4 py-2.5 text-left text-body"
@@ -173,7 +173,7 @@ export function StepReview({
                       key={v.key}
                       title={v.variantSku}
                       className={
-                        "rounded border px-1.5 py-0.5 font-mono text-fine " +
+                        " border px-1.5 py-0.5 font-mono text-fine " +
                         (v.barcode ? "" : "border-dashed text-muted-foreground")
                       }
                     >

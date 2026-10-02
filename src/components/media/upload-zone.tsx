@@ -36,7 +36,7 @@ export function UploadZone({
     <div
       {...getRootProps()}
       className={cn(
-        "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+        "border-2 border-dashed p-6 text-center cursor-pointer transition-colors",
         isDragActive
           ? "border-ink bg-selected"
           : "border-muted-foreground/25 hover:border-muted-foreground/50",

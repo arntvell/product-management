@@ -112,7 +112,7 @@ export function ImportPanel({
   }
 
   return (
-    <div className="rounded-lg border p-5">
+    <div className="border p-5">
       <h2 className="text-body">Import carry-over from Shopify</h2>
       <p className="mt-1 text-body text-muted-foreground">
         Bring products that exist in Shopify but not yet in the master (external
@@ -132,7 +132,7 @@ export function ImportPanel({
       </div>
 
       {preview && (
-        <div className="mt-4 rounded-md border bg-muted/30 p-3 text-body">
+        <div className="mt-4 border bg-muted/30 p-3 text-body">
           <p className="tabular-nums">
             {preview.total} in Shopify · <b>{preview.toImport}</b> not in master
             · {preview.skipped} already here · {preview.excluded} excluded
@@ -146,7 +146,7 @@ export function ImportPanel({
             {preview.byVendor.map((v) => (
               <label
                 key={v.vendor}
-                className="flex items-center gap-2 rounded px-1.5 py-1 text-fine hover:bg-background"
+                className="flex items-center gap-2 px-1.5 py-1 text-fine hover:bg-background"
               >
                 <input
                   type="checkbox"
@@ -186,7 +186,7 @@ export function ImportPanel({
             {importedVendors.map((v) => (
               <label
                 key={v.vendor}
-                className="flex items-center gap-2 rounded px-1.5 py-1 text-fine hover:bg-muted/50"
+                className="flex items-center gap-2 px-1.5 py-1 text-fine hover:bg-muted/50"
               >
                 <input
                   type="checkbox"

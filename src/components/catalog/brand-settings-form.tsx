@@ -77,7 +77,7 @@ export function BrandSettingsForm({
             <div className="text-fine text-muted-foreground sm:pt-6">
               <div>
                 A new style would be{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono">{example}</code>
+                <code className="bg-muted px-1 py-0.5 font-mono">{example}</code>
               </div>
               {tokenDiffers ? (
                 <div className="mt-1">
@@ -121,7 +121,7 @@ export function BrandSettingsForm({
             </Label>
             <select
               id="sizes"
-              className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
+              className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
               value={t.defaultSizeSystemId}
               onChange={(e) => set("defaultSizeSystemId", e.target.value)}
             >
@@ -177,7 +177,7 @@ export function BrandSettingsForm({
             </Label>
             <select
               id="manu"
-              className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
+              className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
               value={t.manufacturerId}
               onChange={(e) => set("manufacturerId", e.target.value)}
             >
@@ -233,7 +233,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-md border p-5">
+    <section className="border p-5">
       <h2 className="text-body">{title}</h2>
       {hint ? <p className="mt-1 text-fine text-muted-foreground">{hint}</p> : null}
       <div className="mt-4">{children}</div>

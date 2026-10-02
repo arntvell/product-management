@@ -197,7 +197,7 @@ export function ImportProducts({
   if (resumeBatchId)
     return (
       <div className="space-y-6">
-        <div className="rounded-lg border p-5">
+        <div className="border p-5">
           <h2 className="text-body">A publish from this screen is unfinished</h2>
           <p className="mt-1 text-fine text-muted-foreground">
             The products are in the master. Resume to let it finish — typically Loom, whose
@@ -231,7 +231,7 @@ export function ImportProducts({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Brand">
             <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
+              className="h-9 w-full border bg-transparent px-3 text-body"
               value={brandId}
               onChange={(e) => chooseBrand(e.target.value)}
             >
@@ -245,7 +245,7 @@ export function ImportProducts({
           </Field>
           <Field label="Season">
             <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
+              className="h-9 w-full border bg-transparent px-3 text-body"
               value={seasonId}
               onChange={(e) => setSeasonId(e.target.value)}
             >
@@ -259,7 +259,7 @@ export function ImportProducts({
           </Field>
           <Field label="Type">
             <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
+              className="h-9 w-full border bg-transparent px-3 text-body"
               value={kind}
               onChange={(e) => setKind(e.target.value)}
             >
@@ -273,7 +273,7 @@ export function ImportProducts({
           <Field label="Size system">
             {sizeSystems.length ? (
               <select
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
+                className="h-9 w-full border bg-transparent px-3 text-body"
                 value={sizeSystemId}
                 onChange={(e) => setSizeSystemId(e.target.value)}
               >
@@ -369,7 +369,7 @@ export function ImportProducts({
         {!brand ? (
           <p className="text-fine text-muted-foreground">Choose a brand to see its defaults.</p>
         ) : brandIncomplete.length ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
+          <div className="border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
             <p>
               {brand.name} is missing {brandIncomplete.join(", ")}.
             </p>
@@ -424,7 +424,7 @@ export function ImportProducts({
               setReport(null);
               setDecisions({});
             }}
-            className="text-body file:mr-3 file:rounded-md file:border file:bg-transparent file:px-3 file:py-1.5 file:text-body"
+            className="text-body file:mr-3 file: file:border file:bg-transparent file:px-3 file:py-1.5 file:text-body"
           />
           <Button size="sm" variant="outline" onClick={() => post(true)} disabled={busy !== null}>
             {busy === "parse" ? "Reading…" : "Check the file"}
@@ -486,7 +486,7 @@ function ReportView({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border p-5">
+      <div className="border p-5">
         <h2 className="text-body">
           {report.context.brandName} · {report.context.seasonCode} · {report.context.kind}
         </h2>
@@ -496,14 +496,14 @@ function ReportView({
         </p>
 
         {report.errors.length ? (
-          <ul className="mt-4 space-y-1.5 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
+          <ul className="mt-4 space-y-1.5 border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
             {report.errors.map((e, i) => (
               <li key={i}>{e}</li>
             ))}
           </ul>
         ) : null}
         {report.warnings.length ? (
-          <ul className="mt-3 space-y-1.5 rounded-md border p-3 text-fine text-muted-foreground">
+          <ul className="mt-3 space-y-1.5 border p-3 text-fine text-muted-foreground">
             {report.warnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
@@ -512,7 +512,7 @@ function ReportView({
       </div>
 
       {report.categories.length ? (
-        <div className="rounded-lg border p-5">
+        <div className="border p-5">
           <h3 className="text-body">Categories in the file</h3>
           <p className="mt-1 text-fine text-muted-foreground">
             A value that already exists is matched by name. Anything else needs a decision —
@@ -528,7 +528,7 @@ function ReportView({
               return (
                 <div
                   key={c.value}
-                  className="grid items-center gap-2 rounded-md border p-3 sm:grid-cols-[1fr_1.4fr_auto]"
+                  className="grid items-center gap-2 border p-3 sm:grid-cols-[1fr_1.4fr_auto]"
                 >
                   <div className="min-w-0">
                     <div className="truncate text-body">{c.value}</div>
@@ -552,7 +552,7 @@ function ReportView({
                     />
                   ) : (
                     <select
-                      className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
+                      className="h-9 w-full border bg-transparent px-3 text-body"
                       value={resolvedId}
                       onChange={(e) => {
                         const id = e.target.value;
@@ -607,11 +607,11 @@ function ReportView({
         </div>
       ) : null}
 
-      <div className="rounded-lg border p-5">
+      <div className="border p-5">
         <h3 className="text-body">What would be created</h3>
         <div className="mt-3 space-y-3">
           {report.styles.map((s) => (
-            <div key={s.styleSku} className="rounded-md border p-3">
+            <div key={s.styleSku} className="border p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <div className="text-body">
                   {s.styleName}{" "}
@@ -718,7 +718,7 @@ function Result({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border p-5">
+      <div className="border p-5">
         <h2 className="text-body">
           {result.drafts.length} draft{result.drafts.length === 1 ? "" : "s"} created
         </h2>
@@ -805,7 +805,7 @@ function Result({
         </div>
       ) : null}
 
-      <div className="rounded-md border">
+      <div className="border">
         {result.drafts.map((d) => {
           const r = byId.get(d.id);
           return (
@@ -884,7 +884,7 @@ function CategoryPicker({
     .filter((c): c is CategoryOption => !!c);
 
   return (
-    <div className="rounded-md border">
+    <div className="border">
       <div className="flex flex-wrap items-center gap-1.5 border-b p-2">
         {chosen.length ? (
           chosen.map((c) => (
@@ -906,7 +906,7 @@ function CategoryPicker({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search categories…"
-        className="rounded-none border-0 border-b focus-visible:ring-0"
+        className="border-0 border-b focus-visible:ring-0"
       />
       <div className="max-h-48 overflow-y-auto p-1">
         {shown.map((c) => {
@@ -914,7 +914,7 @@ function CategoryPicker({
           return (
             <label
               key={c.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-body hover:bg-muted"
+              className="flex cursor-pointer items-center gap-2 px-2 py-1 text-body hover:bg-muted"
             >
               <input
                 type="checkbox"
@@ -961,7 +961,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border p-5">
+    <section className="border p-5">
       <h2 className="text-body">
         <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border text-fine">
           {step}

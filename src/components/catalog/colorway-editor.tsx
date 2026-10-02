@@ -141,7 +141,7 @@ export function ColorwayEditor({
       </div>
 
       {/* Product properties (always base) */}
-      <section className="mt-8 space-y-4 rounded-lg border p-5">
+      <section className="mt-8 space-y-4 border p-5">
         <h2 className="text-body">Product properties</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
@@ -149,7 +149,7 @@ export function ColorwayEditor({
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as ProductStatusValue)}
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
+              className="h-9 w-full border bg-transparent px-3 text-body"
             >
               {PRODUCT_STATUSES.map((s) => (
                 <option key={s} value={s}>
@@ -173,7 +173,7 @@ export function ColorwayEditor({
       </section>
 
       {/* Channel-split content: tags + descriptions */}
-      <section className="mt-6 rounded-lg border p-5">
+      <section className="mt-6 border p-5">
         <h2 className="text-body">Content</h2>
         <p className="mt-1 text-fine text-muted-foreground">
           Tags and descriptions can differ per channel. Edit the shared{" "}

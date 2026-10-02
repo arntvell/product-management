@@ -66,7 +66,7 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
               {tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="text-fine bg-muted px-1.5 py-0.5 rounded shrink-0"
+                  className="text-fine bg-muted px-1.5 py-0.5 shrink-0"
                 >
                   {tag}
                 </span>
@@ -86,7 +86,7 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
           {tags.map((tag) => (
             <span
               key={tag}
-              className="flex items-center gap-1 text-fine bg-muted px-1.5 py-0.5 rounded"
+              className="flex items-center gap-1 text-fine bg-muted px-1.5 py-0.5"
             >
               {tag}
               <button
@@ -112,13 +112,13 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
             type="button"
             disabled={!input.trim()}
             onClick={() => addTag(input)}
-            className="p-1 rounded border hover:bg-muted disabled:opacity-40"
+            className="p-1 border hover:bg-muted disabled:opacity-40"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
         </div>
         {input && suggestions.length > 0 && (
-          <div className="border rounded text-fine divide-y max-h-32 overflow-auto">
+          <div className="border text-fine divide-y max-h-32 overflow-auto">
             {suggestions.slice(0, 8).map((s) => (
               <button
                 key={s}

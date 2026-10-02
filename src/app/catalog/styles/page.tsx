@@ -63,7 +63,7 @@ export default async function StylesPage({
           page.
         </p>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-lg border">
+        <div className="mt-6 overflow-hidden border">
           <table className="w-full text-body">
             <thead>
               <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">
@@ -84,7 +84,7 @@ export default async function StylesPage({
                     className="border-b last:border-0 hover:bg-muted/30"
                   >
                     <td className="p-2">
-                      <div className="h-11 w-11 overflow-hidden rounded bg-muted">
+                      <div className="h-11 w-11 overflow-hidden bg-muted">
                         {src && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img

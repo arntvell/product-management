@@ -26,7 +26,7 @@ export default async function BrandIdentityPage() {
         </div>
         <Link
           href="/catalog/brands"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Brand settings
         </Link>

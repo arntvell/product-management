@@ -216,7 +216,7 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
   }
 
   return (
-    <div className="rounded-lg border p-5">
+    <div className="border p-5">
       <h2 className="text-body">Sync from Threadflow</h2>
       <p className="mt-1 text-body text-muted-foreground">
         Pull a season&apos;s Livid catalogue (including not-yet-approved and
@@ -261,7 +261,7 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
       {error && <p className="mt-3 text-body text-destructive">{error}</p>}
 
       {result && (
-        <div className="mt-4 rounded-md border bg-muted/30 p-3 text-body">
+        <div className="mt-4 border bg-muted/30 p-3 text-body">
           <p>
             {statusLabel(result)}
             <span className="ml-2 text-muted-foreground">
@@ -342,7 +342,7 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
                     )}
                   </div>
                   {openRun === r.id && (
-                    <div className="mt-1 rounded-md border bg-muted/30 p-2">
+                    <div className="mt-1 border bg-muted/30 p-2">
                       {skips.length > 0 && <SkippedTable items={skips} />}
                       {notes.length > 0 && (
                         <NoteList

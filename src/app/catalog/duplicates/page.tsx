@@ -27,7 +27,7 @@ export default async function DuplicatesPage() {
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
@@ -38,12 +38,12 @@ export default async function DuplicatesPage() {
         barcode, because the defining feature of these pairs is that one record
         has no barcode at all. The usual shape is a Cin7 import carrying the
         barcodes and a Threadflow sync of the same garment under the retired{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-fine">LIV-M-</code>/
-        <code className="rounded bg-muted px-1 py-0.5 text-fine">LIV-W-</code> SKU
+        <code className="bg-muted px-1 py-0.5 text-fine">LIV-M-</code>/
+        <code className="bg-muted px-1 py-0.5 text-fine">LIV-W-</code> SKU
         carrying none.
       </p>
 
-      <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 rounded-lg border p-4">
+      <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 border p-4">
         {[
           { label: "colorways scanned", value: report.scanned.toLocaleString("en-GB") },
           { label: "high confidence", value: String(high.length) },
@@ -69,7 +69,7 @@ export default async function DuplicatesPage() {
         <p className="mt-2 text-fine text-muted-foreground">
           The <strong className="text-foreground">Pio</strong> column is the
           warehouse&rsquo;s own quantity for each SKU, from{" "}
-          <code className="rounded bg-muted px-1 py-0.5">{pio.source}</code> (
+          <code className="bg-muted px-1 py-0.5">{pio.source}</code> (
           {pio.rows.toLocaleString("en-GB")} SKUs). Stock on one side and none on
           the other is independent confirmation of which record is real.
         </p>

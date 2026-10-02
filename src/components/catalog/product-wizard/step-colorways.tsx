@@ -94,7 +94,7 @@ export function StepColorways({ payload, update }: StepProps) {
   return (
     <div className="space-y-5">
       {existingHere.length ? (
-        <div className="rounded-md border bg-muted/30 p-3">
+        <div className="border bg-muted/30 p-3">
           <div className="text-fine">
             {style.styleName} already has {existingHere.length} colourway
             {existingHere.length === 1 ? "" : "s"}
@@ -103,7 +103,7 @@ export function StepColorways({ payload, update }: StepProps) {
             {existingHere.map((e) => (
               <span
                 key={e.id}
-                className="rounded border bg-background px-2 py-0.5 text-fine"
+                className="border bg-background px-2 py-0.5 text-fine"
                 title={e.colorwaySku}
               >
                 {e.name}
@@ -117,7 +117,7 @@ export function StepColorways({ payload, update }: StepProps) {
         {payload.colorways.map((cw) => {
           const clash = taken.get(cw.name.trim().toLowerCase());
           return (
-            <div key={cw.key} className="rounded-md border p-3">
+            <div key={cw.key} className="border p-3">
               <div className="grid gap-3 sm:grid-cols-[2fr_1.5fr_5rem_auto] sm:items-end">
                 <div>
                   <Label className="text-fine">Colourway name</Label>
@@ -160,7 +160,7 @@ export function StepColorways({ payload, update }: StepProps) {
               </div>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-fine">
+                <code className="bg-muted px-1.5 py-0.5 font-mono text-fine">
                   {cw.colorwaySku || "—"}
                 </code>
                 {cw.manualSku ? (

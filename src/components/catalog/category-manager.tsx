@@ -113,7 +113,7 @@ export function CategoryManager({
             Values seen in a channel that do not yet resolve to a category. Most-used first
             — mapping the top of this list covers most of the catalogue.
           </p>
-          <div className="mt-3 overflow-hidden rounded-md border">
+          <div className="mt-3 overflow-hidden border">
             {unmapped.slice(0, 40).map((u) => (
               <div
                 key={u.id}
@@ -132,7 +132,7 @@ export function CategoryManager({
                   {u.productCount || "—"}
                 </div>
                 <select
-                  className="h-8 rounded-md border bg-transparent px-2 text-fine"
+                  className="h-8 border bg-transparent px-2 text-fine"
                   defaultValue=""
                   onChange={(e) => {
                     const categoryId = e.target.value;
@@ -196,7 +196,7 @@ export function CategoryManager({
           ) : null}
         </div>
 
-        <div className="mt-3 overflow-x-auto rounded-md border">
+        <div className="mt-3 overflow-x-auto border">
           <div className="min-w-[52rem]">
             <div className="grid grid-cols-[minmax(10rem,2fr)_7rem_7rem_7rem_5rem_5rem_9rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
               <div>Category</div>
@@ -241,7 +241,7 @@ export function CategoryManager({
                   }}
                 />
                 <select
-                  className="h-7 rounded-md border bg-transparent px-1.5 text-fine"
+                  className="h-7 border bg-transparent px-1.5 text-fine"
                   defaultValue={c.loomCategory ?? ""}
                   onChange={(e) =>
                     start(async () => {
@@ -338,7 +338,7 @@ export function CategoryManager({
 
 function Stat({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="border p-3">
       <div className="text-fine text-muted-foreground">{label}</div>
       <div className="text-section tabular-nums">{value}</div>
       {hint ? <div className="text-fine text-muted-foreground">{hint}</div> : null}

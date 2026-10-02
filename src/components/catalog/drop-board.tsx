@@ -287,7 +287,7 @@ export function DropBoard({
 
       {/* What is blocking this view */}
       {fieldGaps.length > 0 && (
-        <div className="mt-3 rounded-lg border bg-muted/20 p-3">
+        <div className="mt-3 border bg-muted/20 p-3">
           <p className="text-body">
             <b>{readyCount}</b> of {rows.length} ready to publish. Blocking, most common first:
           </p>
@@ -309,7 +309,7 @@ export function DropBoard({
       )}
 
       {/* Bulk bar */}
-      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2 border bg-muted/30 px-3 py-2">
         <span className="text-fine">
           {selected.size} selected
           {selectedHidden > 0 && (
@@ -322,7 +322,7 @@ export function DropBoard({
           type="button"
           onClick={() => setSelected(new Set())}
           disabled={!selected.size}
-          className="rounded border px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
         >
           Clear
         </button>
@@ -331,13 +331,13 @@ export function DropBoard({
           value={dropValue}
           onChange={(e) => setDropValue(e.target.value)}
           placeholder="Drop 1"
-          className="w-24 rounded border bg-background px-2 py-1 text-fine"
+          className="w-24 border bg-background px-2 py-1 text-fine"
         />
         <button
           type="button"
           onClick={() => assignDrop(dropValue || null)}
           disabled={busy || !selected.size}
-          className="rounded border px-2.5 py-1 text-fine transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-2.5 py-1 text-fine transition-colors hover:bg-muted disabled:opacity-40"
         >
           Move to drop
         </button>
@@ -345,7 +345,7 @@ export function DropBoard({
           type="button"
           onClick={() => assignDrop(null)}
           disabled={busy || !selected.size}
-          className="rounded border px-2.5 py-1 text-fine text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-2.5 py-1 text-fine text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
         >
           Unassign
         </button>
@@ -356,7 +356,7 @@ export function DropBoard({
             setBulkField(e.target.value as Field);
             setBulkValue("");
           }}
-          className="rounded border bg-background px-2 py-1 text-fine"
+          className="border bg-background px-2 py-1 text-fine"
         >
           {BULK_FIELDS.map((b) => (
             <option key={b.field} value={b.field}>
@@ -368,13 +368,13 @@ export function DropBoard({
           value={bulkValue}
           onChange={(e) => setBulkValue(e.target.value)}
           placeholder={BULK_FIELDS.find((b) => b.field === bulkField)?.hint ?? "value"}
-          className="min-w-56 flex-1 rounded border bg-background px-2 py-1 text-fine"
+          className="min-w-56 flex-1 border bg-background px-2 py-1 text-fine"
         />
         <button
           type="button"
           onClick={applyBulk}
           disabled={busy || !selected.size || !bulkValue.trim()}
-          className="rounded bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
+          className="bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
         >
           Apply to selected
         </button>
@@ -386,7 +386,7 @@ export function DropBoard({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search style, colour, SKU, type, tag…"
-            className="w-72 rounded border bg-background px-2 py-1 pr-6 text-fine"
+            className="w-72 border bg-background px-2 py-1 pr-6 text-fine"
           />
           {query && (
             <button
@@ -409,7 +409,7 @@ export function DropBoard({
         <button
           type="button"
           onClick={() => setPasteOpen((v) => !v)}
-          className="ml-auto rounded border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
+          className="ml-auto border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
         >
           {pasteOpen ? "Hide paste list" : "Assign by handle…"}
         </button>
@@ -419,7 +419,7 @@ export function DropBoard({
           the whole catalogue, so it works from any tab and can name products
           this view is filtering out. */}
       {pasteOpen && (
-        <div className="mt-2 rounded-lg border bg-muted/20 p-3">
+        <div className="mt-2 border bg-muted/20 p-3">
           <p className="text-fine text-muted-foreground">
             Paste Shopify handles, SKUs or product URLs — separated by commas,
             spaces or new lines. Case and punctuation do not matter.
@@ -429,20 +429,20 @@ export function DropBoard({
             onChange={(e) => setPasteText(e.target.value)}
             rows={4}
             placeholder="liv-kr-jpn-blck, liv-kr-jpn-dwn, LIV-BX-BLCK-NPP"
-            className="mt-2 w-full rounded border bg-background px-2 py-1 font-mono text-fine"
+            className="mt-2 w-full border bg-background px-2 py-1 font-mono text-fine"
           />
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
               value={pasteDrop}
               onChange={(e) => setPasteDrop(e.target.value)}
               placeholder="Drop 1"
-              className="w-28 rounded border bg-background px-2 py-1 text-fine"
+              className="w-28 border bg-background px-2 py-1 text-fine"
             />
             <button
               type="button"
               onClick={assignByHandles}
               disabled={busy || !pasteText.trim()}
-              className="rounded bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
+              className="bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
             >
               {busy ? "Assigning…" : "Assign drop"}
             </button>
@@ -490,7 +490,7 @@ export function DropBoard({
       )}
 
       {/* Grid */}
-      <div className="mt-3 overflow-x-auto rounded-lg border">
+      <div className="mt-3 overflow-x-auto border">
         <table className="w-full min-w-[1200px] text-body">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">

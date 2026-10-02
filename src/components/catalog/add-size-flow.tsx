@@ -52,7 +52,7 @@ function Step({ o }: { o: StepOutcome }) {
 function Chip({ on, label }: { on: boolean; label: string }) {
   return (
     <span
-      className={`rounded border px-1 text-fine ${
+      className={` border px-1 text-fine ${
         on ? "border-foreground/30" : "border-dashed text-muted-foreground/60 line-through"
       }`}
     >
@@ -304,12 +304,12 @@ export function AddSizeFlow({
             onChange={(e) => setQ(e.target.value)}
             autoFocus
             placeholder="Style, colour, SKU or barcode — e.g. Hestra Robert, EXT-PNT-BCK"
-            className="min-w-64 flex-1 rounded-md border bg-background px-3 py-2 text-body"
+            className="min-w-64 flex-1 border bg-background px-3 py-2 text-body"
           />
           <select
             value={brandId}
             onChange={(e) => setBrandId(e.target.value)}
-            className="rounded-md border bg-background px-3 py-2 text-body"
+            className="border bg-background px-3 py-2 text-body"
           >
             <option value="">All brands</option>
             {brands.map((b) => (
@@ -321,7 +321,7 @@ export function AddSizeFlow({
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="rounded-md border bg-background px-3 py-2 text-body"
+            className="border bg-background px-3 py-2 text-body"
           >
             <option value="">All categories</option>
             {categories.map((c) => (
@@ -344,7 +344,7 @@ export function AddSizeFlow({
             <p className="text-body text-muted-foreground">Nothing matches.</p>
           ) : null}
           {results?.rows.length ? (
-            <div className="overflow-hidden rounded-lg border">
+            <div className="overflow-hidden border">
               <table className="w-full text-body">
                 <thead className="bg-muted/40 text-left text-fine text-muted-foreground">
                   <tr>
@@ -396,7 +396,7 @@ export function AddSizeFlow({
   return (
     <section className="mt-6 space-y-6">
       {/* The product */}
-      <div className="rounded-lg border p-4">
+      <div className="border p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2>{ctx.colorway.title}</h2>
@@ -453,7 +453,7 @@ export function AddSizeFlow({
       ) : system ? (
         <>
           {/* The size */}
-          <div className="rounded-lg border p-4">
+          <div className="border p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-body">Size</h3>
@@ -466,7 +466,7 @@ export function AddSizeFlow({
                         setSystemId(e.target.value);
                         setPicked([]);
                       }}
-                      className="rounded border bg-background px-1 py-0.5 text-fine"
+                      className="border bg-background px-1 py-0.5 text-fine"
                     >
                       {ctx.systems.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -509,7 +509,7 @@ export function AddSizeFlow({
                         onClick={() => toggle(o.entryId)}
                         disabled={!!o.taken || !!busy}
                         title={o.taken ? `${o.sku} is already on ${o.taken}` : o.sku}
-                        className={`rounded-md border px-2.5 py-1 text-body transition-colors disabled:opacity-40 ${
+                        className={` border px-2.5 py-1 text-body transition-colors disabled:opacity-40 ${
                           on ? "border-foreground bg-foreground text-background" : "hover:bg-muted"
                         }`}
                       >
@@ -548,7 +548,7 @@ export function AddSizeFlow({
                             onChange={(e) => setBarcodes((b) => ({ ...b, [o.entryId]: e.target.value }))}
                             inputMode="numeric"
                             placeholder="EAN-13 from the label or supplier"
-                            className={`w-56 rounded-md border bg-background px-2 py-1 font-mono text-body ${
+                            className={`w-56 border bg-background px-2 py-1 font-mono text-body ${
                               reason ? "border-destructive" : ""
                             }`}
                           />
@@ -612,7 +612,7 @@ export function AddSizeFlow({
       ) : null}
 
       {report ? (
-        <div className="rounded-lg border">
+        <div className="border">
           <div className="flex items-center justify-between border-b px-4 py-2">
             <h3 className="text-body">{report.dryRun ? "What saving will do" : "What happened"}</h3>
             {!report.dryRun ? (

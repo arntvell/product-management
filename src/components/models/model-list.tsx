@@ -27,7 +27,7 @@ export function ModelList({
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {models.map((model) => (
-        <div key={model.id} className="border rounded-lg p-4 space-y-2">
+        <div key={model.id} className="border p-4 space-y-2">
           <div className="flex items-start justify-between">
             <h3>{model.fields.name}</h3>
           </div>

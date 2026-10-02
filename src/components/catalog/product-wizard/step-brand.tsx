@@ -104,7 +104,7 @@ export function StepBrand({ payload, update, options }: StepProps) {
           </Label>
           <select
             id="brand"
-            className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
+            className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
             value={payload.brand.id ?? ""}
             onChange={(e) => {
               const b = external.find((x) => x.id === e.target.value);
@@ -152,7 +152,7 @@ export function StepBrand({ payload, update, options }: StepProps) {
           </Label>
           <select
             id="season"
-            className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
+            className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
             value={payload.seasonId ?? ""}
             onChange={(e) => update((p) => ({ ...p, seasonId: e.target.value || null }))}
           >
@@ -172,7 +172,7 @@ export function StepBrand({ payload, update, options }: StepProps) {
         </Label>
         <select
           id="kind"
-          className="mt-1.5 h-9 w-full max-w-sm rounded-md border bg-transparent px-3 text-body"
+          className="mt-1.5 h-9 w-full max-w-sm border bg-transparent px-3 text-body"
           value={payload.kind}
           onChange={(e) => update((p) => ({ ...p, kind: e.target.value as ProductKind }))}
         >

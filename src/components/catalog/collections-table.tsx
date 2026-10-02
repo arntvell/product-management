@@ -212,7 +212,7 @@ export function CollectionsTable({
   }
 
   const selectCls =
-    "h-8 rounded-md border bg-background px-2 text-fine text-foreground shadow-sm";
+    "h-8 border bg-background px-2 text-fine text-foreground shadow-sm";
 
   return (
     <div className="mt-4 flex min-h-0 flex-1 flex-col">
@@ -364,7 +364,7 @@ export function CollectionsTable({
                     />
                   </td>
                   <td className="p-2">
-                    <div className="h-11 w-11 overflow-hidden rounded bg-muted">
+                    <div className="h-11 w-11 overflow-hidden bg-muted">
                       {src && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={src} alt="" className="h-full w-full object-cover" />

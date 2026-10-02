@@ -176,7 +176,7 @@ export function ChannelsPanel({
 
   return (
     <div className="mx-auto mt-6 max-w-3xl px-6">
-      <section className="rounded-lg border p-5">
+      <section className="border p-5">
         <h2 className="text-body">Channels</h2>
         <p className="mt-1 text-fine text-muted-foreground">
           Choose where this product publishes. Pushing to the channel is done
@@ -242,7 +242,7 @@ export function ChannelsPanel({
         )}
 
         {preview && (
-          <div className="mt-4 space-y-3 rounded-md border bg-muted/30 p-4 text-fine">
+          <div className="mt-4 space-y-3 border bg-muted/30 p-4 text-fine">
             <div>
               Would {preview.action} product
               {preview.externalId ? ` (${preview.externalId})` : ""}

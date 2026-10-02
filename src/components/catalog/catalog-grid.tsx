@@ -994,7 +994,7 @@ export function CatalogGrid({
           />
           <button
             onClick={() => setCopyOpen(true)}
-            className="h-7 rounded border px-2 text-fine hover:bg-muted"
+            className="h-7 border px-2 text-fine hover:bg-muted"
             title="Take the description and other fields off a product that is already written"
           >
             Copy fields from a product…
@@ -1033,7 +1033,7 @@ export function CatalogGrid({
       {/* Grid */}
       <div
         ref={scrollRef}
-        className="mt-3 flex-1 overflow-auto rounded-lg border"
+        className="mt-3 flex-1 overflow-auto border"
       >
         <div style={{ width: totalWidth, position: "relative" }}>
           {/* Header */}
@@ -1074,7 +1074,7 @@ export function CatalogGrid({
                 <button
                   title="Fill down to all visible rows"
                   onClick={() => fillDown(c.key as string)}
-                  className="rounded px-1 text-muted-foreground hover:bg-background hover:text-foreground"
+                  className="px-1 text-muted-foreground hover:bg-background hover:text-foreground"
                 >
                   ↓
                 </button>
@@ -1118,7 +1118,7 @@ export function CatalogGrid({
                     style={{ width: LABEL_W }}
                     className="flex shrink-0 items-center gap-2 border-l px-3"
                   >
-                    <div className="h-6 w-6 shrink-0 overflow-hidden rounded bg-muted">
+                    <div className="h-6 w-6 shrink-0 overflow-hidden bg-muted">
                       {catalogImageSrc(row.thumbnailRef) && (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -1175,7 +1175,7 @@ export function CatalogGrid({
                     )}
                   >
                     <span
-                      className="h-4 w-4 shrink-0 rounded border"
+                      className="h-4 w-4 shrink-0 border"
                       style={{ backgroundColor: cellValue(row, "BASE", "swatchHex") || "transparent" }}
                     />
                     <input
@@ -1439,7 +1439,7 @@ function FieldBulkPicker({
       <PopoverTrigger asChild>
         <button
           disabled={selectedCount < 1}
-          className="h-7 rounded border px-2 text-fine hover:bg-muted disabled:opacity-40"
+          className="h-7 border px-2 text-fine hover:bg-muted disabled:opacity-40"
           title="Copy chosen fields from one selected row to the rest, or clear them"
         >
           Copy down / clear…
@@ -1465,7 +1465,7 @@ function FieldBulkPicker({
           {fields.map((f) => (
             <label
               key={f.key}
-              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-body hover:bg-muted/50"
+              className="flex cursor-pointer items-center gap-2 px-1 py-1 text-body hover:bg-muted/50"
             >
               <input
                 type="checkbox"
@@ -1486,7 +1486,7 @@ function FieldBulkPicker({
           <button
             onClick={() => run(onClear)}
             disabled={!chosen.size || selectedCount < 1}
-            className="ml-auto rounded border px-2 py-1 text-fine text-destructive hover:bg-destructive/10 disabled:opacity-40"
+            className="ml-auto border px-2 py-1 text-fine text-destructive hover:bg-destructive/10 disabled:opacity-40"
             title={
               layer === "BASE"
                 ? "Empty these fields on every selected row"
@@ -1573,12 +1573,12 @@ function AddTagToSelected({
           }
         }}
         placeholder="Add a tag…"
-        className="h-7 w-32 rounded border bg-transparent px-2 text-fine"
+        className="h-7 w-32 border bg-transparent px-2 text-fine"
       />
       <button
         onClick={submit}
         disabled={!tag.trim()}
-        className="h-7 rounded border px-2 text-fine hover:bg-muted disabled:opacity-40"
+        className="h-7 border px-2 text-fine hover:bg-muted disabled:opacity-40"
       >
         Add to {count}
       </button>
@@ -1606,7 +1606,7 @@ function FilterSelect({
       onChange={(e) => onChange(e.target.value)}
       title={label}
       className={cn(
-        "h-8 rounded-md border bg-transparent px-2 text-fine",
+        "h-8 border bg-transparent px-2 text-fine",
         value ? "border-foreground" : "text-muted-foreground"
       )}
     >
@@ -1672,12 +1672,12 @@ function BulkRefApply({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
+    <div className="flex flex-wrap items-center gap-2 border bg-muted/30 p-2">
       <span className="px-1 text-fine">Bulk set</span>
       <select
         value={fieldKey}
         onChange={(e) => changeField(e.target.value)}
-        className="h-8 rounded-md border bg-transparent px-2 text-fine"
+        className="h-8 border bg-transparent px-2 text-fine"
       >
         {REF_FIELDS.map((f) => (
           <option key={f.key} value={f.key}>
@@ -1695,7 +1695,7 @@ function BulkRefApply({
           className="h-8 w-64"
         />
         {matches.length > 0 && (
-          <div className="absolute z-20 mt-1 w-64 overflow-hidden rounded-md border bg-background shadow-md">
+          <div className="absolute z-20 mt-1 w-64 overflow-hidden border bg-background shadow-md">
             {matches.map((o) => (
               <button
                 key={o.id}

@@ -43,7 +43,7 @@ export default async function CatalogPage() {
         The single source of truth for product data — Livid products synced from
         Threadflow, plus external brands created here — published out to Shopify
         and Loom. See{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-fine">
+        <code className="bg-muted px-1 py-0.5 text-fine">
           docs/product-master-architecture.md
         </code>{" "}
         for the full plan.
@@ -52,7 +52,7 @@ export default async function CatalogPage() {
       {/* Database status */}
       <div className="mt-8">
         {dbError ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+          <div className="border border-destructive/40 bg-destructive/5 p-4">
             <p className="text-body text-destructive">
               Database not reachable
             </p>
@@ -86,7 +86,7 @@ export default async function CatalogPage() {
               <Link
                 key={key}
                 href="/catalog/styles"
-                className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                className="border p-4 transition-colors hover:bg-muted/50"
               >
                 {card}
                 <span className="mt-2 block text-fine underline underline-offset-4">
@@ -94,7 +94,7 @@ export default async function CatalogPage() {
                 </span>
               </Link>
             ) : (
-              <div key={key} className="rounded-lg border p-4">
+              <div key={key} className="border p-4">
                 {card}
               </div>
             );

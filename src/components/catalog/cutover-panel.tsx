@@ -85,7 +85,7 @@ export function CutoverPanel() {
       {ACTIONS.map((a) => {
         const outcome = outcomes[a.key];
         return (
-          <div key={a.key} className="rounded-lg border p-4">
+          <div key={a.key} className="border p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div>{a.label}</div>
@@ -125,7 +125,7 @@ export function CutoverPanel() {
                     <span className="text-fine text-destructive">{outcome.error}</span>
                   ) : null}
                 </div>
-                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-fine leading-relaxed">
+                <pre className="max-h-72 overflow-auto bg-muted p-3 text-fine leading-relaxed">
                   {JSON.stringify(outcome.body, null, 2)}
                 </pre>
               </div>

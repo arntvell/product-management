@@ -82,7 +82,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto border">
         <div className="min-w-[58rem]">
           <div className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
             <div>Brand</div>
