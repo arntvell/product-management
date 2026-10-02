@@ -307,12 +307,28 @@ editors, side panel, find-and-replace, bulk toolbar and dialog, prices.
 - The loading state lost its spinner (§9) and now says it is reading from the
   live Shopify store, which on that screen is worth repeating.
 
-### Remaining screens
+### Everything else (done)
 
-Everything else, highest-traffic first, same approach. **Off-palette colour
-count: 340 at the start, 224 now.** Products, bulk, prices and the seven
-screens done so far are at zero; what remains is in the data-repair tools,
-`/catalog`, Media, Groups, Models and the product wizard.
+The product wizard, the repair tools (fix, duplicates, style splits, import
+gaps, lookup, skus, identity, cutover), media, groups, models, brands and the
+style pages.
+
+- **74 inert `dark:` colour utilities were deleted first.** The dark variant
+  has been pinned to a class nothing ever gets since phase 1, so they changed
+  nothing on screen — but they were half of every colour pair and nobody was
+  maintaining them.
+- The mapping, settled by the earlier screens and applied throughout: amber and
+  rose meant *needs attention or blocks a step* → ink; emerald and green meant
+  *nothing is in the way* → quiet, because §9 raises a notice for a problem and
+  says nothing otherwise; blue meant *information or selection* → muted text or
+  the `selected` ground.
+- `src/app/catalog/styles/[id]` carried its own local `Badge`, a rounded pill
+  reimplementing the system's. It uses the real one now, outlined, since brand
+  and category are metadata rather than status.
+
+**Off-palette colour: 340 at the start, zero now.** Verified across
+`src/components` and `src/app`; the only remaining match in the repo is the
+word `bg-blue-500` inside a comment in `globals.css`.
 
 ### Phase 6 — enforcement
 
