@@ -20,3 +20,12 @@ export function formatDate(value: Date | string): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
+
+/** Dates keep the §4 format; the time is appended where "which did I touch
+ *  last" is the question being asked, as on a list of work in progress. */
+export function formatDateTime(value: Date | string): string {
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${formatDate(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
