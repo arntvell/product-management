@@ -128,7 +128,7 @@ export default async function StyleSplitsPage({
         ))}
       </div>
 
-      <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+      <p className="mt-3 border border-ink bg-paper p-3 text-meta normal-case tracking-normal text-muted-foreground">
         <strong className="text-foreground">
           {report.counts.stylesEmptiedInLoom.toLocaleString("en-GB")} of the emptied
           styles are already in Loom.

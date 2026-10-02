@@ -7,8 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { SplitProposal, SplitStyle } from "@/lib/master/style-splits";
 
 const CONFIDENCE_STYLE: Record<string, string> = {
-  high: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
-  medium: "border-amber-500/40 bg-amber-500/10 text-amber-700",
+  high: "border-ink bg-ink text-offwhite",
+  medium: "border-ink bg-paper text-ink",
   low: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
@@ -43,7 +43,7 @@ function TargetLine({ style, renameTo }: { style: SplitStyle; renameTo?: string 
         {style.colorways.length} colourway{style.colorways.length === 1 ? "" : "s"}
       </span>
       {style.threadflowId ? (
-        <span className="text-xs text-emerald-600">Threadflow</span>
+        <span className="text-xs text-muted-foreground">Threadflow</span>
       ) : (
         <span className="text-xs text-muted-foreground">{style.source}</span>
       )}
@@ -116,8 +116,8 @@ function Outcome({
     <div
       className={`mt-3 rounded-md border p-3 text-xs ${
         pushFailed
-          ? "border-amber-500/40 bg-amber-500/5"
-          : "border-emerald-500/40 bg-emerald-500/5"
+          ? "border-ink bg-paper"
+          : "border-line bg-paper"
       }`}
     >
       {applied ? (
@@ -393,7 +393,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
     `This is a real write to Loom.`;
 
   return (
-    <div className={`rounded-lg border p-4 ${done ? "border-emerald-500/40" : ""}`}>
+    <div className={`border p-4 ${done ? "border-ink" : "border-line"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -405,7 +405,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
             </span>
             <span className="text-[11px] text-muted-foreground">{KIND_LABEL[p.kind]}</span>
             {done ? (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <span className="inline-flex h-6 items-center border border-line px-2 text-meta uppercase text-ink">
                 done — applied and pushed
               </span>
             ) : null}
@@ -504,7 +504,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
                   <Seasons codes={c.seasons} />
                   {c.archived ? <span className="text-muted-foreground">archived</span> : null}
                   {c.threadflowId ? (
-                    <span className="text-amber-600">Threadflow</span>
+                    <span className="text-ink">Threadflow</span>
                   ) : null}
                   {c.publishedTo.length ? (
                     <span className="text-muted-foreground">{c.publishedTo.join(", ")}</span>
@@ -522,7 +522,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
           Strip the garment name from the colourway names
         </label>
         {rename && publishedCount > 0 ? (
-          <label className="flex items-center gap-2 text-amber-700">
+          <label className="flex items-center gap-2 text-ink">
             <Checkbox
               checked={renamePublished}
               onCheckedChange={(v) => setRenamePublished(Boolean(v))}
@@ -538,7 +538,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
       </div>
 
       {p.categoryConflict ? (
-        <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+        <p className="mt-3 border border-ink bg-paper p-2 text-meta normal-case tracking-normal">
           Categories disagree: {p.categoryConflict}. Loom takes category at style
           level, so whichever survives becomes the category for all of them.
         </p>

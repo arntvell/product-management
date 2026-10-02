@@ -108,11 +108,11 @@ export function StepReview({
           ) : null}
 
           {report.warnings.length ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-4">
-              <div className="text-sm font-medium text-amber-900">
+            <div className="border border-ink bg-paper p-4">
+              <div className="text-sm font-medium text-ink">
                 Worth knowing
               </div>
-              <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-amber-900">
+              <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-ink">
                 {report.warnings.map((w) => (
                   <li key={w}>{w}</li>
                 ))}
@@ -121,7 +121,7 @@ export function StepReview({
           ) : null}
 
           {report.ok ? (
-            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">
+            <div className="border border-line bg-paper p-3 text-body text-muted-foreground">
               Ready. {report.counts.styles ? "1 new style, " : "Existing style, "}
               {report.counts.colorways} colourways, {report.counts.variants} variants,{" "}
               {report.counts.prices} prices.

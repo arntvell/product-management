@@ -31,11 +31,11 @@ function editsKey(edits: Edits): string {
 }
 
 const TONE: Record<ChannelOutcome["state"], string> = {
-  write: "text-blue-700",
-  written: "text-emerald-700",
+  write: "text-muted-foreground",
+  written: "text-muted-foreground",
   agrees: "text-muted-foreground",
   "not-live": "text-muted-foreground",
-  refused: "text-amber-700",
+  refused: "text-ink",
   failed: "text-destructive",
   "n/a": "text-muted-foreground",
 };
@@ -398,7 +398,7 @@ export function VariantBarcodeEditor({
                         placeholder={r.barcode ?? ""}
                         inputMode="numeric"
                         className={`w-40 rounded border bg-background px-2 py-1 font-mono text-xs ${
-                          invalid ? "border-destructive" : value ? "border-blue-500" : ""
+                          invalid ? "border-destructive" : value ? "border-ink" : ""
                         }`}
                       />
                       {invalid ? <div className="max-w-56 text-[10px] text-destructive">{invalid}</div> : null}
@@ -412,7 +412,7 @@ export function VariantBarcodeEditor({
                                 ? "text-destructive"
                                 : plan.master === "unchanged"
                                   ? "text-muted-foreground"
-                                  : "text-blue-700"
+                                  : "text-muted-foreground"
                             }`}
                             title={plan.note}
                           >
@@ -491,7 +491,7 @@ export function VariantBarcodeEditor({
           <span className="text-xs text-muted-foreground">{applyBlocked}</span>
         ) : null}
         {showConfirm && report ? (
-          <div className="flex basis-full flex-wrap items-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+          <div className="flex basis-full flex-wrap items-center gap-2 rounded-md border border-ink bg-paper px-3 py-2 text-sm">
             <span>
               {writeSummary(report)} <span className="font-medium">These are live systems.</span>
             </span>

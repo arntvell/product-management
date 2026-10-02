@@ -91,7 +91,7 @@ export function PagePicker({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm truncate">{suggestedPage.title}</p>
                 </div>
-                <Badge className="text-xs bg-blue-100 text-blue-800">
+                <Badge className="text-meta border border-line px-2 text-ink">
                   Suggested
                 </Badge>
               </div>

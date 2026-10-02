@@ -157,7 +157,7 @@ export function CopyFieldsDialog({
         />
 
         {warnings.map((w) => (
-          <p key={w} className="text-xs text-amber-700">
+          <p key={w} className="text-xs text-ink">
             {w}
           </p>
         ))}
@@ -188,7 +188,7 @@ export function CopyFieldsDialog({
                   className={cn(
                     "mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
                     s.origin === "shopify"
-                      ? "bg-green-500/15 text-green-700"
+                      ? "bg-hover text-muted-foreground"
                       : "bg-muted text-muted-foreground"
                   )}
                 >

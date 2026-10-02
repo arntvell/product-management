@@ -59,9 +59,9 @@ export default async function CatalogPage() {
             <p className="mt-1 text-xs text-muted-foreground">{dbError}</p>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-2 rounded-full border border-green-600/30 bg-green-600/5 px-3 py-1">
-            <span className="h-2 w-2 rounded-full bg-green-600" />
-            <span className="text-xs font-medium text-green-700">
+          <div className="inline-flex items-center gap-2 border border-line bg-paper px-3 py-1">
+            <span className="size-2 rounded-full bg-ink" />
+            <span className="text-xs font-medium text-muted-foreground">
               Connected to Postgres
             </span>
           </div>

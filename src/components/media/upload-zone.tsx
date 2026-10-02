@@ -38,7 +38,7 @@ export function UploadZone({
       className={cn(
         "border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
         isDragActive
-          ? "border-blue-500 bg-blue-50/50"
+          ? "border-ink bg-selected"
           : "border-muted-foreground/25 hover:border-muted-foreground/50",
         isUploading && "opacity-50 cursor-not-allowed"
       )}
@@ -52,7 +52,7 @@ export function UploadZone({
           {progress && (
             <div className="max-w-xs mx-auto h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-500 transition-all duration-200"
+                className="h-full bg-ink transition-all duration-200"
                 style={{
                   width: `${(progress.completed / progress.total) * 100}%`,
                 }}
@@ -61,7 +61,7 @@ export function UploadZone({
           )}
         </div>
       ) : isDragActive ? (
-        <p className="text-sm text-blue-600">Drop files here</p>
+        <p className="text-sm text-muted-foreground">Drop files here</p>
       ) : (
         <p className="text-sm text-muted-foreground">
           Drag & drop images here, or click to browse

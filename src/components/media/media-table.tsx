@@ -95,9 +95,9 @@ const MediaRow = React.memo(function MediaRow({
         <span
           className={cn(
             "text-xs px-1.5 py-0.5 rounded",
-            product.status === "ACTIVE" && "bg-green-100 text-green-800",
-            product.status === "DRAFT" && "bg-yellow-100 text-yellow-800",
-            product.status === "ARCHIVED" && "bg-gray-100 text-gray-800"
+            product.status === "ACTIVE" && "bg-ink text-offwhite",
+            product.status === "DRAFT" && "border border-ink text-ink",
+            product.status === "ARCHIVED" && "bg-hover text-muted-foreground"
           )}
         >
           {product.status}

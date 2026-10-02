@@ -61,7 +61,7 @@ export function MediaCell({
       }}
       className={cn(
         "flex items-center gap-2 h-full px-2 cursor-pointer hover:bg-muted/30 transition-colors",
-        isDragActive && "bg-blue-50 ring-1 ring-blue-400",
+        isDragActive && "bg-selected outline outline-1 -outline-offset-1 outline-ink",
         isUploading && "opacity-50"
       )}
     >
