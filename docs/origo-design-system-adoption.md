@@ -270,9 +270,30 @@ less the top bar, and one of them had been overflowing its own scroll container.
 
 **Zero off-palette colours remain in these three screens' components.**
 
+### Drops, Vintage and Drafts (done)
+
+- **Drafts.** `PageHeader` with the in-progress count and New product as the
+  page's primary action; open drafts in a flush `Panel`, finished ones in their
+  own. `Interrupted` — a finalize that stopped half-way — is the inverted
+  badge; an ordinary draft is the open circle. `formatDateTime` was added
+  alongside `formatDate`: §4 fixes the date format, but on a list of work in
+  progress the question is which one you touched last, and a date alone cannot
+  answer that for anything edited today.
+- **Drops.** Seasons as tabs, Livid-only as the filter pill. The board had
+  spoken in three colours — rose for gaps, amber for cautions, green for ready.
+  Ready is now the filled dot; a gap is outlined with its count; blocking
+  versus caution is inverted ink against a hairline. A field whose value has
+  not reached the database keeps an ink border, the same thing the bulk editor
+  says about an unsaved cell.
+- **Vintage.** On Loom / On Shopify become the same filled-and-open pair the
+  publishing table uses for a channel. The outstanding-work box takes the ink
+  outline, and a garment that still needs something is legible by its border.
+
 ### Remaining screens
 
-Everything else, highest-traffic first, same approach.
+Everything else, highest-traffic first, same approach. **Off-palette colour
+count: 340 at the start, 256 now** — the six screens done so far are at zero,
+and what remains is concentrated in screens not yet touched.
 
 ### Phase 6 — enforcement
 
