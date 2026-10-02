@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 // The drop sheet.
 //
@@ -614,22 +615,14 @@ export function VintageDropSheet({
                 <span className="text-xs text-muted-foreground">
                   {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}
                 </span>
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[11px]",
-                    g.onLoom ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {g.onLoom ? "on Loom" : "not on Loom"}
-                </span>
-                <span
-                  className={cn(
-                    "rounded px-1.5 py-0.5 text-[11px]",
-                    g.onShopify ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  {g.onShopify ? "on Shopify" : "not on Shopify"}
-                </span>
+                <StatusBadge
+                  status={g.onLoom ? "live" : "draft"}
+                  label={g.onLoom ? "On Loom" : "Not on Loom"}
+                />
+                <StatusBadge
+                  status={g.onShopify ? "live" : "draft"}
+                  label={g.onShopify ? "On Shopify" : "Not on Shopify"}
+                />
                 <button
                   type="button"
                   onClick={() => onDelete(g)}
@@ -681,8 +674,10 @@ export function VintageDropSheet({
       )}
 
       {problems.length > 0 && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
-          <p className="font-medium">{problems.length} garment(s) still need something.</p>
+        <div className="border border-ink bg-paper p-4 text-body">
+          <p className="text-meta uppercase">
+            {problems.length} garment{problems.length === 1 ? "" : "s"} still need something
+          </p>
           <ul className="mt-2 space-y-0.5 text-muted-foreground">
             {problems.slice(0, 6).map((p) => (
               <li key={p.itemNumber}>
@@ -783,9 +778,9 @@ export function VintageDropSheet({
             <div
               key={r.itemNumber}
               className={cn(
-                "rounded-lg border p-3",
+                "border border-line bg-paper p-3",
                 !r.include && "opacity-50",
-                probs.length > 0 && "border-amber-500/40"
+                probs.length > 0 && "border-ink"
               )}
             >
               <div className="flex gap-4">
@@ -829,7 +824,9 @@ export function VintageDropSheet({
                       type mål {measurementType(r)} · {shape}
                     </span>
                     {probs.length > 0 && (
-                      <span className="text-xs text-amber-600">{probs.join(", ")}</span>
+                      <span className="text-meta normal-case tracking-normal text-ink">
+                        {probs.join(", ")}
+                      </span>
                     )}
                   </div>
 
