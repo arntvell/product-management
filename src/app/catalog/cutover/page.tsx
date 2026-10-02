@@ -54,7 +54,7 @@ export default async function CutoverPage() {
                   <div className="flex items-start gap-3">
                     <span
                       className={`mt-1 size-2 shrink-0 rounded-full ${
-                        s.done ? "bg-emerald-500" : "bg-muted-foreground/40"
+                        s.done ? "bg-ink" : "bg-line"
                       }`}
                       aria-hidden
                     />

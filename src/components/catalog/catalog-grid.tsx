@@ -11,6 +11,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import {  gridHead,
+  gridRow,
+  gridRowSelected,
+  GRID_ROW_HEIGHT_COMPACT,
+  dirtyCell,
+} from "@/components/ui/grid";
 import {
   CHANNELS,
   CHANNEL_LABELS,
@@ -86,7 +92,7 @@ const FIELD_LABELS: Record<string, string> = {
 
 const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
-const ROW_H = 40;
+const ROW_H = GRID_ROW_HEIGHT_COMPACT;
 
 /** How long the grid waits after the last edit before autosaving. */
 const AUTOSAVE_IDLE_MS = 1500;
@@ -788,18 +794,18 @@ export function CatalogGrid({
   }, [dirty, autosave, save]);
 
   return (
-    <div className="flex h-[calc(100vh-56px)] flex-col px-6 py-6">
+    <div className="flex h-full flex-col px-8 py-6">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Bulk editor</h1>
+        <h1 className="font-display text-page uppercase">Bulk editor</h1>
         <div className="flex gap-1.5">
           <a
             href="/catalog/edit"
             className={cn(
-              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+              "inline-flex h-8 items-center rounded-full border px-3 text-meta uppercase no-underline transition-colors duration-150 ease-origo",
               !season
-                ? "border-foreground bg-foreground text-background"
-                : "text-muted-foreground hover:bg-muted"
+                ? "border-ink bg-ink text-offwhite"
+                : "border-line bg-paper text-ink hover:border-ink"
             )}
           >
             All
@@ -809,10 +815,10 @@ export function CatalogGrid({
               key={s.code}
               href={`/catalog/edit?season=${s.code}`}
               className={cn(
-                "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                "inline-flex h-8 items-center rounded-full border px-3 text-meta uppercase no-underline transition-colors duration-150 ease-origo",
                 season === s.code
-                  ? "border-foreground bg-foreground text-background"
-                  : "text-muted-foreground hover:bg-muted"
+                  ? "border-ink bg-ink text-offwhite"
+                  : "border-line bg-paper text-ink hover:border-ink"
               )}
             >
               {s.code}
@@ -960,7 +966,7 @@ export function CatalogGrid({
       </div>
 
       {!seasonId && (
-        <p className="mt-2 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-500">
+        <p className="mt-2 border border-line bg-paper px-3 py-2 text-meta normal-case tracking-normal text-muted-foreground">
           Prices are per-season — select a season above to edit NOK prices.
         </p>
       )}
@@ -973,7 +979,7 @@ export function CatalogGrid({
       </p>
       {selected.size > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <p className="text-xs text-blue-600 dark:text-blue-400">
+          <p className="text-meta normal-case tracking-normal text-muted-foreground">
             {selected.size} selected — fill-down (↓) and bulk actions apply to
             these rows. Shift-click a checkbox to select a range.
           </p>
@@ -1032,7 +1038,7 @@ export function CatalogGrid({
         <div style={{ width: totalWidth, position: "relative" }}>
           {/* Header */}
           <div
-            className="sticky top-0 z-10 flex border-b bg-muted/60 text-xs font-medium text-muted-foreground backdrop-blur"
+            className={cn(gridHead, "flex")}
             style={{ width: totalWidth }}
           >
             <div
@@ -1085,8 +1091,9 @@ export function CatalogGrid({
                 <div
                   key={row.id}
                   className={cn(
-                    "absolute left-0 flex border-b hover:bg-muted/20",
-                    isSel && "bg-blue-500/10 hover:bg-blue-500/15"
+                    gridRow,
+                    "absolute left-0 flex",
+                    isSel && gridRowSelected
                   )}
                   style={{
                     top: vi.start,
@@ -1129,9 +1136,9 @@ export function CatalogGrid({
                         {row.dropped && (
                           <span
                             title="Dropped from Threadflow for this season"
-                            className="mr-1 rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-700 dark:text-amber-500"
+                            className="mr-1 border border-line px-1 text-[10px] uppercase text-muted-foreground"
                           >
-                            dropped
+                            Dropped
                           </span>
                         )}
                         {row.name}
@@ -1164,7 +1171,7 @@ export function CatalogGrid({
                     style={{ width: FIXED_COLS[0].width }}
                     className={cn(
                       "flex shrink-0 items-center gap-1 border-l px-1",
-                      dirty.has(dkey(row.id, "BASE", "swatchHex")) && "bg-amber-500/10"
+                      dirty.has(dkey(row.id, "BASE", "swatchHex")) && dirtyCell
                     )}
                   >
                     <span
@@ -1183,7 +1190,7 @@ export function CatalogGrid({
                     style={{ width: FIXED_COLS[1].width }}
                     className={cn(
                       "shrink-0 border-l",
-                      dirty.has(dkey(row.id, "BASE", "priceNok")) && "bg-amber-500/10"
+                      dirty.has(dkey(row.id, "BASE", "priceNok")) && dirtyCell
                     )}
                   >
                     <input
@@ -1215,7 +1222,7 @@ export function CatalogGrid({
                           <div
                             key={c.key}
                             style={{ width: c.width }}
-                            className={cn("shrink-0 border-l", isDirty && "bg-amber-500/10")}
+                            className={cn("shrink-0 border-l", isDirty && dirtyCell)}
                           >
                             <select
                               {...cellHandlers(vi.index, row, c.key, "select")}
@@ -1248,7 +1255,7 @@ export function CatalogGrid({
                             style={{ width: c.width }}
                             className={cn(
                               "flex shrink-0 items-center justify-between gap-1 border-l px-2 text-xs",
-                              isDirty && "bg-amber-500/10"
+                              isDirty && dirtyCell
                             )}
                           >
                             <span className={count ? "" : "text-muted-foreground/50"}>
@@ -1282,7 +1289,7 @@ export function CatalogGrid({
                           style={{ width: c.width }}
                           className={cn(
                             "shrink-0 border-l",
-                            isDirty && "bg-amber-500/10"
+                            isDirty && dirtyCell
                           )}
                         >
                           {c.kind === "status" ? (
@@ -1325,7 +1332,7 @@ export function CatalogGrid({
                                   : placeholder || "Click to write"
                               }
                               className={cn(
-                                "h-full w-full truncate px-2 text-left text-xs hover:bg-muted/60 focus:bg-background focus:outline focus:outline-1 disabled:opacity-40",
+                                "h-full w-full truncate px-2 text-left text-meta normal-case tracking-normal hover:bg-hover focus:bg-paper focus:outline focus:outline-2 focus:outline-cyan disabled:opacity-40",
                                 !value && "text-muted-foreground/50"
                               )}
                             >
@@ -1527,7 +1534,7 @@ function SaveStatus({
   if (saving) return <span className="text-xs text-muted-foreground">Saving…</span>;
   if (pending > 0)
     return (
-      <span className="text-xs text-amber-700 dark:text-amber-500">
+      <span className="text-meta uppercase text-ink">
         {autosave ? "Saving shortly…" : `${pending} unsaved`}
       </span>
     );

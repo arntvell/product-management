@@ -146,7 +146,7 @@ export default function GroupsPage() {
       </div>
 
       {autoLinkCount !== null && (
-        <div className="mb-6 rounded-md border border-yellow-300 bg-yellow-50 p-4 space-y-2">
+        <div className="mb-6 space-y-2 border border-ink bg-paper p-4">
           <p className="text-sm font-medium">
             Auto-populate {autoLinkCount} Livid products?
           </p>

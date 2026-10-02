@@ -9,11 +9,17 @@ import { useFileNodes } from "@/hooks/use-file-nodes";
 import { useUploadMedia } from "@/hooks/use-product-media";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { parseGidList, serializeGidList, cn } from "@/lib/utils";
+import {
+  gridHead,
+  gridRow,
+  gridRowSelected,
+  GRID_ROW_HEIGHT,
+} from "@/components/ui/grid";
 import { UNISEX_VENDOR } from "@/lib/constants";
 import type { MediaColumnDef, MediaColumnKey } from "@/lib/media-columns";
 import type { Product } from "@/types";
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = GRID_ROW_HEIGHT;
 
 interface MediaTableProps {
   products: Product[];
@@ -54,8 +60,9 @@ const MediaRow = React.memo(function MediaRow({
     <tr
       style={style}
       className={cn(
-        "border-b hover:bg-muted/30 transition-colors flex",
-        isSelected && "bg-blue-50/50"
+        gridRow,
+        "flex",
+        isSelected && gridRowSelected
       )}
     >
       <td className="p-2 w-10 shrink-0 flex items-center">
@@ -88,9 +95,9 @@ const MediaRow = React.memo(function MediaRow({
         <span
           className={cn(
             "text-xs px-1.5 py-0.5 rounded",
-            product.status === "ACTIVE" && "bg-green-100 text-green-800",
-            product.status === "DRAFT" && "bg-yellow-100 text-yellow-800",
-            product.status === "ARCHIVED" && "bg-gray-100 text-gray-800"
+            product.status === "ACTIVE" && "bg-ink text-offwhite",
+            product.status === "DRAFT" && "border border-ink text-ink",
+            product.status === "ARCHIVED" && "bg-hover text-muted-foreground"
           )}
         >
           {product.status}
@@ -267,7 +274,7 @@ export function MediaTable({
         className="h-full flex flex-col"
       >
         {/* Sticky header */}
-        <div className="bg-muted/80 backdrop-blur-sm z-10 flex border-b">
+        <div className={cn(gridHead, "flex")}>
           <div className="w-10 p-2 shrink-0">
             <Checkbox
               checked={

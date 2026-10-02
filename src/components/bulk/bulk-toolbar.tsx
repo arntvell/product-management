@@ -77,8 +77,8 @@ export function BulkToolbar({
   };
 
   return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border-b">
-      <span className="text-sm font-medium">
+    <div className="flex items-center gap-3 border-b border-line bg-ink px-4 py-2 text-offwhite">
+      <span className="text-meta uppercase tabular-nums">
         {selectedCount} product{selectedCount !== 1 ? "s" : ""} selected
       </span>
       <Button size="sm" variant="outline" onClick={onBulkApply}>

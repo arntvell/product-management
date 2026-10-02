@@ -57,7 +57,7 @@ export default async function DuplicatesPage() {
         ))}
       </div>
 
-      <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+      <p className="mt-3 border border-ink bg-paper p-3 text-meta normal-case tracking-normal text-muted-foreground">
         <strong className="text-foreground">Vintage is excluded deliberately.</strong>{" "}
         {report.vintageSkipped} name collisions are <code>VN-</code> SKUs, where
         one-of-one means six second-hand Tommy Hilfiger shirts in XL are six

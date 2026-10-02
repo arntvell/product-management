@@ -356,7 +356,7 @@ export function ImportProducts({
           ))}
         </div>
         {sitooBrandProblem ? (
-          <p className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <p className="mb-4 border border-ink bg-paper p-3 text-meta normal-case tracking-normal text-ink">
             {sitooBrandProblem} A Sitoo product carries the brand as its manufacturer, so the
             create is refused without exactly one.{" "}
             <Link href="/catalog/brands/identity" className="underline underline-offset-2">
@@ -799,7 +799,7 @@ function Result({
         />
       ) : null}
       {createdIds !== null && createdIds.length === 0 ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="border border-ink bg-paper p-4 text-meta normal-case tracking-normal text-ink">
           Nothing was created, so nothing was published. Open a draft below to see what
           its pre-flight refused.
         </div>
@@ -925,7 +925,7 @@ function CategoryPicker({
               />
               <span style={{ paddingLeft: c.depth * 12 }}>{c.name}</span>
               {c.sitooCategoryId ? null : (
-                <span className="ml-auto text-[10px] text-amber-700 dark:text-amber-400">
+                <span className="ml-auto text-[10px] text-ink">
                   no Sitoo id
                 </span>
               )}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
 import type { DropRow, DropSummary } from "@/lib/master/drops";
 
 type Field =
@@ -294,7 +295,7 @@ export function DropBoard({
             {fieldGaps.map((g) => (
               <span
                 key={g.field}
-                className="rounded bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-400"
+                className="inline-flex h-6 items-center border border-line px-2 text-meta uppercase tabular-nums text-ink"
               >
                 {GAP_LABEL[g.field] ?? g.field} · {g.missing}
               </span>
@@ -564,10 +565,10 @@ function HandleBucket({
     <div>
       <span
         className={cn(
-          "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+          "inline-flex h-6 items-center px-2 text-meta uppercase tabular-nums",
           tone === "bad"
-            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400"
-            : "bg-amber-500/10 text-amber-700 dark:text-amber-500"
+            ? "bg-ink text-offwhite"
+            : "border border-line text-ink"
         )}
       >
         {items.length} {label}
@@ -616,9 +617,7 @@ function Row({
       <Cell row={row} field="swatchHex" value={row.values.swatchHex} busy={busy} onSave={onSave} />
       <td className="p-2">
         {row.missing.length === 0 ? (
-          <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-green-700 dark:text-green-500">
-            ready
-          </span>
+          <StatusBadge status="live" label="Ready" />
         ) : (
           <div className="text-[11px] text-muted-foreground">
             needs {row.missing.map((m) => GAP_LABEL[m] ?? m).join(", ")}
@@ -661,8 +660,8 @@ function Cell({
     if (!(await onSave(field, next))) setDraft(persisted);
   };
   const cls = cn(
-    "w-full rounded border bg-background px-1.5 py-1 text-xs",
-    !persisted && "border-rose-500/50"
+    "w-full border border-line bg-paper px-2 py-1 text-meta normal-case tracking-normal",
+    !persisted && "border-ink"
   );
   return (
     <td className="p-2">

@@ -1,5 +1,11 @@
 import Link from "next/link";
 import { listDrafts } from "@/lib/master/drafts";
+import { PageHeader, Page } from "@/components/ui/page-header";
+import { Panel } from "@/components/ui/panel";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { buttonVariants } from "@/components/ui/button";
+import { formatDate, formatDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -9,95 +15,125 @@ export default async function DraftsPage() {
   const finished = drafts.filter((d) => d.status !== "DRAFT" && d.status !== "FINALIZING");
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Product drafts</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Drafts are shared and saved as you type — closing the tab, or losing the
-            server, costs nothing.
-          </p>
-        </div>
-        <Link
-          href="/catalog/products/new"
-          className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
+    <>
+      <PageHeader
+        eyebrow="Catalogue"
+        title="Drafts"
+        meta={
+          <span className="text-meta uppercase tabular-nums text-muted-foreground">
+            {open.length} in progress
+          </span>
+        }
+        actions={
+          <Link href="/catalog/products/new" className={buttonVariants()}>
+            New product
+          </Link>
+        }
+      />
+      <Page>
+        <Panel
+          flush
+          description="Drafts are shared and saved as you type — closing the tab, or losing the server, costs nothing."
         >
-          + New product
-        </Link>
-      </div>
-
-      {open.length === 0 ? (
-        <p className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No drafts in progress.
-        </p>
-      ) : (
-        <div className="rounded-md border">
-          {open.map((d) => (
-            <Link
-              key={d.id}
-              href={`/catalog/products/drafts/${d.id}`}
-              className="flex items-center justify-between gap-4 border-b px-4 py-3 text-sm transition-colors last:border-0 hover:bg-muted/50"
-            >
-              <div className="min-w-0">
-                <div className="truncate font-medium">{d.title}</div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {[d.seasonCode, `${d.colorways} colourways`, `${d.variants} sizes`, `at “${d.step}”`]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </div>
-                {d.finalizeError ? (
-                  <div className="mt-0.5 truncate text-xs text-destructive">
-                    last attempt failed: {d.finalizeError}
-                  </div>
-                ) : null}
-              </div>
-              <div className="shrink-0 text-right text-xs text-muted-foreground">
-                {d.status === "FINALIZING" ? (
-                  <span className="rounded-full border border-amber-400 px-2 py-0.5 text-amber-700 dark:text-amber-400">
-                    interrupted
-                  </span>
-                ) : null}
-                <div>{new Date(d.updatedAt).toLocaleString()}</div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {finished.length ? (
-        <details className="mt-6 rounded-md border p-4">
-          <summary className="cursor-pointer text-sm font-medium">
-            {finished.length} finished or discarded
-          </summary>
-          <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-            {finished.slice(0, 50).map((d) => {
-              const row = (
-                <>
-                  <span className="truncate">
-                    {d.title} — {d.status.toLowerCase()}
-                  </span>
-                  <span className="shrink-0">{new Date(d.updatedAt).toLocaleDateString()}</span>
-                </>
-              );
-              // A completed draft's page is where its publish panel lives, and
-              // publishing is retryable — so it has to stay reachable after "Created".
-              return d.status === "COMPLETED" ? (
+          {open.length === 0 ? (
+            <EmptyState
+              title="No drafts"
+              body="Nothing is in progress. Starting a product creates its draft before the first keystroke."
+              action={
+                <Link
+                  href="/catalog/products/new"
+                  className={buttonVariants({ variant: "outline" })}
+                >
+                  New product
+                </Link>
+              }
+            />
+          ) : (
+            <div>
+              {open.map((d) => (
                 <Link
                   key={d.id}
-                  href={`/catalog/products/drafts/${d.id}/done`}
-                  className="flex justify-between gap-4 hover:text-foreground hover:underline"
+                  href={`/catalog/products/drafts/${d.id}`}
+                  className="flex items-center justify-between gap-4 border-b border-line px-5 py-3 text-body no-underline transition-colors duration-150 ease-origo last:border-0 hover:bg-hover"
                 >
-                  {row}
+                  <div className="min-w-0">
+                    <div className="truncate text-ink">{d.title}</div>
+                    <div className="truncate text-meta uppercase text-muted-foreground">
+                      {[
+                        d.seasonCode,
+                        `${d.colorways} colourways`,
+                        `${d.variants} sizes`,
+                        `at ${d.step}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                    {d.finalizeError ? (
+                      <div className="mt-1 truncate text-body text-ink">
+                        Last attempt failed: {d.finalizeError}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-4">
+                    {/* Interrupted means a finalize stopped half-way — the one
+                        state here that needs doing something about. */}
+                    {d.status === "FINALIZING" ? (
+                      <StatusBadge status="error" label="Interrupted" />
+                    ) : (
+                      <StatusBadge status="draft" />
+                    )}
+                    <span className="text-meta tabular-nums text-muted-foreground">
+                      {formatDateTime(d.updatedAt)}
+                    </span>
+                  </div>
                 </Link>
-              ) : (
-                <div key={d.id} className="flex justify-between gap-4">
-                  {row}
-                </div>
-              );
-            })}
-          </div>
-        </details>
-      ) : null}
-    </main>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        {finished.length ? (
+          <Panel title="Finished" description={`${finished.length} finished or discarded`}>
+            <div className="flex flex-col">
+              {finished.slice(0, 50).map((d) => {
+                const row = (
+                  <>
+                    <span className="truncate">
+                      {d.title}
+                      <span className="text-muted-foreground">
+                        {" — "}
+                        {d.status.toLowerCase()}
+                      </span>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {formatDate(d.updatedAt)}
+                    </span>
+                  </>
+                );
+                // A completed draft's page is where its publish panel lives,
+                // and publishing is retryable — so it has to stay reachable
+                // after "Created".
+                return d.status === "COMPLETED" ? (
+                  <Link
+                    key={d.id}
+                    href={`/catalog/products/drafts/${d.id}/done`}
+                    className="flex justify-between gap-4 border-b border-line py-2 text-body no-underline last:border-0 hover:bg-hover"
+                  >
+                    {row}
+                  </Link>
+                ) : (
+                  <div
+                    key={d.id}
+                    className="flex justify-between gap-4 border-b border-line py-2 text-body last:border-0"
+                  >
+                    {row}
+                  </div>
+                );
+              })}
+            </div>
+          </Panel>
+        ) : null}
+      </Page>
+    </>
   );
 }

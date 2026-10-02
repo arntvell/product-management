@@ -98,7 +98,7 @@ export function BulkApplyDialog({
 
         {confirmed ? (
           <div className="space-y-4 py-4">
-            <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 space-y-2">
+            <div className="space-y-2 border border-ink bg-paper p-4">
               <p className="text-sm font-medium">
                 Are you sure you want to update {selectedCount} products?
               </p>
@@ -236,7 +236,7 @@ function ReferenceList({
           type="button"
           className={cn(
             "w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors border-b last:border-b-0",
-            selectedId === item.id && "bg-blue-50 font-medium"
+            selectedId === item.id && "bg-selected"
           )}
           onClick={() => onSelect(item.id)}
         >

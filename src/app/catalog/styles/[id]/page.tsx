@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { notFound } from "next/navigation";
 import { getStyleDetail, type StyleDetail } from "@/lib/master/queries";
 import { catalogImageSrc } from "@/lib/catalog-image";
@@ -42,12 +43,12 @@ export default async function StyleDetailPage({
         </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-        {style.brand && <Badge>{style.brand.name}</Badge>}
-        {style.gender && <Badge className="capitalize">{style.gender}</Badge>}
-        <Badge>{style.category}</Badge>
-        {style.unisex && <Badge>Unisex</Badge>}
-        {style.fiberComposition && <Badge>{style.fiberComposition}</Badge>}
-        {style.hsCode && <Badge>HS {style.hsCode}</Badge>}
+        {style.brand && <Badge variant="outline">{style.brand.name}</Badge>}
+        {style.gender && <Badge variant="outline" className="capitalize">{style.gender}</Badge>}
+        <Badge variant="outline">{style.category}</Badge>
+        {style.unisex && <Badge variant="outline">Unisex</Badge>}
+        {style.fiberComposition && <Badge variant="outline">{style.fiberComposition}</Badge>}
+        {style.hsCode && <Badge variant="outline">HS {style.hsCode}</Badge>}
       </div>
 
       <h2 className="mt-8 text-sm font-semibold text-muted-foreground">
@@ -83,16 +84,16 @@ export default async function StyleDetailPage({
                     {cw.name}
                   </Link>
                   {entry?.cancelled && (
-                    <Badge className="border-destructive/40 text-destructive">
+                    <Badge variant="outline">
                       Dropped
                     </Badge>
                   )}
                   {entry?.approvedForProduction ? (
-                    <Badge className="border-green-600/40 text-green-700 dark:text-green-500">
+                    <Badge variant="outline">
                       Approved
                     </Badge>
                   ) : (
-                    <Badge>Not approved</Badge>
+                    <Badge variant="secondary">Not approved</Badge>
                   )}
                 </div>
 
@@ -124,7 +125,7 @@ export default async function StyleDetailPage({
                     >
                       {v.sizeLabel}
                       {v.barcode ? (
-                        <span className="ml-1 text-green-600">•</span>
+                        <span className="ml-1 text-ink">•</span>
                       ) : (
                         <span className="ml-1 text-muted-foreground/40">•</span>
                       )}
@@ -140,18 +141,3 @@ export default async function StyleDetailPage({
   );
 }
 
-function Badge({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span
-      className={`rounded-full border px-2 py-0.5 text-xs text-muted-foreground ${className}`}
-    >
-      {children}
-    </span>
-  );
-}

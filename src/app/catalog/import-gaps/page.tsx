@@ -70,7 +70,7 @@ export default async function ImportGapsPage() {
           </div>
 
           {noted.length ? (
-            <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
+            <p className="mt-3 border border-ink bg-paper p-3 text-meta normal-case tracking-normal">
               <strong className="text-foreground">{noted.length} rows need a decision, not an import.</strong>{" "}
               {noted[0].note}. They are stocked and absent from the master, so the
               gate picks them up correctly — but importing a style with two weeks
@@ -96,13 +96,13 @@ export default async function ImportGapsPage() {
                 {report.rows.map((r) => (
                   <tr
                     key={r.sku}
-                    className={`border-b last:border-0 ${r.note ? "bg-amber-500/5" : ""}`}
+                    className={`border-b last:border-0 ${r.note ? "bg-paper" : ""}`}
                   >
                     <td className="px-3 py-1.5 font-mono">{r.sku}</td>
                     <td className="px-3 py-1.5">
                       {r.name}
                       {r.note ? (
-                        <span className="ml-2 text-amber-600 dark:text-amber-400">{r.note}</span>
+                        <span className="ml-2 text-ink">{r.note}</span>
                       ) : null}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">{r.brand ?? "—"}</td>

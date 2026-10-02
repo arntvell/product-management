@@ -29,9 +29,9 @@ export function GroupCard({ group, onAutoLink, isLinking }: GroupCardProps) {
   };
 
   const statusColor = {
-    linked: "bg-green-100 text-green-800",
-    partially_linked: "bg-yellow-100 text-yellow-800",
-    not_linked: "bg-gray-100 text-gray-800",
+    linked: "bg-ink text-offwhite",
+    partially_linked: "border border-ink text-ink",
+    not_linked: "bg-hover text-muted-foreground",
   };
 
   const statusLabel = {

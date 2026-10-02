@@ -262,7 +262,7 @@ function SortableTile({
           className={cn(
             "absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
             item.source === "BLOB"
-              ? "bg-green-600/90 text-white"
+              ? "bg-ink text-offwhite"
               : "bg-background/90 text-muted-foreground"
           )}
         >

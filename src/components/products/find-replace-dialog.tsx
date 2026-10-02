@@ -199,11 +199,11 @@ export function FindReplaceDialog({
                       <>
                         {" "}
                         — replacing{" "}
-                        <code className="bg-red-50 text-red-700 px-1 rounded text-xs">
+                        <code className="px-1 text-meta text-muted-foreground line-through">
                           {findText}
                         </code>{" "}
                         with{" "}
-                        <code className="bg-green-50 text-green-700 px-1 rounded text-xs">
+                        <code className="px-1 text-meta text-ink">
                           {replaceText}
                         </code>
                       </>
@@ -232,7 +232,7 @@ export function FindReplaceDialog({
                           className="font-mono text-[11px] text-muted-foreground leading-relaxed"
                         >
                           {s.before}
-                          <mark className="bg-yellow-200 text-yellow-900 not-italic px-0">
+                          <mark className="bg-selected px-0 not-italic text-ink">
                             {s.match}
                           </mark>
                           {s.after}

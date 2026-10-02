@@ -336,7 +336,7 @@ export function StyleSplitPending() {
                   (t.state === "running"
                     ? "border-border bg-muted/40"
                     : t.state === "ok"
-                      ? "border-emerald-500/40 bg-emerald-500/5"
+                      ? "border-line bg-paper"
                       : "border-destructive/40 bg-destructive/5")
                 }
               >
@@ -344,7 +344,7 @@ export function StyleSplitPending() {
                   {t.state === "running" ? (
                     <Loader2Icon className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                   ) : t.state === "ok" ? (
-                    <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   ) : (
                     <XCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
                   )}
@@ -384,7 +384,7 @@ export function StyleSplitPending() {
       ) : null}
 
       {waiting.length ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+        <div className="border border-ink bg-paper p-4">
           <h2 className="text-sm font-semibold">
             Applied here, not yet in Loom — {waiting.length}
           </h2>

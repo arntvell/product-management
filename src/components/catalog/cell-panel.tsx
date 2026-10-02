@@ -77,7 +77,7 @@ export function CellPanel({
 
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
           {confirmDiscard && (
-            <div className="space-y-2 rounded-md border border-amber-400 bg-amber-500/10 p-3">
+            <div className="space-y-2 border border-ink bg-paper p-3">
               <p className="text-sm font-medium">You have unsaved changes here</p>
               <p className="text-xs text-muted-foreground">
                 Closing discards what you typed in this panel. Anything already

@@ -23,6 +23,13 @@ import { COLUMN_DEFINITIONS } from "@/lib/columns";
 import type { ColumnDef } from "@/lib/columns";
 import type { SortKey } from "@/hooks/use-product-search";
 import { parseGidList, serializeGidList, cn } from "@/lib/utils";
+import { StatusBadge, type ProductStatus } from "@/components/ui/status-badge";
+import {  gridHead,
+  gridRow,
+  gridRowSelected,
+  GRID_ROW_HEIGHT,
+  dirtyCell,
+} from "@/components/ui/grid";
 import type {
   DirtyCell,
   DirtyProductProp,
@@ -33,7 +40,9 @@ import type {
   Model,
 } from "@/types";
 
-const ROW_HEIGHT = 40;
+// 48px: the §5 list height, and what a 32px thumbnail inside 8px padding
+// always needed — the old 40 was clipping it.
+const ROW_HEIGHT = GRID_ROW_HEIGHT;
 
 type PickerType =
   | "product"
@@ -93,11 +102,11 @@ function StatusCell({
   onChange: (s: Product["status"]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const colorClass = {
-    ACTIVE: "bg-green-100 text-green-800",
-    DRAFT: "bg-yellow-100 text-yellow-800",
-    ARCHIVED: "bg-gray-100 text-gray-800",
-  }[status];
+  const statusGlyph = {
+    ACTIVE: "live",
+    DRAFT: "draft",
+    ARCHIVED: "archived",
+  }[status] as ProductStatus;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -105,12 +114,10 @@ function StatusCell({
         <div
           className={cn(
             "h-full w-full px-2 flex items-center cursor-pointer",
-            isDirty && "bg-yellow-50"
+            isDirty && dirtyCell
           )}
         >
-          <span className={cn("text-xs px-1.5 py-0.5 rounded", colorClass)}>
-            {status}
-          </span>
+          <StatusBadge status={statusGlyph} label={status} />
         </div>
       </PopoverTrigger>
       <PopoverContent className="w-36 p-1" align="start">
@@ -166,7 +173,7 @@ function VendorCell({
         <div
           className={cn(
             "h-full w-full px-2 flex items-center cursor-pointer text-sm text-muted-foreground truncate",
-            isDirty && "bg-yellow-50"
+            isDirty && dirtyCell
           )}
         >
           {vendor}
@@ -271,8 +278,9 @@ const ProductRow = React.memo(function ProductRow({
       role="row"
       style={style}
       className={cn(
-        "border-b hover:bg-muted/30 transition-colors flex",
-        isSelected && "bg-blue-50/50"
+        gridRow,
+        "flex",
+        isSelected && gridRowSelected
       )}
     >
       <div role="cell" className="p-2 w-10 shrink-0 flex items-center">
@@ -640,8 +648,8 @@ export function ProductTable({
       />
 
       {dirtyCount > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b">
-          <span className="text-sm">
+        <div className="flex items-center gap-3 border-b border-line bg-selected px-4 py-2">
+          <span className="text-meta uppercase tabular-nums">
             {dirtyCount} unsaved change{dirtyCount !== 1 ? "s" : ""}
           </span>
           <Button size="sm" onClick={onSaveAll} disabled={isSaving}>
@@ -654,7 +662,7 @@ export function ProductTable({
           {saveProgress && (
             <div className="flex-1 max-w-xs h-2 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-500 transition-all duration-200"
+                className="h-full bg-ink transition-all duration-560 ease-origo"
                 style={{
                   width: `${(saveProgress.completed / saveProgress.total) * 100}%`,
                 }}
@@ -668,7 +676,7 @@ export function ProductTable({
       <div className="flex-1 min-h-0 overflow-x-auto">
         <div style={{ minWidth: `${dynamicMinWidth}px` }} className="h-full flex flex-col">
           {/* Sticky header */}
-          <div className="bg-muted/80 backdrop-blur-sm z-10 flex border-b">
+          <div className={cn(gridHead, "flex")}>
             <div className="w-10 p-2 shrink-0">
               <Checkbox
                 checked={
@@ -679,25 +687,25 @@ export function ProductTable({
             </div>
             <div className="w-12 p-2 shrink-0" />
             <button
-              className="p-2 text-left text-sm font-medium min-w-[200px] flex-1 hover:bg-muted/50 flex items-center"
+              className="p-2 text-left min-w-[200px] flex-1 hover:text-ink flex items-center"
               onClick={() => onSort?.("title")}
             >
               Title <SortIcon col="title" sortKey={sortKey} sortDir={sortDir} />
             </button>
             <button
-              className="p-2 text-left text-sm font-medium w-[120px] shrink-0 hover:bg-muted/50 flex items-center"
+              className="p-2 text-left w-[120px] shrink-0 hover:text-ink flex items-center"
               onClick={() => onSort?.("vendor")}
             >
               Vendor <SortIcon col="vendor" sortKey={sortKey} sortDir={sortDir} />
             </button>
             <button
-              className="p-2 text-left text-sm font-medium w-[80px] shrink-0 hover:bg-muted/50 flex items-center"
+              className="p-2 text-left w-[80px] shrink-0 hover:text-ink flex items-center"
               onClick={() => onSort?.("productType")}
             >
               Type <SortIcon col="productType" sortKey={sortKey} sortDir={sortDir} />
             </button>
             <button
-              className="p-2 text-left text-sm font-medium w-[100px] shrink-0 hover:bg-muted/50 flex items-center"
+              className="p-2 text-left w-[100px] shrink-0 hover:text-ink flex items-center"
               onClick={() => onSort?.("status")}
             >
               Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} />

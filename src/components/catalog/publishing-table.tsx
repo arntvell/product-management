@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Notice } from "@/components/ui/notice";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { catalogImageSrc } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
 import type { PublishingRow, ChannelCellState } from "@/lib/master/queries";
@@ -368,7 +371,7 @@ export function PublishingTable({
       </div>
 
       {preview && (
-        <div className="mt-4 rounded-lg border bg-muted/20 p-3 text-sm">
+        <div className="mt-4 border border-line bg-paper p-4 text-body">
           <div className="flex items-baseline justify-between">
             <h3 className="font-semibold">
               {preview.pushedDataOnly === undefined ? "Preview" : "Pushed"} — Loom, {preview.season}
@@ -390,19 +393,22 @@ export function PublishingTable({
 
           {/* The two-stage publish gate, stated plainly. */}
           {preview.dataOnly > 0 && (
-            <div className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-[13px] text-amber-800 dark:text-amber-400">
-              <b>{preview.dataOnly}</b> of these have never been pushed to Loom, so they go
-              out marked <code>loom: false</code> — Loom receives the data but does{" "}
-              <b>not</b> publish them. Push a second time to publish.{" "}
-              {preview.willPublish > 0 && (
-                <>The other <b>{preview.willPublish}</b> publish immediately.</>
-              )}
-            </div>
+            <Notice
+              className="mt-2"
+              title={`${preview.dataOnly} will not publish yet`}
+            >
+              They have never been pushed to Loom, so they go out marked{" "}
+              <code>loom: false</code> — Loom receives the data but does not
+              publish them. Push a second time to publish.
+              {preview.willPublish > 0 &&
+                ` The other ${preview.willPublish} publish immediately.`}
+            </Notice>
           )}
           {preview.dataOnly === 0 && preview.wouldSend > 0 && (
-            <div className="mt-2 rounded border border-green-500/40 bg-green-500/10 p-2 text-[13px] text-green-800 dark:text-green-400">
-              All {preview.willPublish} publish immediately — Loom has seen them before.
-            </div>
+            <p className="mt-2 text-body text-muted-foreground">
+              All {preview.willPublish} publish immediately — Loom has seen them
+              before.
+            </p>
           )}
 
           {preview.core > 0 && (
@@ -413,7 +419,7 @@ export function PublishingTable({
           )}
 
           {preview.failedEventId && (
-            <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 p-2 text-[13px] text-rose-800 dark:text-rose-300">
+            <div className="mt-2 border border-ink bg-paper p-2 text-body text-ink">
               The last attempt failed and Loom has kept its delivery id
               (<code>{preview.failedEventId}</code>). Pushing again from here now
               sends a <b>new</b> id, so it will actually be retried rather than
@@ -554,7 +560,7 @@ export function PublishingTable({
             </button>
           </div>
           {report.issues.length > 0 && (
-            <ul className="mt-2 max-h-48 list-disc space-y-0.5 overflow-auto pl-4 text-amber-700 dark:text-amber-500">
+            <ul className="mt-2 max-h-48 list-disc space-y-0.5 overflow-auto pl-4 text-muted-foreground">
               {report.issues.map((it, i) => (
                 <li key={i}>{it}</li>
               ))}
@@ -596,12 +602,13 @@ export function PublishingTable({
                   <td className="p-3">
                     <a href={`/catalog/colorways/${r.id}`} className="font-medium hover:underline">
                       {r.dropped && (
-                        <span
+                        <Badge
+                          variant="outline"
+                          className="mr-1.5"
                           title="Dropped from Threadflow for this season"
-                          className="mr-1.5 rounded bg-amber-500/20 px-1 text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-500"
                         >
-                          dropped
-                        </span>
+                          Dropped
+                        </Badge>
                       )}
                       {r.name}
                     </a>
@@ -634,15 +641,23 @@ function ChannelCell({
       <div className="flex flex-col items-center gap-1">
         <input type="checkbox" checked={state.targeted} disabled={busy} onChange={onToggle} />
         {state.ready ? (
-          <span className="rounded-full px-1.5 text-[10px] text-green-700 dark:text-green-500">
-            {state.published ? "published" : state.targeted ? "targeted" : "ready"}
-          </span>
+          <StatusBadge
+            status={
+              state.published ? "live" : state.targeted ? "pending" : "draft"
+            }
+            label={
+              state.published ? "Published" : state.targeted ? "Targeted" : "Ready"
+            }
+          />
         ) : (
-          <span
-            className="rounded-full px-1.5 text-[10px] text-amber-600 dark:text-amber-500"
-            title={`Missing: ${state.missing.join(", ")}`}
-          >
-            needs {state.missing.length}
+          <span title={`Missing: ${state.missing.join(", ")}`}>
+            <StatusBadge
+              // Targeted but not ready is the thing that blocks the push, and
+              // §2 asks every screen to make that obvious. Not targeted and
+              // not ready is merely unfinished.
+              status={state.targeted ? "error" : "draft"}
+              label={`Needs ${state.missing.length}`}
+            />
           </span>
         )}
       </div>

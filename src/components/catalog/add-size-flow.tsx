@@ -14,12 +14,12 @@ import type {
 } from "@/lib/master/add-size";
 
 const TONE: Record<StepState, string> = {
-  write: "text-blue-700 dark:text-blue-400",
-  written: "text-emerald-700 dark:text-emerald-400",
+  write: "text-muted-foreground",
+  written: "text-muted-foreground",
   exists: "text-muted-foreground",
   "not-live": "text-muted-foreground",
-  refused: "text-amber-700 dark:text-amber-400",
-  skipped: "text-amber-700 dark:text-amber-400",
+  refused: "text-ink",
+  skipped: "text-ink",
   failed: "text-destructive",
   "n/a": "text-muted-foreground",
 };
@@ -444,7 +444,7 @@ export function AddSizeFlow({
       </div>
 
       {ctx.refusal ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
+        <div className="border border-ink bg-paper p-4 text-body">
           {ctx.refusal}{" "}
           <Link href="/catalog/size-systems" className="underline underline-offset-4">
             Size systems
@@ -491,7 +491,7 @@ export function AddSizeFlow({
 
             {system.skuNote ? (
               <p
-                className={`mt-2 text-xs ${system.skuStem ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400"}`}
+                className={`mt-2 text-xs ${system.skuStem ? "text-muted-foreground" : "text-ink"}`}
               >
                 {system.skuNote}
               </p>
@@ -555,7 +555,7 @@ export function AddSizeFlow({
                           {reason ? (
                             <div className="text-[11px] text-destructive">{reason}</div>
                           ) : !value.trim() ? (
-                            <div className="text-[11px] text-amber-700 dark:text-amber-400">
+                            <div className="text-[11px] text-ink">
                               No barcode: the till cannot scan it until one is added.
                             </div>
                           ) : null}
@@ -638,7 +638,7 @@ export function AddSizeFlow({
             </ul>
           ) : null}
           {report.warnings.length ? (
-            <ul className="border-b bg-amber-500/5 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">
+            <ul className="border-b border-line bg-paper px-4 py-2 text-meta normal-case tracking-normal text-ink">
               {report.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}

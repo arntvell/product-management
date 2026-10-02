@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { dirtyCell } from "@/components/ui/grid";
 
 interface TagsCellProps {
   tags: string[];
@@ -55,7 +56,7 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
         <div
           className={cn(
             "h-full w-full px-2 flex items-center gap-1 cursor-pointer overflow-hidden",
-            isDirty && "bg-yellow-50"
+            isDirty && dirtyCell
           )}
         >
           {tags.length === 0 ? (

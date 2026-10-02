@@ -27,7 +27,7 @@ export interface CandidateView {
 function Pio({ qty }: { qty: number | null }) {
   if (qty === null) return <span className="text-muted-foreground">not in Pio</span>;
   if (qty === 0) return <span className="text-muted-foreground">Pio 0</span>;
-  return <span className="font-medium text-emerald-600 dark:text-emerald-400">Pio {qty}</span>;
+  return <span className="font-medium text-muted-foreground">Pio {qty}</span>;
 }
 
 function Side({
@@ -119,7 +119,7 @@ export function DuplicateRow({ candidate: c }: { candidate: CandidateView }) {
       </div>
 
       {pioContradicts ? (
-        <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs">
+        <p className="mt-3 border border-ink bg-paper p-2 text-meta normal-case tracking-normal">
           The warehouse holds stock under the SKU this would absorb, and none
           under the one it would keep. Check before merging — the barcodes and
           the bins disagree.

@@ -26,6 +26,7 @@ import { ModelPicker } from "@/components/pickers/model-picker";
 import { PricesTable } from "@/components/prices/prices-table";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { tabItemClass } from "@/components/ui/tab-styles";
 import { downloadProductsCsv } from "@/lib/csv-export";
 import type { DirtyCell, DirtyProductProp, DirtyPrice, MetafieldKey, Product } from "@/types";
 
@@ -403,10 +404,12 @@ export default function ProductsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-56px)]">
-        <div className="text-center space-y-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading products...</p>
+      <div className="flex items-center justify-center h-full">
+        <div className="space-y-3 text-center">
+          <p className="font-display text-section uppercase">Loading products</p>
+          <p className="text-body text-muted-foreground">
+            Reading them from the live Shopify store.
+          </p>
         </div>
       </div>
     );
@@ -414,10 +417,12 @@ export default function ProductsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-[calc(100vh-56px)]">
-        <div className="text-center space-y-3">
-          <p className="text-sm text-destructive">Failed to load products</p>
-          <p className="text-xs text-muted-foreground">
+      <div className="flex items-center justify-center h-full">
+        <div className="space-y-3 text-center">
+          <p className="font-display text-section uppercase">
+            Could not load products
+          </p>
+          <p className="text-body text-muted-foreground">
             {error instanceof Error ? error.message : "Unknown error"}
           </p>
           <Button variant="outline" size="sm" onClick={() => refetch()}>
@@ -429,17 +434,14 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className="flex flex-col h-full">
       {/* Tab bar */}
-      <div className="flex border-b px-4 shrink-0 bg-background">
+      <div className="flex shrink-0 gap-6 border-b border-line bg-ecru px-8">
         {(["metafields", "prices"] as const).map((tab) => (
           <button
             key={tab}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 -mb-px capitalize transition-colors",
-              activeTab === tab
-                ? "border-foreground text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+              tabItemClass(activeTab === tab)
             )}
             onClick={() => setActiveTab(tab)}
           >

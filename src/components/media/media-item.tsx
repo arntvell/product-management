@@ -41,7 +41,7 @@ export function MediaItemCard({
       className={cn(
         "relative group border rounded-lg overflow-hidden bg-muted/30",
         isDragging && "opacity-50 z-50",
-        isSelected && "ring-2 ring-blue-500"
+        isSelected && "outline outline-2 -outline-offset-2 outline-ink"
       )}
     >
       <div

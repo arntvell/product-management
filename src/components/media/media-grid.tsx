@@ -80,7 +80,7 @@ export function MediaGrid({
   return (
     <div className="space-y-3">
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 p-2 bg-blue-50 rounded-lg">
+        <div className="flex items-center gap-3 bg-selected p-2">
           <span className="text-sm">
             {selectedIds.size} selected
           </span>

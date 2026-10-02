@@ -219,7 +219,7 @@ export function ChannelsPanel({
               </span>
             </div>
             {pushResult && (
-              <p className="mt-2 text-xs text-green-700 dark:text-green-500">
+              <p className="mt-2 text-xs text-muted-foreground">
                 ✓ {pushResult.action} · {pushResult.variants} variants ·{" "}
                 {pushResult.metafields} metafields ·{" "}
                 <a href={pushResult.adminUrl} target="_blank" rel="noreferrer" className="underline">
@@ -248,7 +248,7 @@ export function ChannelsPanel({
               {preview.externalId ? ` (${preview.externalId})` : ""}
             </div>
             {preview.warnings.length > 0 && (
-              <ul className="list-disc pl-4 text-amber-600 dark:text-amber-500">
+              <ul className="list-disc pl-4 text-ink">
                 {preview.warnings.map((w, i) => (
                   <li key={i}>{w}</li>
                 ))}

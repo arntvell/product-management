@@ -260,7 +260,7 @@ function CategoryField({ payload, update, options }: StepProps) {
       )}
       {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
       {!chosen && payload.template.category ? (
-        <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
+        <p className="mt-1 text-xs text-ink">
           &ldquo;{payload.template.category}&rdquo; is not a modelled category — pick one so
           Shopify and Loom get the mapped spelling rather than a guess.
         </p>

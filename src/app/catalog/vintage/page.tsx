@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { VintageDropSheet } from "@/components/catalog/vintage-drop-sheet";
+import { PageHeader, Page } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,16 +69,10 @@ export default async function VintageDropPage() {
   ]);
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      <div className="mb-6">
-        <Link
-          href="/catalog"
-          className="text-xs text-muted-foreground underline underline-offset-4"
-        >
-          ← Catalog
-        </Link>
-        <h1 className="mt-1 text-2xl font-semibold">Vintage drop</h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+    <>
+      <PageHeader eyebrow="Catalogue" title="Vintage drop" />
+      <Page>
+        <p className="max-w-3xl text-body text-muted-foreground">
           Pick the drop and how many garments are in it. Item numbers, SKUs, handles and
           barcodes follow from that — none is typed, and the barcodes are the ones already
           assigned to those numbers, so they match the printed labels. Write the garments up,
@@ -87,13 +81,13 @@ export default async function VintageDropPage() {
           store product a garment came out of fills its price and cost from what that
           category sells at — both as defaults, since about a third get priced up.
         </p>
-      </div>
 
-      <VintageDropSheet
+        <VintageDropSheet
         brands={brands}
         categories={categories}
         sourceProducts={sourceProducts}
-      />
-    </main>
+        />
+      </Page>
+    </>
   );
 }
