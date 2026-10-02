@@ -289,11 +289,30 @@ less the top bar, and one of them had been overflowing its own scroll container.
   publishing table uses for a channel. The outstanding-work box takes the ink
   outline, and a garment that still needs something is legible by its border.
 
+### Products and its component family (done)
+
+The legacy Shopify screen and the eleven components around it — cells, inline
+editors, side panel, find-and-replace, bulk toolbar and dialog, prices.
+
+- **`dirtyCell` in `ui/grid.ts` is now the one definition of an unsaved edit.**
+  Seven files marked it two ways, amber in the bulk editor and yellow here.
+  It is an ink rule, not a fill, for the reason given at its definition.
+- Product status is the same filled / open / dashed glyph the master uses, so a
+  product's state reads the same on either side of Origo.
+- The blue selection bar is the inverted ink bar of §6; the unsaved banner
+  takes the `selected` ground, being the same fact as the cells it counts.
+- Find-and-replace showed before in red and after in green; it is a strike
+  through muted ink and the replacement in full ink, which survives printing
+  and does not ask anyone to tell red from green to know which way round it is.
+- The loading state lost its spinner (§9) and now says it is reading from the
+  live Shopify store, which on that screen is worth repeating.
+
 ### Remaining screens
 
 Everything else, highest-traffic first, same approach. **Off-palette colour
-count: 340 at the start, 256 now** — the six screens done so far are at zero,
-and what remains is concentrated in screens not yet touched.
+count: 340 at the start, 224 now.** Products, bulk, prices and the seven
+screens done so far are at zero; what remains is in the data-repair tools,
+`/catalog`, Media, Groups, Models and the product wizard.
 
 ### Phase 6 — enforcement
 
