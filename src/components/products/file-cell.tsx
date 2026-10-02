@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { dirtyCell } from "@/components/ui/grid";
 
 interface FileCellProps {
   value: string;
@@ -13,7 +14,7 @@ export function FileCell({ value, isDirty, onClick }: FileCellProps) {
     <div
       className={cn(
         "px-2 py-1.5 min-h-[32px] cursor-pointer text-sm flex items-center",
-        isDirty && "bg-yellow-50"
+        isDirty && dirtyCell
       )}
       onClick={onClick}
     >

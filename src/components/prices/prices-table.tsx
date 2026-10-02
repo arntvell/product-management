@@ -3,7 +3,9 @@
 import { useState, useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
-import { gridHead, gridRow, GRID_ROW_HEIGHT } from "@/components/ui/grid";
+import { gridHead, gridRow, GRID_ROW_HEIGHT,
+  dirtyCell,
+} from "@/components/ui/grid";
 import { Button } from "@/components/ui/button";
 import type { Product, DirtyPrice } from "@/types";
 
@@ -52,7 +54,7 @@ function PriceCell({ value, isDirty, onChange }: PriceCellProps) {
     <div
       className={cn(
         "px-2 h-full flex items-center text-body tabular-nums cursor-pointer select-none hover:bg-hover transition-colors duration-150 ease-origo",
-        isDirty && "bg-yellow-50"
+        isDirty && dirtyCell
       )}
       onClick={() => {
         setDraft(value);
@@ -185,7 +187,7 @@ export function PricesTable({
                 className={cn(
                   gridRow,
                   "flex",
-                  isDirty && "bg-yellow-50/50"
+                  isDirty && dirtyCell
                 )}
               >
                 <div

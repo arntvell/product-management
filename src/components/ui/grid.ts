@@ -20,6 +20,16 @@ export const gridRow =
 /** Selected — and edited, which §7 gives the same ground. */
 export const gridRowSelected = "bg-selected hover:bg-selected";
 
+/**
+ * A cell holding an edit that is not saved yet.
+ *
+ * A rule, not a fill: §7 gives an edited row the `selected` ground, so a fill
+ * would be the same ground a ticked row already has and the edit would vanish
+ * inside its own selection. An outline sits on top of any ground and costs no
+ * layout.
+ */
+export const dirtyCell = "outline outline-1 -outline-offset-1 outline-ink";
+
 /** Numbers are tabular and right-aligned, always. §4 */
 export const gridNumeric = "tabular-nums text-right";
 

@@ -23,11 +23,11 @@ import { COLUMN_DEFINITIONS } from "@/lib/columns";
 import type { ColumnDef } from "@/lib/columns";
 import type { SortKey } from "@/hooks/use-product-search";
 import { parseGidList, serializeGidList, cn } from "@/lib/utils";
-import {
-  gridHead,
+import {  gridHead,
   gridRow,
   gridRowSelected,
   GRID_ROW_HEIGHT,
+  dirtyCell,
 } from "@/components/ui/grid";
 import type {
   DirtyCell,
@@ -113,7 +113,7 @@ function StatusCell({
         <div
           className={cn(
             "h-full w-full px-2 flex items-center cursor-pointer",
-            isDirty && "bg-yellow-50"
+            isDirty && dirtyCell
           )}
         >
           <span className={cn("text-xs px-1.5 py-0.5 rounded", colorClass)}>
@@ -174,7 +174,7 @@ function VendorCell({
         <div
           className={cn(
             "h-full w-full px-2 flex items-center cursor-pointer text-sm text-muted-foreground truncate",
-            isDirty && "bg-yellow-50"
+            isDirty && dirtyCell
           )}
         >
           {vendor}

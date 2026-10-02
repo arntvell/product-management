@@ -1,6 +1,7 @@
 "use client";
 
 import { cn, parseGidList } from "@/lib/utils";
+import { dirtyCell } from "@/components/ui/grid";
 import type { RenderType } from "@/lib/columns";
 import type { ShopifyPage, ShopifyCollection, Model } from "@/types";
 
@@ -71,7 +72,7 @@ export function ReferenceCell({
     <div
       className={cn(
         "px-2 py-1.5 min-h-[32px] cursor-pointer text-sm",
-        isDirty && "bg-yellow-50"
+        isDirty && dirtyCell
       )}
       onClick={onClick}
     >

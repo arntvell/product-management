@@ -11,11 +11,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import {
-  gridHead,
+import {  gridHead,
   gridRow,
   gridRowSelected,
   GRID_ROW_HEIGHT_COMPACT,
+  dirtyCell,
 } from "@/components/ui/grid";
 import {
   CHANNELS,
@@ -1171,9 +1171,7 @@ export function CatalogGrid({
                     style={{ width: FIXED_COLS[0].width }}
                     className={cn(
                       "flex shrink-0 items-center gap-1 border-l px-1",
-                      // An edited cell takes an ink rule rather than a fill:
-                      // a fill is the ground a selected row already has.
-                      dirty.has(dkey(row.id, "BASE", "swatchHex")) && "outline outline-1 -outline-offset-1 outline-ink"
+                      dirty.has(dkey(row.id, "BASE", "swatchHex")) && dirtyCell
                     )}
                   >
                     <span
@@ -1192,7 +1190,7 @@ export function CatalogGrid({
                     style={{ width: FIXED_COLS[1].width }}
                     className={cn(
                       "shrink-0 border-l",
-                      dirty.has(dkey(row.id, "BASE", "priceNok")) && "outline outline-1 -outline-offset-1 outline-ink"
+                      dirty.has(dkey(row.id, "BASE", "priceNok")) && dirtyCell
                     )}
                   >
                     <input
@@ -1224,7 +1222,7 @@ export function CatalogGrid({
                           <div
                             key={c.key}
                             style={{ width: c.width }}
-                            className={cn("shrink-0 border-l", isDirty && "outline outline-1 -outline-offset-1 outline-ink")}
+                            className={cn("shrink-0 border-l", isDirty && dirtyCell)}
                           >
                             <select
                               {...cellHandlers(vi.index, row, c.key, "select")}
@@ -1257,7 +1255,7 @@ export function CatalogGrid({
                             style={{ width: c.width }}
                             className={cn(
                               "flex shrink-0 items-center justify-between gap-1 border-l px-2 text-xs",
-                              isDirty && "outline outline-1 -outline-offset-1 outline-ink"
+                              isDirty && dirtyCell
                             )}
                           >
                             <span className={count ? "" : "text-muted-foreground/50"}>
@@ -1291,7 +1289,7 @@ export function CatalogGrid({
                           style={{ width: c.width }}
                           className={cn(
                             "shrink-0 border-l",
-                            isDirty && "outline outline-1 -outline-offset-1 outline-ink"
+                            isDirty && dirtyCell
                           )}
                         >
                           {c.kind === "status" ? (
