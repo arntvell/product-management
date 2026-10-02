@@ -338,7 +338,7 @@ export function PublishingTable({
 
   return (
     <>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <p className="mt-1 text-body text-muted-foreground">
         {items.length} products · {counts.shopify} → Shopify · {counts.sitoo} → Sitoo ·{" "}
         {counts.loom} → Loom · {counts.both} in both storefront channels (stock
         syncs), {counts.neither} in neither · {counts.shopifyReady} Shopify-ready ·{" "}
@@ -359,7 +359,7 @@ export function PublishingTable({
             key={f}
             onClick={() => setDroppedFilter(f)}
             className={cn(
-              "rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors",
+              "rounded-full border px-3 py-1 text-fine capitalize transition-colors",
               droppedFilter === f
                 ? "border-foreground bg-foreground text-background"
                 : "text-muted-foreground hover:bg-muted"
@@ -373,13 +373,13 @@ export function PublishingTable({
       {preview && (
         <div className="mt-4 border border-line bg-paper p-4 text-body">
           <div className="flex items-baseline justify-between">
-            <h3 className="font-semibold">
+            <h3>
               {preview.pushedDataOnly === undefined ? "Preview" : "Pushed"} — Loom, {preview.season}
             </h3>
             <button
               type="button"
               onClick={() => setPreview(null)}
-              className="text-xs text-muted-foreground underline underline-offset-4"
+              className="text-fine text-muted-foreground underline underline-offset-4"
             >
               dismiss
             </button>
@@ -412,7 +412,7 @@ export function PublishingTable({
           )}
 
           {preview.core > 0 && (
-            <p className="mt-2 text-[13px] text-muted-foreground">
+            <p className="mt-2 text-body text-muted-foreground">
               <b>{preview.core}</b> of these are marked <b>Core</b> and will be sent as{" "}
               <code>is_core: true</code> for {preview.season}.
             </p>
@@ -428,23 +428,23 @@ export function PublishingTable({
           )}
 
           {preview.missingImage > 0 && (
-            <p className="mt-2 text-[13px] text-muted-foreground">
+            <p className="mt-2 text-body text-muted-foreground">
               ⚠ {preview.missingImage} have no product image — buyers would see them without
               a picture.
             </p>
           )}
           {preview.currencies.length > 0 && (
-            <p className="mt-1 text-[13px] text-muted-foreground">
+            <p className="mt-1 text-body text-muted-foreground">
               Currencies: {preview.currencies.join(", ")}
             </p>
           )}
 
           {preview.skipped.length > 0 && (
             <details className="mt-2">
-              <summary className="cursor-pointer text-[13px] text-muted-foreground">
+              <summary className="cursor-pointer text-body text-muted-foreground">
                 {preview.skipped.length} skipped — why
               </summary>
-              <ul className="mt-1 list-inside list-disc text-[13px] text-muted-foreground">
+              <ul className="mt-1 list-inside list-disc text-body text-muted-foreground">
                 {preview.skipped.slice(0, 30).map((r) => (
                   <li key={r}>{r}</li>
                 ))}
@@ -473,7 +473,7 @@ export function PublishingTable({
 
       {/* Bulk toolbar */}
       <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
-        <span className="px-1 text-xs text-muted-foreground tabular-nums">
+        <span className="px-1 text-fine text-muted-foreground tabular-nums">
           {selected.size} selected
         </span>
         <div className="h-4 w-px bg-border" />
@@ -519,8 +519,8 @@ export function PublishingTable({
           <div className="mx-1 w-px self-stretch bg-border" />
           <label
             className={cn(
-              "flex items-center gap-1.5 text-xs",
-              clearEmptied ? "font-medium text-destructive" : "text-muted-foreground"
+              "flex items-center gap-1.5 text-fine",
+              clearEmptied ? " text-destructive" : "text-muted-foreground"
             )}
             title="A blank field in the master normally leaves Shopify untouched. Tick this to delete it live instead."
           >
@@ -546,9 +546,9 @@ export function PublishingTable({
       </div>
 
       {report && (
-        <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs">
+        <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-fine">
           <div className="flex items-center justify-between">
-            <span className="font-medium">
+            <span>
               {report.channel} push: {report.ok}/{report.total} pushed
               {report.issues.length ? ` · ${report.issues.length} issue(s)` : " · no issues"}
             </span>
@@ -570,9 +570,9 @@ export function PublishingTable({
       )}
 
       <div className="mt-4 overflow-hidden rounded-lg border">
-        <table className="w-full text-sm">
+        <table className="w-full text-body">
           <thead>
-            <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">
               <th className="w-10 p-3">
                 <input type="checkbox" checked={allSelected} onChange={selectAll} />
               </th>
@@ -600,7 +600,7 @@ export function PublishingTable({
                     </div>
                   </td>
                   <td className="p-3">
-                    <a href={`/catalog/colorways/${r.id}`} className="font-medium hover:underline">
+                    <a href={`/catalog/colorways/${r.id}`} className="hover:underline">
                       {r.dropped && (
                         <Badge
                           variant="outline"
@@ -612,7 +612,7 @@ export function PublishingTable({
                       )}
                       {r.name}
                     </a>
-                    <div className="text-xs text-muted-foreground">{r.styleName}</div>
+                    <div className="text-fine text-muted-foreground">{r.styleName}</div>
                   </td>
                   <ChannelCell state={r.shopify} busy={busy} onToggle={() => toggleOne(r, "SHOPIFY")} />
                   <ChannelCell state={r.sitoo} busy={busy} onToggle={() => toggleOne(r, "SITOO")} />

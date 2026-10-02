@@ -13,11 +13,11 @@ export function StepSizes({ payload, update, options }: StepProps) {
   const systems = options.sizeSystems.filter((s) => !s.archived);
 
   if (!payload.colorways.length)
-    return <p className="text-sm text-muted-foreground">Add a colourway first.</p>;
+    return <p className="text-body text-muted-foreground">Add a colourway first.</p>;
 
   if (!systems.length)
     return (
-      <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+      <p className="rounded-md border border-dashed p-6 text-center text-body text-muted-foreground">
         No size systems yet.{" "}
         <Link href="/catalog/size-systems" className="underline underline-offset-2">
           Create one
@@ -123,13 +123,13 @@ export function StepSizes({ payload, update, options }: StepProps) {
           <div key={cw.key} className="rounded-md border p-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <div className="text-sm font-medium">{cw.name || "Unnamed colourway"}</div>
-                <code className="text-xs text-muted-foreground">{cw.colorwaySku}</code>
+                <div className="text-body">{cw.name || "Unnamed colourway"}</div>
+                <code className="text-fine text-muted-foreground">{cw.colorwaySku}</code>
               </div>
               <div>
-                <Label className="text-xs">Size system</Label>
+                <Label className="text-fine">Size system</Label>
                 <select
-                  className="mt-1.5 h-9 rounded-md border bg-transparent px-3 text-sm"
+                  className="mt-1.5 h-9 rounded-md border bg-transparent px-3 text-body"
                   value={systemId}
                   onChange={(e) => setSystem(cw.key, e.target.value)}
                 >
@@ -145,7 +145,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
 
             {system ? (
               <div className="mt-3">
-                <div className="mb-2 flex items-center gap-3 text-xs">
+                <div className="mb-2 flex items-center gap-3 text-fine">
                   <button
                     type="button"
                     className="underline underline-offset-2"
@@ -174,7 +174,7 @@ export function StepSizes({ payload, update, options }: StepProps) {
                         onClick={() => toggle(cw.key, system, e.id)}
                         title={buildVariantSku(cw.colorwaySku, e.skuToken)}
                         className={
-                          "rounded border px-2.5 py-1 text-xs transition-colors " +
+                          "rounded border px-2.5 py-1 text-fine transition-colors " +
                           (on
                             ? "border-foreground bg-foreground text-background"
                             : "hover:bg-muted")

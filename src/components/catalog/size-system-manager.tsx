@@ -49,7 +49,7 @@ export function SizeSystemManager({ initial }: { initial: SizeSystemView[] }) {
       ) : null}
 
       {live.length === 0 && !creating ? (
-        <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-md border border-dashed p-6 text-center text-body text-muted-foreground">
           No size systems yet. The builder needs at least one before it can create variants.
         </p>
       ) : null}
@@ -75,12 +75,12 @@ export function SizeSystemManager({ initial }: { initial: SizeSystemView[] }) {
 
       {archived.length ? (
         <details className="rounded-md border p-4">
-          <summary className="cursor-pointer text-sm font-medium">
+          <summary className="cursor-pointer text-body">
             {archived.length} archived
           </summary>
           <div className="mt-3 space-y-2">
             {archived.map((s) => (
-              <div key={s.id} className="flex items-center justify-between text-sm">
+              <div key={s.id} className="flex items-center justify-between text-body">
                 <span className="text-muted-foreground">
                   {s.name} · {s.entries.filter((e) => !e.archived).length} sizes
                 </span>
@@ -133,16 +133,16 @@ function SystemRow({
       >
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium">{system.name}</span>
-            <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+            <span>{system.name}</span>
+            <span className="rounded-full border px-2 py-0.5 text-fine text-muted-foreground">
               {KIND_LABELS[system.kind as Kind]}
             </span>
           </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
+          <p className="mt-1 truncate text-fine text-muted-foreground">
             {activeEntries.map((e) => e.sizeLabel).join(" · ") || "no sizes"}
           </p>
         </div>
-        <div className="shrink-0 pl-4 text-right text-xs text-muted-foreground">
+        <div className="shrink-0 pl-4 text-right text-fine text-muted-foreground">
           <div>{activeEntries.length} sizes</div>
           {system.brands.length ? <div>{system.brands.length} brands</div> : null}
         </div>
@@ -151,18 +151,18 @@ function SystemRow({
       {open ? (
         <div className="space-y-4 border-t px-4 py-4">
           {system.brands.length ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-fine text-muted-foreground">
               Default for {system.brands.map((b) => b.name).join(", ")}.
             </p>
           ) : null}
 
           <div>
-            <Label className="text-xs">Sizes, in order</Label>
+            <Label className="text-fine">Sizes, in order</Label>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {activeEntries.map((e) => (
                 <span
                   key={e.id}
-                  className="rounded border px-2 py-1 text-xs"
+                  className="rounded border px-2 py-1 text-fine"
                   title={`SKU token: ${e.skuToken}`}
                 >
                   {e.sizeLabel}
@@ -170,14 +170,14 @@ function SystemRow({
                 </span>
               ))}
             </div>
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-fine text-muted-foreground">
               The grey value is what a variant SKU ends with. Waist/length folds to four
               digits so the Threadflow and Cin7 importers can read it back.
             </p>
           </div>
 
           {retired.length ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-fine text-muted-foreground">
               Retired: {retired.map((e) => e.sizeLabel).join(", ")}. Variants already using
               these keep them — a size is archived, never deleted.
             </p>
@@ -238,7 +238,7 @@ function AddSizes({ system, onSaved }: { system: SizeSystemView; onSaved: () => 
 
   return (
     <div>
-      <Label htmlFor={`add-${system.id}`} className="text-xs">
+      <Label htmlFor={`add-${system.id}`} className="text-fine">
         Add sizes
       </Label>
       <div className="mt-1.5 flex gap-2">
@@ -288,7 +288,7 @@ function CreateForm({ onDone }: { onDone: () => void }) {
     <div className="space-y-3 rounded-md border p-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <Label htmlFor="ss-name" className="text-xs">
+          <Label htmlFor="ss-name" className="text-fine">
             Name
           </Label>
           <Input
@@ -300,12 +300,12 @@ function CreateForm({ onDone }: { onDone: () => void }) {
           />
         </div>
         <div>
-          <Label htmlFor="ss-kind" className="text-xs">
+          <Label htmlFor="ss-kind" className="text-fine">
             Kind
           </Label>
           <select
             id="ss-kind"
-            className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+            className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
             value={kind}
             onChange={(e) => setKind(e.target.value as Kind)}
           >
@@ -319,10 +319,10 @@ function CreateForm({ onDone }: { onDone: () => void }) {
       </div>
 
       {kind === "ONE_SIZE" ? (
-        <p className="text-xs text-muted-foreground">{KIND_HINTS.ONE_SIZE}</p>
+        <p className="text-fine text-muted-foreground">{KIND_HINTS.ONE_SIZE}</p>
       ) : (
         <div>
-          <Label htmlFor="ss-range" className="text-xs">
+          <Label htmlFor="ss-range" className="text-fine">
             Sizes
           </Label>
           <Input
@@ -332,7 +332,7 @@ function CreateForm({ onDone }: { onDone: () => void }) {
             onChange={(e) => setRange(e.target.value)}
             placeholder={KIND_HINTS[kind]}
           />
-          <p className="mt-1.5 text-xs text-muted-foreground">
+          <p className="mt-1.5 text-fine text-muted-foreground">
             Ranges expand: <code>39-46</code> gives eight sizes. Commas list them literally.
           </p>
         </div>

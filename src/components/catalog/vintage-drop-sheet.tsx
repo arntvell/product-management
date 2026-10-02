@@ -109,8 +109,8 @@ function rowProblems(r: Row): string[] {
 }
 
 const INPUT =
-  "w-full rounded border bg-background px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-ring";
-const MONO = "font-mono text-[11px] text-muted-foreground";
+  "w-full rounded border bg-background px-2 py-1 text-body outline-none focus:ring-1 focus:ring-ring";
+const MONO = "font-mono text-fine text-muted-foreground";
 
 const STORAGE_KEY = "vintage-drop-sheet";
 
@@ -545,8 +545,8 @@ export function VintageDropSheet({
     <div className="space-y-6">
       {/* --- Start a drop ------------------------------------------------ */}
       <div className="flex flex-wrap items-end gap-4 rounded-lg border p-4">
-        <label className="text-sm">
-          <span className="mb-1 block font-medium">Drop</span>
+        <label className="text-body">
+          <span className="mb-1 block">Drop</span>
           <input
             className={cn(INPUT, "w-32")}
             placeholder="DROP 187"
@@ -554,8 +554,8 @@ export function VintageDropSheet({
             onChange={(e) => setDrop(e.target.value)}
           />
         </label>
-        <label className="text-sm">
-          <span className="mb-1 block font-medium">Garments</span>
+        <label className="text-body">
+          <span className="mb-1 block">Garments</span>
           <input
             className={cn(INPUT, "w-24")}
             inputMode="numeric"
@@ -567,7 +567,7 @@ export function VintageDropSheet({
           type="button"
           onClick={onStart}
           disabled={busy !== null}
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
         >
           {busy === "Start" ? "Reserving…" : rows.length ? "Start over" : "Start drop"}
         </button>
@@ -575,7 +575,7 @@ export function VintageDropSheet({
           type="button"
           onClick={onLoadDrop}
           disabled={busy !== null}
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
           title="Pull back garments already created for this drop, to push or fix them"
         >
           {busy === "Load drop" ? "Loading…" : "Load existing drop"}
@@ -586,11 +586,11 @@ export function VintageDropSheet({
               type="button"
               onClick={onLoadPhotos}
               disabled={busy !== null}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+              className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
             >
               {busy === "Load photos" ? "Reading share…" : "Load photos from share"}
             </button>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               {rows[0].itemNumber}–{rows[rows.length - 1].itemNumber} · {included.length} selected ·{" "}
               {included.length - withoutPhotos.length}/{included.length} photographed
             </p>
@@ -600,19 +600,19 @@ export function VintageDropSheet({
 
       {existing && existing.length > 0 && (
         <div className="rounded-lg border p-4">
-          <p className="mb-3 text-sm font-medium">
+          <p className="mb-3 text-body">
             {existing.length} garment(s) already created in {drop.trim()}
           </p>
           <div className="space-y-1.5">
             {existing.map((g) => (
               <div
                 key={g.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border px-2 py-1.5 text-sm"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border px-2 py-1.5 text-body"
               >
-                <span className="font-mono text-xs">{g.itemNumber}</span>
+                <span className="font-mono text-fine">{g.itemNumber}</span>
                 <span className="min-w-0 flex-1 truncate">{g.name}</span>
                 <span className={MONO}>{g.barcode}</span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-fine text-muted-foreground">
                   {g.photos.length} photo{g.photos.length === 1 ? "" : "s"}
                 </span>
                 <StatusBadge
@@ -632,7 +632,7 @@ export function VintageDropSheet({
                       ? "Live on Shopify — archive it there first"
                       : "Delete so it can be entered again"
                   }
-                  className="rounded border px-2 py-0.5 text-xs transition-colors hover:bg-muted disabled:opacity-40"
+                  className="rounded border px-2 py-0.5 text-fine transition-colors hover:bg-muted disabled:opacity-40"
                 >
                   Delete
                 </button>
@@ -644,15 +644,15 @@ export function VintageDropSheet({
               type="button"
               onClick={onAttachPhotos}
               disabled={busy !== null}
-              className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
+              className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted disabled:opacity-40"
             >
               {busy === "Attach photos" ? "Reading share…" : "Attach photos from share"}
             </button>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-fine text-muted-foreground">
               {existing.filter((g) => g.photos.length).length} of {existing.length} photographed
             </span>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 text-fine text-muted-foreground">
             The buttons at the bottom act on these. An item number stays bound to its barcode, so
             deleting and re-entering the same number gets the same code back.
           </p>
@@ -666,7 +666,7 @@ export function VintageDropSheet({
       )}
 
       {rows.length === 0 && (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           Pick the drop and how many garments are in it. The item numbers, SKUs, handles and
           barcodes are computed from there — none of them is typed, and the barcodes are the ones
           already assigned to those numbers, so they match whatever is on the labels.
@@ -691,16 +691,16 @@ export function VintageDropSheet({
 
       {rows.length > 0 && (
         <details className="rounded-lg border p-3">
-          <summary className="cursor-pointer text-sm font-medium">
+          <summary className="cursor-pointer text-body">
             Paste from the INPUT sheet
           </summary>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-fine text-muted-foreground">
             Copy a block of rows out of Excel and paste it here — the sheet&rsquo;s own columns, in
             its own order, header row optional. Rows are matched on Nummer rather than position, so
             a partial paste still lands on the right garments.
           </p>
           <textarea
-            className={cn(INPUT, "mt-2 min-h-[6rem] font-mono text-xs")}
+            className={cn(INPUT, "mt-2 min-h-[6rem] font-mono text-fine")}
             placeholder="13763&#9;Disneyland Epcot Bomber Jacket&#9;100% cotton…&#9;Jacket&#9;Bomber jacket&#9;499&#9;499&#9;60&#9;72&#9;L…"
             onPaste={(e) => {
               const text = e.clipboardData.getData("text");
@@ -723,14 +723,14 @@ export function VintageDropSheet({
           <button
             type="button"
             onClick={() => selectAll(true)}
-            className="rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted"
+            className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
           >
             Select all
           </button>
           <button
             type="button"
             onClick={() => selectAll(false)}
-            className="rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted"
+            className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
           >
             Select none
           </button>
@@ -738,12 +738,12 @@ export function VintageDropSheet({
             type="button"
             onClick={selectPhotographed}
             disabled={!rows.some((r) => r.photos.length)}
-            className="rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted disabled:opacity-40"
+            className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted disabled:opacity-40"
             title="Keep only the garments the shoot has uploaded"
           >
             Select photographed
           </button>
-          <span className="mr-1 text-xs text-muted-foreground">
+          <span className="mr-1 text-fine text-muted-foreground">
             {included.length} of {rows.length}
           </span>
           <span className="h-4 w-px bg-border" aria-hidden />
@@ -761,7 +761,7 @@ export function VintageDropSheet({
               key={field}
               type="button"
               onClick={() => fillDown(field)}
-              className="rounded-md border px-2.5 py-1 text-xs transition-colors hover:bg-muted"
+              className="rounded-md border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
             >
               Fill {label} down
             </button>
@@ -797,7 +797,7 @@ export function VintageDropSheet({
                       />
                     ))
                   ) : (
-                    <div className="grid size-24 place-items-center rounded border border-dashed text-center text-[11px] leading-tight text-muted-foreground">
+                    <div className="grid size-24 place-items-center rounded border border-dashed text-center text-fine leading-tight text-muted-foreground">
                       waiting for
                       <br />
                       the shoot
@@ -809,18 +809,18 @@ export function VintageDropSheet({
                   {/* Computed identity — read-only, but visible. What is on
                       the label should be legible while describing the item. */}
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <label className="flex items-center gap-1.5 text-sm">
+                    <label className="flex items-center gap-1.5 text-body">
                       <input
                         type="checkbox"
                         checked={r.include}
                         onChange={(e) => set(r.itemNumber, { include: e.target.checked })}
                       />
-                      <span className="font-mono font-medium">{r.itemNumber}</span>
+                      <span className="font-mono">{r.itemNumber}</span>
                     </label>
                     <span className={MONO}>{r.variantSku}</span>
                     <span className={MONO}>{r.barcode}</span>
                     <span className={MONO}>{r.handle}</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-fine text-muted-foreground">
                       type mål {measurementType(r)} · {shape}
                     </span>
                     {probs.length > 0 && (
@@ -905,7 +905,7 @@ export function VintageDropSheet({
                       typing in the right boxes, exactly as in the sheet. */}
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 lg:grid-cols-6">
                     <div className="col-span-2 lg:col-span-2">
-                      <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                      <p className="mb-1 text-fine text-muted-foreground">
                         Mål Overdel (cm)
                       </p>
                       <div className="grid grid-cols-2 gap-2">
@@ -924,7 +924,7 @@ export function VintageDropSheet({
                       </div>
                     </div>
                     <div className="col-span-2 lg:col-span-3">
-                      <p className="mb-1 text-[11px] font-medium text-muted-foreground">
+                      <p className="mb-1 text-fine text-muted-foreground">
                         Mål Jeans/trouser (cm)
                       </p>
                       <div className="grid grid-cols-3 gap-2">
@@ -989,7 +989,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!ready || busy !== null || created !== null || rows.length === 0}
             onClick={onCreate}
-            className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-40"
+            className="rounded-md border bg-foreground px-3 py-1.5 text-body text-background disabled:opacity-40"
           >
             {busy === "Create" ? "Creating…" : `Create ${included.length} in Origio`}
           </button>
@@ -1001,7 +1001,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!created?.length || busy !== null}
             onClick={onPushShopify}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Push to Shopify" ? "Pushing…" : "Push to Shopify"}
           </button>
@@ -1010,7 +1010,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!created?.length || busy !== null}
             onClick={onPushLoom}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Push to Loom" ? "Sending…" : "Push to Loom"}
           </button>
@@ -1019,7 +1019,7 @@ export function VintageDropSheet({
             type="button"
             disabled={!created?.length || busy !== null}
             onClick={onMoveToTop}
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Move to top" ? "Moving…" : "Move to top of collection"}
           </button>
@@ -1029,7 +1029,7 @@ export function VintageDropSheet({
             disabled={!created?.length || busy !== null}
             onClick={onReveal}
             title="Drop the hide tags and publish to every sales channel"
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Reveal" ? "Revealing…" : "Reveal now"}
           </button>
@@ -1038,12 +1038,12 @@ export function VintageDropSheet({
             disabled={busy !== null || !drop.trim()}
             onClick={onSchedule}
             title="Reveal automatically at a set time"
-            className="rounded-md border px-3 py-1.5 text-sm font-medium disabled:opacity-40"
+            className="rounded-md border px-3 py-1.5 text-body disabled:opacity-40"
           >
             {busy === "Schedule" ? "Scheduling…" : "Schedule reveal"}
           </button>
           {created !== null && (
-            <span className="text-sm text-muted-foreground">
+            <span className="text-body text-muted-foreground">
               {created.length} created
               {withoutPhotos.length > 0 && ` · ${withoutPhotos.length} still without a photo`}
             </span>

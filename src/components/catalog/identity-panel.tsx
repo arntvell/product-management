@@ -115,7 +115,7 @@ export function IdentityPanel({
           placeholder="Search SKU or name"
           className="h-8 max-w-xs"
         />
-        <span className="text-xs text-muted-foreground">
+        <span className="text-fine text-muted-foreground">
           showing {filtered.length} of {total}
         </span>
         <div className="ml-auto flex gap-2">
@@ -132,7 +132,7 @@ export function IdentityPanel({
 
       <div className="overflow-x-auto rounded-md border">
         <div className="min-w-[52rem]">
-          <div className="grid grid-cols-[2rem_minmax(14rem,2fr)_5rem_5rem_5rem_5rem_minmax(9rem,1fr)] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="grid grid-cols-[2rem_minmax(14rem,2fr)_5rem_5rem_5rem_5rem_minmax(9rem,1fr)] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
             <div />
             <div>Colorway</div>
             <div className="text-right">Sizes</div>
@@ -144,7 +144,7 @@ export function IdentityPanel({
           {filtered.map((r) => (
             <div
               key={r.colorwayId}
-              className="grid grid-cols-[2rem_minmax(14rem,2fr)_5rem_5rem_5rem_5rem_minmax(9rem,1fr)] items-center gap-3 border-b px-3 py-1.5 text-sm last:border-0"
+              className="grid grid-cols-[2rem_minmax(14rem,2fr)_5rem_5rem_5rem_5rem_minmax(9rem,1fr)] items-center gap-3 border-b px-3 py-1.5 text-body last:border-0"
             >
               <input
                 type="checkbox"
@@ -157,8 +157,8 @@ export function IdentityPanel({
                 }}
               />
               <div className="min-w-0">
-                <code className="block truncate text-xs">{r.colorwaySku}</code>
-                <div className="truncate text-[11px] text-muted-foreground">
+                <code className="block truncate text-fine">{r.colorwaySku}</code>
+                <div className="truncate text-fine text-muted-foreground">
                   {r.brand ? `${r.brand} · ` : ""}
                   {r.name}
                 </div>
@@ -167,7 +167,7 @@ export function IdentityPanel({
               <Frac have={r.withInventoryGid} of={r.variants} />
               <Frac have={r.withSitooId} of={r.variants} />
               <Frac have={r.withBarcode} of={r.variants} />
-              <div className="truncate text-[11px] text-muted-foreground">
+              <div className="truncate text-fine text-muted-foreground">
                 {r.gaps.join(", ") || "—"}
               </div>
             </div>
@@ -183,7 +183,7 @@ function Frac({ have, of }: { have: number; of: number }) {
   return (
     <div
       className={
-        "text-right tabular-nums text-xs " +
+        "text-right tabular-nums text-fine " +
         (complete ? "text-muted-foreground" : "text-ink")
       }
     >
@@ -207,21 +207,21 @@ function Stat({
 }) {
   return (
     <div className="rounded-md border p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-fine text-muted-foreground">{label}</div>
       <div
         className={
-          "text-xl font-semibold tabular-nums " +
+          "text-section tabular-nums " +
           (warn && value ? "text-ink" : "")
         }
       >
         {value.toLocaleString()}
         {of ? (
-          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+          <span className="ml-1.5 text-fine text-muted-foreground">
             {((value / of) * 100).toFixed(0)}%
           </span>
         ) : null}
       </div>
-      {hint ? <div className="text-[11px] text-muted-foreground">{hint}</div> : null}
+      {hint ? <div className="text-fine text-muted-foreground">{hint}</div> : null}
     </div>
   );
 }

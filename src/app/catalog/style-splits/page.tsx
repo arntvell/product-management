@@ -21,7 +21,7 @@ function Pill({
   return (
     <Link
       href={href}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+      className={`rounded-full border px-3 py-1 text-fine transition-colors ${
         active
           ? "border-foreground bg-foreground text-background"
           : "text-muted-foreground hover:bg-muted"
@@ -67,19 +67,19 @@ export default async function StyleSplitsPage({
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Style splits</h1>
-          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          <h1 className="text-page">Style splits</h1>
+          <span className="rounded-full border px-2.5 py-0.5 text-fine text-muted-foreground">
             one garment, several styles
           </span>
         </div>
-        <Link href="/catalog" className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted">
+        <Link href="/catalog" className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted">
           Catalog
         </Link>
       </div>
 
-      <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+      <p className="mt-3 max-w-3xl text-body text-muted-foreground">
         Loom groups colourways by one thing: our{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-xs">Colorway.styleId</code>{" "}
+        <code className="rounded bg-muted px-1 py-0.5 text-fine">Colorway.styleId</code>{" "}
         foreign key. A colourway has no style of its own over there — it belongs
         to whichever style block it arrives in, and every push rewrites the
         grouping from our structure. So a split here is a split there, and
@@ -89,7 +89,7 @@ export default async function StyleSplitsPage({
 
       <StyleSplitPending />
 
-      <ol className="mt-4 max-w-3xl list-decimal space-y-1 rounded-lg border p-4 pl-8 text-sm text-muted-foreground">
+      <ol className="mt-4 max-w-3xl list-decimal space-y-1 rounded-lg border p-4 pl-8 text-body text-muted-foreground">
         <li>
           Work through a row: the ticked colourways are the ones that will move
           under the style marked <strong className="text-foreground">keep</strong>.
@@ -122,8 +122,8 @@ export default async function StyleSplitsPage({
           { label: "styles left empty", value: report.counts.stylesEmptied.toLocaleString("en-GB") },
         ].map((s) => (
           <div key={s.label} className="flex items-baseline gap-1.5">
-            <span className="text-lg font-semibold tabular-nums">{s.value}</span>
-            <span className="text-xs text-muted-foreground">{s.label}</span>
+            <span className="text-section tabular-nums">{s.value}</span>
+            <span className="text-fine text-muted-foreground">{s.label}</span>
           </div>
         ))}
       </div>
@@ -140,7 +140,7 @@ export default async function StyleSplitsPage({
         before running the rest.
       </p>
 
-      <p className="mt-2 rounded-lg border p-3 text-xs text-muted-foreground">
+      <p className="mt-2 rounded-lg border p-3 text-fine text-muted-foreground">
         <strong className="text-foreground">Vintage is excluded deliberately.</strong>{" "}
         {report.vintageSkipped.toLocaleString("en-GB")} styles are one-of-one{" "}
         <code>VN-</code>/<code>EXT-VN-</code> stock, where six second-hand shirts in
@@ -176,15 +176,15 @@ export default async function StyleSplitsPage({
           name="q"
           defaultValue={q ?? ""}
           placeholder="Filter by style name or SKU — Barnes, LIV-W-KR…"
-          className="w-full rounded-md border px-3 py-1.5 text-sm"
+          className="w-full rounded-md border px-3 py-1.5 text-body"
         />
       </form>
 
       <section className="mt-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-body uppercase tracking-wide text-muted-foreground">
           {shown.length} of {report.proposals.length}
         </h2>
-        <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+        <p className="mt-1 max-w-3xl text-fine text-muted-foreground">
           High confidence means the survivor is decided for you: one side is the
           Threadflow row, and the sync writes to it. Medium and low are proposals
           — the leading word is usually the garment, but{" "}
@@ -201,7 +201,7 @@ export default async function StyleSplitsPage({
           ))}
         </div>
         {shown.length > 200 ? (
-          <p className="mt-4 text-xs text-muted-foreground">
+          <p className="mt-4 text-fine text-muted-foreground">
             Showing the first 200. Narrow with the filters above.
           </p>
         ) : null}

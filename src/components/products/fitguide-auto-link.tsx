@@ -153,9 +153,9 @@ export function FitguideAutoLink({
             </DialogDescription>
           </DialogHeader>
           {matches.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4">
+            <p className="text-body text-muted-foreground py-4">
               No matches found. Ensure fitguide page handles follow the pattern{" "}
-              <code className="text-xs bg-muted px-1 py-0.5 rounded">
+              <code className="text-fine bg-muted px-1 py-0.5 rounded">
                 {"{product-name}"}-fitguide
               </code>
               {" "}(e.g. product &quot;nelson-slim-black&quot; matches &quot;nelson-fitguide&quot;)
@@ -167,7 +167,7 @@ export function FitguideAutoLink({
                   {matches.map((m) => (
                     <div
                       key={m.product.id}
-                      className="flex items-center gap-2 text-sm py-1 px-1"
+                      className="flex items-center gap-2 text-body py-1 px-1"
                     >
                       <span className="truncate flex-1 min-w-0">
                         {m.product.title}
@@ -183,7 +183,7 @@ export function FitguideAutoLink({
                   ))}
                 </div>
               </ScrollArea>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-fine text-muted-foreground">
                 {matches.length} match{matches.length !== 1 ? "es" : ""} found
               </p>
             </>

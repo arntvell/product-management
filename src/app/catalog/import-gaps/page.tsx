@@ -21,20 +21,20 @@ export default async function ImportGapsPage() {
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Import gaps</h1>
-          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          <h1 className="text-page">Import gaps</h1>
+          <span className="rounded-full border px-2.5 py-0.5 text-fine text-muted-foreground">
             real product the Cin7 backfill cannot reach
           </span>
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
       </div>
 
-      <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+      <p className="mt-3 max-w-3xl text-body text-muted-foreground">
         The backfill runs through the Cin7 importer, so it can only bring in what
         Cin7 holds. That made sense while Cin7 was the master and does not now
         that it is being retired — a garment selling in the shop and the webshop
@@ -44,7 +44,7 @@ export default async function ImportGapsPage() {
       </p>
 
       {report.error ? (
-        <p className="mt-6 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
+        <p className="mt-6 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-body">
           {report.error}
         </p>
       ) : (
@@ -58,12 +58,12 @@ export default async function ImportGapsPage() {
               { label: "flagged", value: noted.length },
             ].map((s) => (
               <div key={s.label} className="flex items-baseline gap-1.5">
-                <span className="text-lg font-semibold tabular-nums">{s.value}</span>
-                <span className="text-xs text-muted-foreground">{s.label}</span>
+                <span className="text-section tabular-nums">{s.value}</span>
+                <span className="text-fine text-muted-foreground">{s.label}</span>
               </div>
             ))}
             <div className="flex items-baseline gap-1.5">
-              <span className="text-xs text-muted-foreground">
+              <span className="text-fine text-muted-foreground">
                 from <code className="rounded bg-muted px-1">{report.snapshot}</code>
               </span>
             </div>
@@ -79,17 +79,17 @@ export default async function ImportGapsPage() {
           ) : null}
 
           <div className="mt-6 overflow-x-auto rounded-lg border">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-fine">
               <thead className="sticky top-0 border-b bg-muted/60 backdrop-blur">
                 <tr>
-                  <th className="px-3 py-2 font-medium">SKU</th>
-                  <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Brand</th>
-                  <th className="px-3 py-2 font-medium">Barcode</th>
-                  <th className="px-3 py-2 text-right font-medium">Price</th>
-                  <th className="px-3 py-2 text-right font-medium">Pio</th>
-                  <th className="px-3 py-2 font-medium">Exists in</th>
-                  <th className="px-3 py-2 font-medium">Create from</th>
+                  <th className="px-3 py-2">SKU</th>
+                  <th className="px-3 py-2">Name</th>
+                  <th className="px-3 py-2">Brand</th>
+                  <th className="px-3 py-2">Barcode</th>
+                  <th className="px-3 py-2 text-right">Price</th>
+                  <th className="px-3 py-2 text-right">Pio</th>
+                  <th className="px-3 py-2">Exists in</th>
+                  <th className="px-3 py-2">Create from</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,7 +119,7 @@ export default async function ImportGapsPage() {
                         .join(" · ")}
                     </td>
                     <td className="px-3 py-1.5">
-                      <span className="rounded bg-muted px-1.5 py-0.5 font-medium">{r.source}</span>
+                      <span className="rounded bg-muted px-1.5 py-0.5">{r.source}</span>
                     </td>
                   </tr>
                 ))}
@@ -127,7 +127,7 @@ export default async function ImportGapsPage() {
             </table>
           </div>
 
-          <p className="mt-4 text-xs text-muted-foreground">
+          <p className="mt-4 text-fine text-muted-foreground">
             Sitoo is preferred as the source where both hold a product: it is the
             system where a wrong value fails physically, at a till, so its data
             has been exercised in a way Shopify&rsquo;s has not.

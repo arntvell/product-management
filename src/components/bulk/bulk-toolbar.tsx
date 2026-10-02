@@ -92,8 +92,8 @@ export function BulkToolbar({
         </PopoverTrigger>
         <PopoverContent align="start" className="w-64 p-3 space-y-2">
           <div>
-            <p className="text-sm font-medium">Add a tag</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-body">Add a tag</p>
+            <p className="text-fine text-muted-foreground">
               Added to all {selectedCount} selected — existing tags are kept.
             </p>
           </div>
@@ -109,7 +109,7 @@ export function BulkToolbar({
                 }
               }}
               placeholder="Tag name..."
-              className="h-7 text-xs"
+              className="h-7 text-fine"
             />
             <Button
               size="sm"
@@ -121,7 +121,7 @@ export function BulkToolbar({
             </Button>
           </div>
           {tagSuggestions.length > 0 && (
-            <div className="border rounded text-xs divide-y max-h-32 overflow-auto">
+            <div className="border rounded text-fine divide-y max-h-32 overflow-auto">
               {tagSuggestions.map((s) => (
                 <button
                   key={s}
@@ -144,8 +144,8 @@ export function BulkToolbar({
         </PopoverTrigger>
         <PopoverContent align="start" className="w-56 p-0">
           <div className="px-3 py-2 border-b">
-            <p className="text-sm font-medium">Copy which fields?</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-body">Copy which fields?</p>
+            <p className="text-fine text-muted-foreground">
               From first selected product to the rest
             </p>
           </div>
@@ -153,7 +153,7 @@ export function BulkToolbar({
             {columns.map((col) => (
               <label
                 key={col.key}
-                className="flex items-center gap-2 px-1 py-1 text-sm hover:bg-muted/50 rounded cursor-pointer"
+                className="flex items-center gap-2 px-1 py-1 text-body hover:bg-muted/50 rounded cursor-pointer"
               >
                 <Checkbox
                   checked={selectedFields.has(col.key)}
@@ -167,7 +167,7 @@ export function BulkToolbar({
             <Button
               size="sm"
               variant="ghost"
-              className="text-xs"
+              className="text-fine"
               onClick={handleSelectAll}
             >
               Select All

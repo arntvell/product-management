@@ -61,8 +61,8 @@ export function ReferencesPanel({
   return (
     <div className="mx-auto mt-6 max-w-3xl px-6">
       <section className="rounded-lg border p-5">
-        <h2 className="text-sm font-semibold">References</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <h2 className="text-body">References</h2>
+        <p className="mt-1 text-fine text-muted-foreground">
           Care / fit guide / collection / model point at Shopify resources.
           Product links point at other master products (resolved to Shopify
           products on push).
@@ -121,7 +121,7 @@ function SingleRef({
       <select
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
-        className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+        className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
       >
         <option value="">—</option>
         {options.map((o) => (
@@ -164,7 +164,7 @@ function ProductMulti({
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selected.map((id) => (
-            <span key={id} className="flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-xs">
+            <span key={id} className="flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-fine">
               {labelById.get(id) ?? id}
               <button
                 onClick={() => onChange(selected.filter((x) => x !== id))}
@@ -193,7 +193,7 @@ function ProductMulti({
                   onChange([...selected, o.id]);
                   setQ("");
                 }}
-                className="block w-full truncate px-3 py-1.5 text-left text-xs hover:bg-muted"
+                className="block w-full truncate px-3 py-1.5 text-left text-fine hover:bg-muted"
               >
                 {o.label}
               </button>

@@ -93,14 +93,14 @@ function sideLabel(s: ColorwaySide | null): string {
 function SkippedTable({ items }: { items: SkippedItem[] }) {
   return (
     <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[52rem] border-collapse text-xs">
+      <table className="w-full min-w-[52rem] border-collapse text-fine">
         <thead>
           <tr className="border-b text-left text-muted-foreground">
-            <th className="py-1 pr-3 font-medium">Season · style</th>
-            <th className="py-1 pr-3 font-medium">Wanted SKU</th>
-            <th className="py-1 pr-3 font-medium">Our row</th>
-            <th className="py-1 pr-3 font-medium">Held by</th>
-            <th className="py-1 font-medium">What to do</th>
+            <th className="py-1 pr-3">Season · style</th>
+            <th className="py-1 pr-3">Wanted SKU</th>
+            <th className="py-1 pr-3">Our row</th>
+            <th className="py-1 pr-3">Held by</th>
+            <th className="py-1">What to do</th>
           </tr>
         </thead>
         <tbody>
@@ -143,7 +143,7 @@ function NoteList({
   return (
     <div className="mt-2">
       <ul
-        className={`list-disc space-y-0.5 pl-4 text-xs ${
+        className={`list-disc space-y-0.5 pl-4 text-fine ${
           tone === "error" ? "text-destructive" : "text-muted-foreground"
         }`}
       >
@@ -155,7 +155,7 @@ function NoteList({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 text-xs underline text-muted-foreground"
+          className="mt-1 text-fine underline text-muted-foreground"
         >
           {expanded ? "Show fewer" : `Show all ${items.length}`}
         </button>
@@ -217,8 +217,8 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
 
   return (
     <div className="rounded-lg border p-5">
-      <h2 className="text-sm font-semibold">Sync from Threadflow</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <h2 className="text-body">Sync from Threadflow</h2>
+      <p className="mt-1 text-body text-muted-foreground">
         Pull a season&apos;s Livid catalogue (including not-yet-approved and
         dropped colorways) into the master. Safe to re-run — matches on stable
         ids, keeps barcodes, never deletes. A product whose SKU collides with
@@ -252,24 +252,24 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
       </div>
 
       {running && (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-3 text-fine text-muted-foreground">
           Walking the season — this can take a minute or two from a local
           machine (the database is remote). You can leave this open.
         </p>
       )}
 
-      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+      {error && <p className="mt-3 text-body text-destructive">{error}</p>}
 
       {result && (
-        <div className="mt-4 rounded-md border bg-muted/30 p-3 text-sm">
-          <p className="font-medium">
+        <div className="mt-4 rounded-md border bg-muted/30 p-3 text-body">
+          <p>
             {statusLabel(result)}
-            <span className="ml-2 font-normal text-muted-foreground">
+            <span className="ml-2 text-muted-foreground">
               {result.seasonCode} · {(result.durationMs / 1000).toFixed(1)}s
             </span>
           </p>
 
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-fine text-muted-foreground tabular-nums">
             {Object.entries(result.counts ?? result.planned ?? {}).map(([k, v]) => (
               <span key={k}>
                 {v} {k.replace(/([A-Z])/g, " $1").toLowerCase()}
@@ -279,7 +279,7 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
 
           {result.errors && result.errors.length > 0 && (
             <>
-              <p className="mt-3 text-xs font-medium text-destructive">
+              <p className="mt-3 text-fine text-destructive">
                 Errors ({result.errors.length})
               </p>
               <NoteList items={result.errors} tone="error" />
@@ -288,7 +288,7 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
 
           {result.skipped.length > 0 && (
             <>
-              <p className="mt-3 text-xs font-medium">
+              <p className="mt-3 text-fine">
                 Skipped ({result.skipped.length}) — everything else was synced
               </p>
               <SkippedTable items={result.skipped} />
@@ -297,7 +297,7 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
 
           {result.warnings.length > 0 && (
             <>
-              <p className="mt-3 text-xs font-medium text-muted-foreground">
+              <p className="mt-3 text-fine text-muted-foreground">
                 Notes ({result.warnings.length})
               </p>
               <NoteList items={result.warnings} tone="warning" />
@@ -308,10 +308,10 @@ export function SyncPanel({ defaultSeason = "SS27" }: { defaultSeason?: string }
 
       {runs && runs.length > 0 && (
         <div className="mt-5">
-          <h3 className="text-xs font-semibold text-muted-foreground">
+          <h3 className="text-fine text-muted-foreground">
             Recent runs
           </h3>
-          <ul className="mt-2 divide-y text-xs">
+          <ul className="mt-2 divide-y text-fine">
             {runs.map((r) => {
               const notes = r.warnings ?? r.errors ?? [];
               const skips = r.skipped ?? [];

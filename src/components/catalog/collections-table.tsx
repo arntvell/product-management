@@ -212,7 +212,7 @@ export function CollectionsTable({
   }
 
   const selectCls =
-    "h-8 rounded-md border bg-background px-2 text-xs text-foreground shadow-sm";
+    "h-8 rounded-md border bg-background px-2 text-fine text-foreground shadow-sm";
 
   return (
     <div className="mt-4 flex min-h-0 flex-1 flex-col">
@@ -222,7 +222,7 @@ export function CollectionsTable({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search name, style, SKU, vendor…"
-          className="h-8 w-72 text-xs"
+          className="h-8 w-72 text-fine"
         />
         <select className={selectCls} value={vendor} onChange={(e) => setVendor(e.target.value)}>
           <option value="">All vendors</option>
@@ -258,7 +258,7 @@ export function CollectionsTable({
           <option value="sale">On sale</option>
         </select>
 
-        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+        <span className="ml-auto text-fine text-muted-foreground tabular-nums">
           {rows.length} of {filteredCount} · {bucketLabel}
         </span>
       </div>
@@ -291,13 +291,13 @@ export function CollectionsTable({
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
-          <Button size="sm" className="h-8 text-xs" disabled={busy} onClick={() => openPreview(false)}>
+          <Button size="sm" className="h-8 text-fine" disabled={busy} onClick={() => openPreview(false)}>
             Carry into {season}…
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="h-8 text-xs"
+            className="h-8 text-fine"
             disabled={busy}
             onClick={() => openPreview(true)}
           >
@@ -305,7 +305,7 @@ export function CollectionsTable({
           </Button>
           <button
             type="button"
-            className="text-xs text-muted-foreground underline underline-offset-4"
+            className="text-fine text-muted-foreground underline underline-offset-4"
             onClick={() => setSelected(new Set())}
           >
             Clear
@@ -315,7 +315,7 @@ export function CollectionsTable({
 
       {/* Table */}
       <div ref={scrollRef} className="mt-3 min-h-0 flex-1 overflow-auto border border-line bg-paper">
-        <table className="w-full text-sm">
+        <table className="w-full text-body">
           <thead className={gridHead}>
             <tr className="text-left">
               <th className="w-10 p-3">
@@ -372,12 +372,12 @@ export function CollectionsTable({
                     </div>
                   </td>
                   <td className="p-3">
-                    <Link href={`/catalog/colorways/${m.id}`} className="font-medium hover:underline">
+                    <Link href={`/catalog/colorways/${m.id}`} className="hover:underline">
                       {m.name}
                     </Link>
-                    <div className="text-xs text-muted-foreground">{m.styleName}</div>
+                    <div className="text-fine text-muted-foreground">{m.styleName}</div>
                   </td>
-                  <td className="p-3 font-mono text-xs text-muted-foreground">{m.colorwaySku}</td>
+                  <td className="p-3 font-mono text-fine text-muted-foreground">{m.colorwaySku}</td>
                   <td className="p-3 text-muted-foreground">{m.vendor ?? "—"}</td>
                   <td className="p-3 text-muted-foreground">{m.productType ?? "—"}</td>
                   <td className="p-3">
@@ -430,7 +430,7 @@ export function CollectionsTable({
             )}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-sm text-muted-foreground">
+                <td colSpan={7} className="p-8 text-center text-body text-muted-foreground">
                   Nothing matches these filters.
                 </td>
               </tr>
@@ -449,7 +449,7 @@ export function CollectionsTable({
                 : `Carry ${selected.size} product(s) into ${season}?`}
             </DialogTitle>
             <DialogDescription asChild>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 text-body">
                 {pendingRemove ? (
                   <p>
                     They leave {season} entirely — the season entry is deleted, so they fall out
@@ -482,14 +482,14 @@ export function CollectionsTable({
                           </>
                         )}
                         {preview.unpricedSample.length > 0 && (
-                          <div className="mt-1 font-mono text-[11px] opacity-80">
+                          <div className="mt-1 font-mono text-fine opacity-80">
                             {preview.unpricedSample.map((u) => u.colorwaySku).join(", ")}
                             {preview.wouldLackPrice > preview.unpricedSample.length && " …"}
                           </div>
                         )}
                       </div>
                     )}
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-fine text-muted-foreground">
                       Prices are not copied — carry-overs are repriced per season.
                     </p>
                   </>

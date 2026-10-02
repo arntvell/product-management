@@ -62,7 +62,7 @@ export function BrandSettingsForm({
         >
           <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
             <div>
-              <Label htmlFor="token" className="text-xs">
+              <Label htmlFor="token" className="text-fine">
                 Token
               </Label>
               <Input
@@ -74,7 +74,7 @@ export function BrandSettingsForm({
                 placeholder={initial.derivedToken ?? ""}
               />
             </div>
-            <div className="text-xs text-muted-foreground sm:pt-6">
+            <div className="text-fine text-muted-foreground sm:pt-6">
               <div>
                 A new style would be{" "}
                 <code className="rounded bg-muted px-1 py-0.5 font-mono">{example}</code>
@@ -106,7 +106,7 @@ export function BrandSettingsForm({
           <Field label="Category" value={t.category} onChange={(v) => set("category", v)} />
           <Field label="Gender" value={t.gender} onChange={(v) => set("gender", v)} />
           <div className="flex items-end pb-2">
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
                 checked={t.unisex}
@@ -116,12 +116,12 @@ export function BrandSettingsForm({
             </label>
           </div>
           <div>
-            <Label htmlFor="sizes" className="text-xs">
+            <Label htmlFor="sizes" className="text-fine">
               Default size system
             </Label>
             <select
               id="sizes"
-              className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
               value={t.defaultSizeSystemId}
               onChange={(e) => set("defaultSizeSystemId", e.target.value)}
             >
@@ -160,7 +160,7 @@ export function BrandSettingsForm({
             onChange={(v) => set("fiberComposition", v)}
           />
           <div className="sm:col-span-2">
-            <Label htmlFor="customs" className="text-xs">
+            <Label htmlFor="customs" className="text-fine">
               Customs description
             </Label>
             <Textarea
@@ -172,12 +172,12 @@ export function BrandSettingsForm({
             />
           </div>
           <div className="sm:col-span-2">
-            <Label htmlFor="manu" className="text-xs">
+            <Label htmlFor="manu" className="text-fine">
               Manufacturer
             </Label>
             <select
               id="manu"
-              className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-body"
               value={t.manufacturerId}
               onChange={(e) => set("manufacturerId", e.target.value)}
             >
@@ -195,7 +195,7 @@ export function BrandSettingsForm({
       <Section title="Channels" hint="Preselected when creating a product for this brand.">
         <div className="flex flex-wrap gap-4">
           {PUBLISH_CHANNELS.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm">
+            <label key={c} className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
                 checked={t.channels.includes(c)}
@@ -234,8 +234,8 @@ function Section({
 }) {
   return (
     <section className="rounded-md border p-5">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+      <h2 className="text-body">{title}</h2>
+      {hint ? <p className="mt-1 text-fine text-muted-foreground">{hint}</p> : null}
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -257,7 +257,7 @@ function Field({
   const id = label.toLowerCase().replace(/\W+/g, "-");
   return (
     <div>
-      <Label htmlFor={id} className="text-xs">
+      <Label htmlFor={id} className="text-fine">
         {label}
       </Label>
       <Input
@@ -267,7 +267,7 @@ function Field({
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
       />
-      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-fine text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

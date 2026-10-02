@@ -15,7 +15,7 @@
    Phase 1 (token bridge): the design-system palette, type scale and radius are
    defined here and shadcn's semantic names are aliased onto them, so the whole
    app adopts the system without touching a single component. Off-palette
-   utilities (bg-blue-500, font-bold, rounded-lg) still resolve at this stage —
+   utilities (bg-blue-500,, rounded-lg) still resolve at this stage —
    they are removed in the enforcement phase once components are migrated.
 
    Light theme only. The .dark block is deliberately gone: the spec is
@@ -139,6 +139,13 @@
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: var(--line);
   --sidebar-ring: var(--cyan);
+}
+
+@utility text-fine {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 @layer base {

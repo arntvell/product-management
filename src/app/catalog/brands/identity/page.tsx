@@ -18,15 +18,15 @@ export default async function BrandIdentityPage() {
     <main className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Brand identity</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-page">Brand identity</h1>
+          <p className="mt-1 text-body text-muted-foreground">
             Which brand each channel&apos;s spelling belongs to, and which of our own brands
             are the same brand twice.
           </p>
         </div>
         <Link
           href="/catalog/brands"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Brand settings
         </Link>

@@ -46,7 +46,7 @@ export function UploadZone({
       <input {...getInputProps()} />
       {isUploading ? (
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             Uploading{progress ? ` ${progress.completed}/${progress.total}` : "..."}
           </p>
           {progress && (
@@ -61,9 +61,9 @@ export function UploadZone({
           )}
         </div>
       ) : isDragActive ? (
-        <p className="text-sm text-muted-foreground">Drop files here</p>
+        <p className="text-body text-muted-foreground">Drop files here</p>
       ) : (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           Drag & drop images here, or click to browse
         </p>
       )}

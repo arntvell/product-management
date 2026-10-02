@@ -29,13 +29,13 @@ export function ProductLinksEditor({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label className="text-xs">{label}</Label>
+        <Label className="text-fine">{label}</Label>
         <Button size="sm" variant="outline" onClick={onOpenSelector}>
           Add Products
         </Button>
       </div>
       {linkedProducts.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No products linked</p>
+        <p className="text-fine text-muted-foreground">No products linked</p>
       ) : (
         <div className="flex flex-wrap gap-2">
           {linkedProducts.map((product) => (
@@ -51,7 +51,7 @@ export function ProductLinksEditor({
                   className="w-4 h-4 rounded object-cover"
                 />
               )}
-              <span className="text-xs max-w-[150px] truncate">
+              <span className="text-fine max-w-[150px] truncate">
                 {product.title}
               </span>
               <button

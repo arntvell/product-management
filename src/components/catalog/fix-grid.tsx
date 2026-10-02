@@ -195,7 +195,7 @@ export function FixGrid({
             type="button"
             onClick={() => setFilter(key)}
             className={cn(
-              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-full border px-2.5 py-1 text-fine transition-colors",
               filter === key
                 ? "border-foreground bg-foreground text-background"
                 : "text-muted-foreground hover:bg-muted"
@@ -209,10 +209,10 @@ export function FixGrid({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search name or SKU…"
-          className="ml-2 w-56 rounded-full border bg-background px-3 py-1 text-xs"
+          className="ml-2 w-56 rounded-full border bg-background px-3 py-1 text-fine"
         />
         {touched.size > 0 && (
-          <span className="ml-2 text-xs text-muted-foreground">
+          <span className="ml-2 text-fine text-muted-foreground">
             {touched.size} edited this session · rows stay listed until you reload
           </span>
         )}
@@ -221,12 +221,12 @@ export function FixGrid({
       {/* Product type */}
       {productTypes.length > 1 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs font-medium text-muted-foreground">Type</span>
+          <span className="mr-1 text-fine text-muted-foreground">Type</span>
           <button
             type="button"
             onClick={() => setTypeFilter("")}
             className={cn(
-              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+              "rounded-full border px-2.5 py-1 text-fine transition-colors",
               !typeFilter
                 ? "border-foreground bg-foreground text-background"
                 : "text-muted-foreground hover:bg-muted"
@@ -240,7 +240,7 @@ export function FixGrid({
               type="button"
               onClick={() => setTypeFilter(type === typeFilter ? "" : type)}
               className={cn(
-                "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+                "rounded-full border px-2.5 py-1 text-fine transition-colors",
                 type === typeFilter
                   ? "border-foreground bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted"
@@ -261,7 +261,7 @@ export function FixGrid({
 
       {/* Bulk bar */}
       <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-        <span className="text-xs font-medium">
+        <span className="text-fine">
           {selected.size} selected
         </span>
         <select
@@ -270,7 +270,7 @@ export function FixGrid({
             setBulkField(e.target.value as Field);
             setBulkValue("");
           }}
-          className="rounded border bg-background px-2 py-1 text-xs"
+          className="rounded border bg-background px-2 py-1 text-fine"
         >
           {BULK_FIELDS.map((b) => (
             <option key={b.field} value={b.field}>
@@ -282,7 +282,7 @@ export function FixGrid({
           <select
             value={bulkValue}
             onChange={(e) => setBulkValue(e.target.value)}
-            className="min-w-44 rounded border bg-background px-2 py-1 text-xs"
+            className="min-w-44 rounded border bg-background px-2 py-1 text-fine"
           >
             <option value="">— pick —</option>
             {manufacturers.map((m) => (
@@ -297,27 +297,27 @@ export function FixGrid({
             value={bulkValue}
             onChange={(e) => setBulkValue(e.target.value)}
             placeholder="value"
-            className="min-w-44 rounded border bg-background px-2 py-1 text-xs"
+            className="min-w-44 rounded border bg-background px-2 py-1 text-fine"
           />
         )}
         <button
           type="button"
           onClick={applyBulk}
           disabled={busy || !selected.size || !bulkValue.trim()}
-          className="rounded bg-foreground px-2.5 py-1 text-xs font-medium text-background disabled:opacity-40"
+          className="rounded bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
         >
           Apply to selected
         </button>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-fine text-muted-foreground">
           Every edit is saved as a manual lock, so enrichment can&apos;t overwrite it.
         </span>
       </div>
 
       {/* Grid */}
       <div className="mt-3 overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[1100px] text-sm">
+        <table className="w-full min-w-[1100px] text-body">
           <thead>
-            <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">
               <th className="w-8 p-2">
                 <input
                   type="checkbox"
@@ -361,7 +361,7 @@ export function FixGrid({
         </table>
       </div>
       {visible.length === 0 && (
-        <p className="mt-8 text-center text-sm text-muted-foreground">
+        <p className="mt-8 text-center text-body text-muted-foreground">
           Nothing here — everything in this filter is resolved.
         </p>
       )}
@@ -395,16 +395,16 @@ function Row({
         <input type="checkbox" checked={selected} onChange={onToggle} />
       </td>
       <td className="p-2">
-        <div className="font-medium">
+        <div>
           {row.isCore && <span title="Core line">★ </span>}
           {row.styleName} · {row.name}
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-fine text-muted-foreground">
           {row.colorwaySku} · {row.productType ?? "—"} · {row.vendor ?? "—"}
           {row.origin ? ` · ${row.origin.toLowerCase()}` : ""}
         </div>
         {row.warnings.map((w) => (
-          <div key={w} className="mt-0.5 text-[11px] text-ink">
+          <div key={w} className="mt-0.5 text-fine text-ink">
             ⚠ {w}
           </div>
         ))}
@@ -415,7 +415,7 @@ function Row({
           disabled={busy}
           onChange={(e) => onSave(row, "manufacturerId", e.target.value)}
           className={cn(
-            "w-full rounded border bg-background px-1.5 py-1 text-xs",
+            "w-full rounded border bg-background px-1.5 py-1 text-fine",
             needs("manufacturerId") && "border-ink",
             didFail("manufacturerId") && "border-ink bg-selected"
           )}
@@ -452,7 +452,7 @@ function Row({
             ready
           </span>
         ) : (
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-fine text-muted-foreground">
             needs {row.missing.join(", ")}
             {row.unfixableHere.length > 0 && (
               <div className="mt-0.5 text-ink">
@@ -508,13 +508,13 @@ function Cell({
           if (!(await onSave(row, field, next))) setDraft(persisted);
         }}
         className={cn(
-          "w-full rounded border bg-background px-1.5 py-1 text-xs",
+          "w-full rounded border bg-background px-1.5 py-1 text-fine",
           needs && "border-ink",
           failed && "border-ink bg-selected"
         )}
       />
       {value.value && value.fromStyle && (
-        <div className="mt-0.5 text-[10px] text-muted-foreground" title="Inherited from the style; editing sets a per-colour override">
+        <div className="mt-0.5 text-fine text-muted-foreground" title="Inherited from the style; editing sets a per-colour override">
           from style
         </div>
       )}

@@ -46,7 +46,7 @@ export function MediaCell({
 
   if (disabled) {
     return (
-      <div className="flex items-center justify-center h-full px-2 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center h-full px-2 text-fine text-muted-foreground">
         N/A
       </div>
     );
@@ -73,11 +73,11 @@ export function MediaCell({
           className="w-8 h-8 object-cover rounded shrink-0"
         />
       ) : (
-        <div className="w-8 h-8 bg-muted rounded shrink-0 flex items-center justify-center text-muted-foreground text-[10px]">
+        <div className="w-8 h-8 bg-muted rounded shrink-0 flex items-center justify-center text-muted-foreground text-fine">
           —
         </div>
       )}
-      <span className="text-xs text-muted-foreground truncate">
+      <span className="text-fine text-muted-foreground truncate">
         {isUploading ? "Uploading..." : `${count} image${count !== 1 ? "s" : ""}`}
       </span>
     </div>

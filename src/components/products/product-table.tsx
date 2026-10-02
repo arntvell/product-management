@@ -126,8 +126,8 @@ function StatusCell({
             key={s}
             type="button"
             className={cn(
-              "w-full text-left px-2 py-1.5 text-sm rounded hover:bg-muted",
-              s === status && "font-medium"
+              "w-full text-left px-2 py-1.5 text-body rounded hover:bg-muted",
+              s === status && ""
             )}
             onClick={() => {
               onChange(s);
@@ -172,7 +172,7 @@ function VendorCell({
       <PopoverTrigger asChild>
         <div
           className={cn(
-            "h-full w-full px-2 flex items-center cursor-pointer text-sm text-muted-foreground truncate",
+            "h-full w-full px-2 flex items-center cursor-pointer text-body text-muted-foreground truncate",
             isDirty && dirtyCell
           )}
         >
@@ -181,7 +181,7 @@ function VendorCell({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-2 space-y-2" align="start">
         <input
-          className="w-full border rounded px-2 py-1 text-sm outline-none"
+          className="w-full border rounded px-2 py-1 text-body outline-none"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
@@ -193,7 +193,7 @@ function VendorCell({
           autoFocus
         />
         {suggestions.length > 0 && (
-          <div className="border rounded text-xs divide-y max-h-40 overflow-auto">
+          <div className="border rounded text-fine divide-y max-h-40 overflow-auto">
             {suggestions.map((v) => (
               <button
                 key={v}
@@ -212,7 +212,7 @@ function VendorCell({
         <div className="flex justify-end">
           <Button
             size="sm"
-            className="h-6 text-xs"
+            className="h-6 text-fine"
             disabled={!input.trim() || input.trim() === vendor}
             onClick={() => {
               onChange(input.trim());
@@ -301,7 +301,7 @@ const ProductRow = React.memo(function ProductRow({
         )}
       </div>
       <div role="cell" className="p-2 min-w-[200px] flex-1 flex items-center">
-        <span className="text-sm font-medium truncate">{product.title}</span>
+        <span className="text-body truncate">{product.title}</span>
       </div>
       {/* Vendor — editable */}
       <div role="cell" className="w-[120px] shrink-0 flex items-center overflow-hidden">
@@ -312,7 +312,7 @@ const ProductRow = React.memo(function ProductRow({
           allVendors={allVendors}
         />
       </div>
-      <div role="cell" className="p-2 w-[80px] shrink-0 text-sm text-muted-foreground flex items-center">
+      <div role="cell" className="p-2 w-[80px] shrink-0 text-body text-muted-foreground flex items-center">
         {product.productType}
       </div>
       {/* Status — editable */}
@@ -669,7 +669,7 @@ export function ProductTable({
               />
             </div>
           )}
-          <span className="text-xs text-muted-foreground">Cmd+S</span>
+          <span className="text-fine text-muted-foreground">Cmd+S</span>
         </div>
       )}
 
@@ -710,13 +710,13 @@ export function ProductTable({
             >
               Status <SortIcon col="status" sortKey={sortKey} sortDir={sortDir} />
             </button>
-            <div className="p-2 text-left text-sm font-medium w-[160px] shrink-0 border-l">
+            <div className="p-2 text-left text-body w-[160px] shrink-0 border-l">
               Tags
             </div>
             {columns.map((col) => (
               <div
                 key={col.key}
-                className="p-2 text-left text-sm font-medium"
+                className="p-2 text-left text-body"
                 style={{ minWidth: col.minWidth, flex: 1 }}
               >
                 {col.label}

@@ -18,7 +18,7 @@ export function ModelList({
 }: ModelListProps) {
   if (models.length === 0) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-12">
+      <p className="text-center text-body text-muted-foreground py-12">
         No models found. Create one to get started.
       </p>
     );
@@ -29,15 +29,15 @@ export function ModelList({
       {models.map((model) => (
         <div key={model.id} className="border rounded-lg p-4 space-y-2">
           <div className="flex items-start justify-between">
-            <h3 className="font-medium">{model.fields.name}</h3>
+            <h3>{model.fields.name}</h3>
           </div>
-          <div className="text-sm text-muted-foreground space-y-1">
+          <div className="text-body text-muted-foreground space-y-1">
             {model.fields.height && <p>Height: {model.fields.height}</p>}
             {model.fields.size_worn && (
               <p>Size worn: {model.fields.size_worn}</p>
             )}
             {model.fields.notes && (
-              <p className="text-xs truncate">{model.fields.notes}</p>
+              <p className="text-fine truncate">{model.fields.notes}</p>
             )}
           </div>
           <div className="flex gap-2 pt-1">

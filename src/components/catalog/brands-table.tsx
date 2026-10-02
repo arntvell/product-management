@@ -32,7 +32,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
           placeholder="Search brands"
           className="max-w-xs"
         />
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-body">
           <input
             type="checkbox"
             checked={onlyIssues}
@@ -40,7 +40,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
           />
           Needs attention
         </label>
-        <span className="ml-auto text-xs text-muted-foreground">
+        <span className="ml-auto text-fine text-muted-foreground">
           {rows.length} of {brands.length}
         </span>
       </div>
@@ -84,7 +84,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
 
       <div className="overflow-x-auto rounded-md border">
         <div className="min-w-[58rem]">
-          <div className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
             <div>Brand</div>
             <div>Token</div>
             <div>Rule</div>
@@ -100,27 +100,27 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
             <Link
               key={b.id}
               href={`/catalog/brands/${b.id}`}
-              className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem] items-center gap-3 border-b px-3 py-2 text-sm transition-colors last:border-0 hover:bg-muted/50"
+              className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem] items-center gap-3 border-b px-3 py-2 text-body transition-colors last:border-0 hover:bg-muted/50"
             >
               <div className="min-w-0">
-                <div className="truncate font-medium">
+                <div className="truncate">
                   {b.name}
                   {b.isLivid ? (
-                    <span className="ml-2 rounded-full border px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                    <span className="ml-2 rounded-full border px-1.5 py-0.5 text-fine text-muted-foreground">
                       Livid
                     </span>
                   ) : null}
                 </div>
                 {b.possibleDuplicateOf.length ? (
-                  <div className="truncate text-[11px] text-ink">
+                  <div className="truncate text-fine text-ink">
                     looks like {b.possibleDuplicateOf.join(", ")}
                   </div>
                 ) : null}
               </div>
-              <div className="font-mono text-xs">
+              <div className="font-mono text-fine">
                 {b.skuToken ?? <span className="text-muted-foreground">—</span>}
               </div>
-              <div className="font-mono text-xs text-muted-foreground">
+              <div className="font-mono text-fine text-muted-foreground">
                 {b.isLivid ? (
                   "—"
                 ) : b.derivedToken === b.skuToken ? (
@@ -138,10 +138,10 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
                   </span>
                 )}
               </div>
-              <div className="truncate text-xs text-muted-foreground">
+              <div className="truncate text-fine text-muted-foreground">
                 {b.defaultSizeSystem?.name ?? (b.hasTemplate ? "—" : "no template")}
               </div>
-              <div className="font-mono text-xs">
+              <div className="font-mono text-fine">
                 {b.sitooManufacturerIds.length ? (
                   <span
                     className={b.sitooManufacturerIds.length > 1 ? "text-ink" : ""}
@@ -159,7 +159,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
                   </span>
                 )}
               </div>
-              <div className="truncate text-xs text-muted-foreground" title={b.shopifyVendors.join(", ")}>
+              <div className="truncate text-fine text-muted-foreground" title={b.shopifyVendors.join(", ")}>
                 {b.shopifyVendors.join(", ") || "—"}
               </div>
               <div className="text-right tabular-nums text-muted-foreground">{b.styles}</div>
@@ -169,7 +169,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
             </Link>
           ))}
           {rows.length === 0 ? (
-            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+            <div className="px-3 py-8 text-center text-body text-muted-foreground">
               No brands match.
             </div>
           ) : null}

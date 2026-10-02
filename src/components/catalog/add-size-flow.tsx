@@ -37,14 +37,14 @@ const LABEL: Record<StepState, string> = {
 
 function Step({ o }: { o: StepOutcome }) {
   return (
-    <td className={`px-2 py-2 align-top text-xs ${TONE[o.state]}`}>
-      <div className="font-medium">{LABEL[o.state]}</div>
+    <td className={`px-2 py-2 align-top text-fine ${TONE[o.state]}`}>
+      <div>{LABEL[o.state]}</div>
       {o.detail?.map((d) => (
-        <div key={d} className="text-[11px] text-muted-foreground">
+        <div key={d} className="text-fine text-muted-foreground">
           {d}
         </div>
       ))}
-      {o.note ? <div className="mt-0.5 max-w-64 text-[11px]">{o.note}</div> : null}
+      {o.note ? <div className="mt-0.5 max-w-64 text-fine">{o.note}</div> : null}
     </td>
   );
 }
@@ -52,7 +52,7 @@ function Step({ o }: { o: StepOutcome }) {
 function Chip({ on, label }: { on: boolean; label: string }) {
   return (
     <span
-      className={`rounded border px-1 text-[10px] font-medium ${
+      className={`rounded border px-1 text-fine ${
         on ? "border-foreground/30" : "border-dashed text-muted-foreground/60 line-through"
       }`}
     >
@@ -304,12 +304,12 @@ export function AddSizeFlow({
             onChange={(e) => setQ(e.target.value)}
             autoFocus
             placeholder="Style, colour, SKU or barcode — e.g. Hestra Robert, EXT-PNT-BCK"
-            className="min-w-64 flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+            className="min-w-64 flex-1 rounded-md border bg-background px-3 py-2 text-body"
           />
           <select
             value={brandId}
             onChange={(e) => setBrandId(e.target.value)}
-            className="rounded-md border bg-background px-3 py-2 text-sm"
+            className="rounded-md border bg-background px-3 py-2 text-body"
           >
             <option value="">All brands</option>
             {brands.map((b) => (
@@ -321,7 +321,7 @@ export function AddSizeFlow({
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="rounded-md border bg-background px-3 py-2 text-sm"
+            className="rounded-md border bg-background px-3 py-2 text-body"
           >
             <option value="">All categories</option>
             {categories.map((c) => (
@@ -334,24 +334,24 @@ export function AddSizeFlow({
         </div>
 
         <div className="mt-4">
-          {loading || searching ? <p className="text-sm text-muted-foreground">Searching…</p> : null}
+          {loading || searching ? <p className="text-body text-muted-foreground">Searching…</p> : null}
           {!results && !searching ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               Search, or pick a brand or category. External brands only — Livid sizes come from Threadflow.
             </p>
           ) : null}
           {results && !results.rows.length && !searching ? (
-            <p className="text-sm text-muted-foreground">Nothing matches.</p>
+            <p className="text-body text-muted-foreground">Nothing matches.</p>
           ) : null}
           {results?.rows.length ? (
             <div className="overflow-hidden rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+              <table className="w-full text-body">
+                <thead className="bg-muted/40 text-left text-fine text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 font-medium">Product</th>
-                    <th className="px-3 py-2 font-medium">Brand · category</th>
-                    <th className="px-3 py-2 font-medium">Sizes today</th>
-                    <th className="px-3 py-2 font-medium">Live in</th>
+                    <th className="px-3 py-2">Product</th>
+                    <th className="px-3 py-2">Brand · category</th>
+                    <th className="px-3 py-2">Sizes today</th>
+                    <th className="px-3 py-2">Live in</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -362,15 +362,15 @@ export function AddSizeFlow({
                       className="cursor-pointer border-t transition-colors hover:bg-muted/50"
                     >
                       <td className="px-3 py-2">
-                        <div className="font-medium">{r.title}</div>
-                        <div className="font-mono text-[11px] text-muted-foreground">{r.colorwaySku}</div>
+                        <div>{r.title}</div>
+                        <div className="font-mono text-fine text-muted-foreground">{r.colorwaySku}</div>
                       </td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground">
+                      <td className="px-3 py-2 text-fine text-muted-foreground">
                         {r.brand ?? "—"}
                         {r.category ? ` · ${r.category}` : ""}
                         {r.seasons.length ? <div>{r.seasons.join(", ")}</div> : null}
                       </td>
-                      <td className="px-3 py-2 text-xs">{r.sizes.join(" · ") || "none"}</td>
+                      <td className="px-3 py-2 text-fine">{r.sizes.join(" · ") || "none"}</td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1">
                           <Chip on={r.shopify} label="Shopify" />
@@ -383,7 +383,7 @@ export function AddSizeFlow({
                 </tbody>
               </table>
               {results.truncated ? (
-                <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                <p className="border-t px-3 py-2 text-fine text-muted-foreground">
                   Showing the first {results.rows.length}. Narrow the search to see the rest.
                 </p>
               ) : null}
@@ -399,9 +399,9 @@ export function AddSizeFlow({
       <div className="rounded-lg border p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="font-semibold">{ctx.colorway.title}</h2>
-            <p className="font-mono text-xs text-muted-foreground">{ctx.colorway.colorwaySku}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <h2>{ctx.colorway.title}</h2>
+            <p className="font-mono text-fine text-muted-foreground">{ctx.colorway.colorwaySku}</p>
+            <p className="mt-1 text-fine text-muted-foreground">
               {ctx.colorway.brand ?? "—"}
               {ctx.colorway.category ? ` · ${ctx.colorway.category}` : ""}
               {ctx.colorway.seasons.length ? ` · ${ctx.colorway.seasons.join(", ")}` : ""}
@@ -416,19 +416,19 @@ export function AddSizeFlow({
             </Button>
           </div>
         </div>
-        <table className="mt-3 w-full text-xs">
+        <table className="mt-3 w-full text-fine">
           <thead className="text-left text-muted-foreground">
             <tr>
-              <th className="py-1 pr-3 font-medium">Size</th>
-              <th className="py-1 pr-3 font-medium">SKU</th>
-              <th className="py-1 pr-3 font-medium">Barcode</th>
-              <th className="py-1 font-medium">Linked</th>
+              <th className="py-1 pr-3">Size</th>
+              <th className="py-1 pr-3">SKU</th>
+              <th className="py-1 pr-3">Barcode</th>
+              <th className="py-1">Linked</th>
             </tr>
           </thead>
           <tbody>
             {ctx.variants.map((v) => (
               <tr key={v.id} className="border-t">
-                <td className="py-1 pr-3 font-medium">{v.sizeLabel}</td>
+                <td className="py-1 pr-3">{v.sizeLabel}</td>
                 <td className="py-1 pr-3 font-mono">{v.variantSku}</td>
                 <td className="py-1 pr-3 font-mono">{v.barcode ?? <span className="text-muted-foreground">none</span>}</td>
                 <td className="py-1">
@@ -456,8 +456,8 @@ export function AddSizeFlow({
           <div className="rounded-lg border p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold">Size</h3>
-                <p className="text-xs text-muted-foreground">
+                <h3 className="text-body">Size</h3>
+                <p className="text-fine text-muted-foreground">
                   From{" "}
                   {ctx.systems.length > 1 ? (
                     <select
@@ -466,7 +466,7 @@ export function AddSizeFlow({
                         setSystemId(e.target.value);
                         setPicked([]);
                       }}
-                      className="rounded border bg-background px-1 py-0.5 text-xs"
+                      className="rounded border bg-background px-1 py-0.5 text-fine"
                     >
                       {ctx.systems.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -475,7 +475,7 @@ export function AddSizeFlow({
                       ))}
                     </select>
                   ) : (
-                    <span className="font-medium text-foreground">{system.name}</span>
+                    <span className="text-foreground">{system.name}</span>
                   )}{" "}
                   — {system.reason}.
                 </p>
@@ -483,7 +483,7 @@ export function AddSizeFlow({
               <Link
                 href="/catalog/size-systems"
                 target="_blank"
-                className="text-xs text-muted-foreground underline underline-offset-4"
+                className="text-fine text-muted-foreground underline underline-offset-4"
               >
                 Size missing? Add it to {system.name}
               </Link>
@@ -491,7 +491,7 @@ export function AddSizeFlow({
 
             {system.skuNote ? (
               <p
-                className={`mt-2 text-xs ${system.skuStem ? "text-muted-foreground" : "text-ink"}`}
+                className={`mt-2 text-fine ${system.skuStem ? "text-muted-foreground" : "text-ink"}`}
               >
                 {system.skuNote}
               </p>
@@ -509,7 +509,7 @@ export function AddSizeFlow({
                         onClick={() => toggle(o.entryId)}
                         disabled={!!o.taken || !!busy}
                         title={o.taken ? `${o.sku} is already on ${o.taken}` : o.sku}
-                        className={`rounded-md border px-2.5 py-1 text-sm transition-colors disabled:opacity-40 ${
+                        className={`rounded-md border px-2.5 py-1 text-body transition-colors disabled:opacity-40 ${
                           on ? "border-foreground bg-foreground text-background" : "hover:bg-muted"
                         }`}
                       >
@@ -519,19 +519,19 @@ export function AddSizeFlow({
                   })}
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-muted-foreground">
+                <p className="mt-3 text-body text-muted-foreground">
                   This product already has every size in {system.name}.
                 </p>
               )
             ) : null}
 
             {pickedOptions.length ? (
-              <table className="mt-4 w-full text-sm">
-                <thead className="text-left text-xs text-muted-foreground">
+              <table className="mt-4 w-full text-body">
+                <thead className="text-left text-fine text-muted-foreground">
                   <tr>
-                    <th className="py-1 pr-3 font-medium">Size</th>
-                    <th className="py-1 pr-3 font-medium">SKU</th>
-                    <th className="py-1 font-medium">Barcode — optional, strongly recommended</th>
+                    <th className="py-1 pr-3">Size</th>
+                    <th className="py-1 pr-3">SKU</th>
+                    <th className="py-1">Barcode — optional, strongly recommended</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -540,22 +540,22 @@ export function AddSizeFlow({
                     const reason = rejectionReason(value);
                     return (
                       <tr key={o.entryId} className="border-t">
-                        <td className="py-2 pr-3 font-medium">{o.sizeLabel}</td>
-                        <td className="py-2 pr-3 font-mono text-xs">{o.sku}</td>
+                        <td className="py-2 pr-3">{o.sizeLabel}</td>
+                        <td className="py-2 pr-3 font-mono text-fine">{o.sku}</td>
                         <td className="py-2">
                           <input
                             value={value}
                             onChange={(e) => setBarcodes((b) => ({ ...b, [o.entryId]: e.target.value }))}
                             inputMode="numeric"
                             placeholder="EAN-13 from the label or supplier"
-                            className={`w-56 rounded-md border bg-background px-2 py-1 font-mono text-sm ${
+                            className={`w-56 rounded-md border bg-background px-2 py-1 font-mono text-body ${
                               reason ? "border-destructive" : ""
                             }`}
                           />
                           {reason ? (
-                            <div className="text-[11px] text-destructive">{reason}</div>
+                            <div className="text-fine text-destructive">{reason}</div>
                           ) : !value.trim() ? (
-                            <div className="text-[11px] text-ink">
+                            <div className="text-fine text-ink">
                               No barcode: the till cannot scan it until one is added.
                             </div>
                           ) : null}
@@ -582,7 +582,7 @@ export function AddSizeFlow({
                   <Button variant="ghost" onClick={() => setConfirming(false)} disabled={!!busy}>
                     Cancel
                   </Button>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-fine text-muted-foreground">
                     Writes the master, then {writes.shopify} to Shopify, {writes.sitoo} to Sitoo
                     {writes.loom ? `, and re-sends the colourway to Loom` : ""}.
                   </span>
@@ -602,9 +602,9 @@ export function AddSizeFlow({
                   Save and push
                 </Button>
               )}
-              {busy ? <span className="text-sm text-muted-foreground">{busy}</span> : null}
+              {busy ? <span className="text-body text-muted-foreground">{busy}</span> : null}
               {!busy && stale && !localErrors.length ? (
-                <span className="text-xs text-muted-foreground">Check first — nothing is written by it.</span>
+                <span className="text-fine text-muted-foreground">Check first — nothing is written by it.</span>
               ) : null}
             </div>
           ) : null}
@@ -614,7 +614,7 @@ export function AddSizeFlow({
       {report ? (
         <div className="rounded-lg border">
           <div className="flex items-center justify-between border-b px-4 py-2">
-            <h3 className="text-sm font-semibold">{report.dryRun ? "What saving will do" : "What happened"}</h3>
+            <h3 className="text-body">{report.dryRun ? "What saving will do" : "What happened"}</h3>
             {!report.dryRun ? (
               <div className="flex items-center gap-3">
                 {lastApplied &&
@@ -624,14 +624,14 @@ export function AddSizeFlow({
                     Retry what failed
                   </Button>
                 ) : null}
-                <Link href="/catalog/variants" className="text-xs underline underline-offset-4">
+                <Link href="/catalog/variants" className="text-fine underline underline-offset-4">
                   Variant editor
                 </Link>
               </div>
             ) : null}
           </div>
           {report.errors.length ? (
-            <ul className="border-b bg-destructive/5 px-4 py-2 text-sm text-destructive">
+            <ul className="border-b bg-destructive/5 px-4 py-2 text-body text-destructive">
               {report.errors.map((e) => (
                 <li key={e}>{e}</li>
               ))}
@@ -645,21 +645,21 @@ export function AddSizeFlow({
             </ul>
           ) : null}
           <table className="w-full">
-            <thead className="text-left text-xs text-muted-foreground">
+            <thead className="text-left text-fine text-muted-foreground">
               <tr>
-                <th className="px-2 py-1.5 font-medium">Size</th>
-                <th className="px-2 py-1.5 font-medium">Master</th>
-                <th className="px-2 py-1.5 font-medium">Shopify</th>
-                <th className="px-2 py-1.5 font-medium">Sitoo</th>
+                <th className="px-2 py-1.5">Size</th>
+                <th className="px-2 py-1.5">Master</th>
+                <th className="px-2 py-1.5">Shopify</th>
+                <th className="px-2 py-1.5">Sitoo</th>
               </tr>
             </thead>
             <tbody>
               {report.rows.map((r) => (
                 <tr key={r.sku} className="border-t">
-                  <td className="px-2 py-2 align-top text-sm">
-                    <div className="font-medium">{r.sizeLabel}</div>
-                    <div className="font-mono text-[11px] text-muted-foreground">{r.sku}</div>
-                    <div className="font-mono text-[11px] text-muted-foreground">{r.barcode ?? "no barcode"}</div>
+                  <td className="px-2 py-2 align-top text-body">
+                    <div>{r.sizeLabel}</div>
+                    <div className="font-mono text-fine text-muted-foreground">{r.sku}</div>
+                    <div className="font-mono text-fine text-muted-foreground">{r.barcode ?? "no barcode"}</div>
                     {report.dryRun && !r.barcode && r.shopify.suggestBarcode ? (
                       <button
                         type="button"
@@ -667,7 +667,7 @@ export function AddSizeFlow({
                           const opt = pickedOptions.find((o) => o.sku === r.sku);
                           if (opt) setBarcodes((b) => ({ ...b, [opt.entryId]: r.shopify.suggestBarcode! }));
                         }}
-                        className="mt-1 text-[11px] underline underline-offset-2"
+                        className="mt-1 text-fine underline underline-offset-2"
                       >
                         Use Shopify&apos;s {r.shopify.suggestBarcode}
                       </button>
@@ -680,8 +680,8 @@ export function AddSizeFlow({
               ))}
             </tbody>
           </table>
-          <div className={`border-t px-4 py-2 text-xs ${TONE[report.loom.state]}`}>
-            <span className="font-medium">Loom: {LABEL[report.loom.state]}</span>
+          <div className={`border-t px-4 py-2 text-fine ${TONE[report.loom.state]}`}>
+            <span>Loom: {LABEL[report.loom.state]}</span>
             {report.loom.note ? <span> — {report.loom.note}</span> : null}
             {report.loom.detail?.map((d) => (
               <div key={d} className="text-muted-foreground">

@@ -83,18 +83,18 @@ const MediaRow = React.memo(function MediaRow({
         )}
       </td>
       <td className="p-2 min-w-[200px] flex-1 flex items-center">
-        <span className="text-sm font-medium truncate">{product.title}</span>
+        <span className="text-body truncate">{product.title}</span>
       </td>
-      <td className="p-2 w-[100px] shrink-0 text-sm text-muted-foreground flex items-center">
+      <td className="p-2 w-[100px] shrink-0 text-body text-muted-foreground flex items-center">
         {product.vendor}
       </td>
-      <td className="p-2 w-[80px] shrink-0 text-sm text-muted-foreground flex items-center">
+      <td className="p-2 w-[80px] shrink-0 text-body text-muted-foreground flex items-center">
         {product.productType}
       </td>
-      <td className="p-2 w-[90px] shrink-0 text-sm text-muted-foreground flex items-center">
+      <td className="p-2 w-[90px] shrink-0 text-body text-muted-foreground flex items-center">
         <span
           className={cn(
-            "text-xs px-1.5 py-0.5 rounded",
+            "text-fine px-1.5 py-0.5 rounded",
             product.status === "ACTIVE" && "bg-ink text-offwhite",
             product.status === "DRAFT" && "border border-ink text-ink",
             product.status === "ARCHIVED" && "bg-hover text-muted-foreground"
@@ -284,22 +284,22 @@ export function MediaTable({
             />
           </div>
           <div className="w-12 p-2 shrink-0" />
-          <div className="p-2 text-left text-sm font-medium min-w-[200px] flex-1">
+          <div className="p-2 text-left text-body min-w-[200px] flex-1">
             Title
           </div>
-          <div className="p-2 text-left text-sm font-medium w-[100px] shrink-0">
+          <div className="p-2 text-left text-body w-[100px] shrink-0">
             Vendor
           </div>
-          <div className="p-2 text-left text-sm font-medium w-[80px] shrink-0">
+          <div className="p-2 text-left text-body w-[80px] shrink-0">
             Type
           </div>
-          <div className="p-2 text-left text-sm font-medium w-[90px] shrink-0">
+          <div className="p-2 text-left text-body w-[90px] shrink-0">
             Status
           </div>
           {columns.map((col) => (
             <div
               key={col.key}
-              className="p-2 text-left text-sm font-medium border-l"
+              className="p-2 text-left text-body border-l"
               style={{ minWidth: col.minWidth, flex: 1 }}
             >
               {col.label}

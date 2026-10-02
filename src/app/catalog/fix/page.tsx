@@ -36,22 +36,22 @@ export default async function FixPage({
     return `/catalog/fix?${p.toString()}`;
   };
   const chip = (on: boolean) =>
-    `rounded-full border px-2.5 py-1 font-medium ${on ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`;
+    `rounded-full border px-2.5 py-1 ${on ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"}`;
 
   return (
     <div className="mx-auto max-w-[1400px] px-6 py-10">
-      <Link href="/catalog" className="text-xs text-muted-foreground underline underline-offset-4">
+      <Link href="/catalog" className="text-fine text-muted-foreground underline underline-offset-4">
         ← Catalog
       </Link>
-      <h1 className="mt-1 text-2xl font-semibold">Fix</h1>
-      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+      <h1 className="mt-1 text-page">Fix</h1>
+      <p className="mt-1 max-w-3xl text-body text-muted-foreground">
         Products that can&apos;t reach Loom yet, and products whose customs data
         looks wrong. Edit a cell and it saves immediately as a{" "}
         <b>manual override</b> — enrichment passes skip manually-set fields, so a
         correction here is never overwritten by a later sync.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-fine">
         {seasons.map((s) => (
           <Link
             key={s.code}

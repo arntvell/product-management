@@ -27,7 +27,7 @@ export interface CandidateView {
 function Pio({ qty }: { qty: number | null }) {
   if (qty === null) return <span className="text-muted-foreground">not in Pio</span>;
   if (qty === 0) return <span className="text-muted-foreground">Pio 0</span>;
-  return <span className="font-medium text-muted-foreground">Pio {qty}</span>;
+  return <span className="text-muted-foreground">Pio {qty}</span>;
 }
 
 function Side({
@@ -40,14 +40,14 @@ function Side({
   role: "keep" | "absorb";
 }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-body">
       <Badge variant={role === "keep" ? "default" : "outline"}>{role}</Badge>
-      <code className="font-medium">{member.colorwaySku}</code>
-      <span className="text-xs text-muted-foreground">{member.source}</span>
-      <span className="text-xs text-muted-foreground">
+      <code>{member.colorwaySku}</code>
+      <span className="text-fine text-muted-foreground">{member.source}</span>
+      <span className="text-fine text-muted-foreground">
         {member.barcoded}/{member.variants} barcoded
       </span>
-      <span className="text-xs">
+      <span className="text-fine">
         <Pio qty={pio} />
       </span>
     </div>
@@ -98,13 +98,13 @@ export function DuplicateRow({ candidate: c }: { candidate: CandidateView }) {
     <div className="rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-medium">
+          <div>
             {c.styleName} — {c.name}
             {c.color ? (
-              <span className="ml-2 text-xs text-muted-foreground">{c.color}</span>
+              <span className="ml-2 text-fine text-muted-foreground">{c.color}</span>
             ) : null}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{c.reason}</p>
+          <p className="mt-0.5 text-fine text-muted-foreground">{c.reason}</p>
         </div>
         <Button variant="outline" size="sm" disabled={busy} onClick={runPreview}>
           {busy ? "Previewing…" : "Preview merge"}
@@ -127,10 +127,10 @@ export function DuplicateRow({ candidate: c }: { candidate: CandidateView }) {
       ) : null}
 
       {error ? (
-        <p className="mt-3 text-xs text-destructive">{error}</p>
+        <p className="mt-3 text-fine text-destructive">{error}</p>
       ) : null}
       {preview ? (
-        <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">
+        <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-muted p-3 text-fine">
           {JSON.stringify(preview, null, 2)}
         </pre>
       ) : null}

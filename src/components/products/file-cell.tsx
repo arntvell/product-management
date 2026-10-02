@@ -13,7 +13,7 @@ export function FileCell({ value, isDirty, onClick }: FileCellProps) {
   return (
     <div
       className={cn(
-        "px-2 py-1.5 min-h-[32px] cursor-pointer text-sm flex items-center",
+        "px-2 py-1.5 min-h-[32px] cursor-pointer text-body flex items-center",
         isDirty && dirtyCell
       )}
       onClick={onClick}
@@ -21,10 +21,10 @@ export function FileCell({ value, isDirty, onClick }: FileCellProps) {
       {value ? (
         <div className="flex items-center gap-1">
           <span className="size-1.5 shrink-0 rounded-full bg-ink" />
-          <span className="text-xs truncate">Flat set</span>
+          <span className="text-fine truncate">Flat set</span>
         </div>
       ) : (
-        <span className="text-muted-foreground text-xs">No flat</span>
+        <span className="text-muted-foreground text-fine">No flat</span>
       )}
     </div>
   );

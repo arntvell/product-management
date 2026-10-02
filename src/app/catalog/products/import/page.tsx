@@ -89,12 +89,12 @@ export default async function ImportProductsPage({
         <div>
           <Link
             href="/catalog/products/new"
-            className="text-xs text-muted-foreground underline underline-offset-4"
+            className="text-fine text-muted-foreground underline underline-offset-4"
           >
             ← New product
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold">Import products</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="mt-1 text-page">Import products</h1>
+          <p className="mt-1 text-body text-muted-foreground">
             The file is generated for one brand, season, type and size system, with the
             categories you choose as a dropdown, and carries those choices inside it — so a
             sheet filled in for one batch cannot be imported against another. Customs,
@@ -103,7 +103,7 @@ export default async function ImportProductsPage({
         </div>
         <Link
           href="/catalog/products/drafts"
-          className="shrink-0 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="shrink-0 rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           All drafts
         </Link>

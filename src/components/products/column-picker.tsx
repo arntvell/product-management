@@ -39,7 +39,7 @@ export function ColumnPicker({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3" align="end">
         <div className="space-y-1">
-          <p className="text-sm font-medium mb-2">Toggle columns</p>
+          <p className="text-body mb-2">Toggle columns</p>
           {COLUMN_DEFINITIONS.map((col) => (
             <div key={col.key} className="flex items-center gap-2 py-0.5">
               <Checkbox
@@ -49,7 +49,7 @@ export function ColumnPicker({
               />
               <Label
                 htmlFor={`col-${col.key}`}
-                className="text-sm cursor-pointer flex-1"
+                className="text-body cursor-pointer flex-1"
               >
                 {col.label}
               </Label>
@@ -61,7 +61,7 @@ export function ColumnPicker({
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 h-7 text-fine"
             onClick={onReset}
           >
             Defaults
@@ -69,7 +69,7 @@ export function ColumnPicker({
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 h-7 text-fine"
             onClick={onShowAll}
           >
             Show All

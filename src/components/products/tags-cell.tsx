@@ -60,19 +60,19 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
           )}
         >
           {tags.length === 0 ? (
-            <span className="text-xs text-muted-foreground">—</span>
+            <span className="text-fine text-muted-foreground">—</span>
           ) : (
             <div className="flex gap-1 flex-wrap overflow-hidden max-h-[32px]">
               {tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="text-xs bg-muted px-1.5 py-0.5 rounded shrink-0"
+                  className="text-fine bg-muted px-1.5 py-0.5 rounded shrink-0"
                 >
                   {tag}
                 </span>
               ))}
               {tags.length > 3 && (
-                <span className="text-xs text-muted-foreground shrink-0">
+                <span className="text-fine text-muted-foreground shrink-0">
                   +{tags.length - 3}
                 </span>
               )}
@@ -81,12 +81,12 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
         </div>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-3 space-y-2" align="start">
-        <p className="text-sm font-medium">Edit Tags</p>
+        <p className="text-body">Edit Tags</p>
         <div className="flex flex-wrap gap-1.5 min-h-[24px]">
           {tags.map((tag) => (
             <span
               key={tag}
-              className="flex items-center gap-1 text-xs bg-muted px-1.5 py-0.5 rounded"
+              className="flex items-center gap-1 text-fine bg-muted px-1.5 py-0.5 rounded"
             >
               {tag}
               <button
@@ -106,7 +106,7 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Add tag..."
-            className="h-7 text-xs"
+            className="h-7 text-fine"
           />
           <button
             type="button"
@@ -118,7 +118,7 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
           </button>
         </div>
         {input && suggestions.length > 0 && (
-          <div className="border rounded text-xs divide-y max-h-32 overflow-auto">
+          <div className="border rounded text-fine divide-y max-h-32 overflow-auto">
             {suggestions.slice(0, 8).map((s) => (
               <button
                 key={s}
@@ -131,7 +131,7 @@ export function TagsCell({ tags, isDirty, onChange, allTags = [] }: TagsCellProp
             ))}
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-fine text-muted-foreground">
           Press Enter or comma to add
         </p>
       </PopoverContent>

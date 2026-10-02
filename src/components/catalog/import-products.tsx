@@ -198,8 +198,8 @@ export function ImportProducts({
     return (
       <div className="space-y-6">
         <div className="rounded-lg border p-5">
-          <h2 className="text-sm font-semibold">A publish from this screen is unfinished</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <h2 className="text-body">A publish from this screen is unfinished</h2>
+          <p className="mt-1 text-fine text-muted-foreground">
             The products are in the master. Resume to let it finish — typically Loom, whose
             job runs longer than the page that submitted it.
           </p>
@@ -212,7 +212,7 @@ export function ImportProducts({
           />
           <Link
             href="/catalog/products/import"
-            className="mt-3 inline-block text-xs underline underline-offset-4"
+            className="mt-3 inline-block text-fine underline underline-offset-4"
           >
             Start a new import instead
           </Link>
@@ -231,7 +231,7 @@ export function ImportProducts({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Brand">
             <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
               value={brandId}
               onChange={(e) => chooseBrand(e.target.value)}
             >
@@ -245,7 +245,7 @@ export function ImportProducts({
           </Field>
           <Field label="Season">
             <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
               value={seasonId}
               onChange={(e) => setSeasonId(e.target.value)}
             >
@@ -259,7 +259,7 @@ export function ImportProducts({
           </Field>
           <Field label="Type">
             <select
-              className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+              className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
               value={kind}
               onChange={(e) => setKind(e.target.value)}
             >
@@ -273,7 +273,7 @@ export function ImportProducts({
           <Field label="Size system">
             {sizeSystems.length ? (
               <select
-                className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
                 value={sizeSystemId}
                 onChange={(e) => setSizeSystemId(e.target.value)}
               >
@@ -285,7 +285,7 @@ export function ImportProducts({
                 ))}
               </select>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-fine text-muted-foreground">
                 None yet —{" "}
                 <Link href="/catalog/size-systems" className="underline underline-offset-2">
                   create one
@@ -298,7 +298,7 @@ export function ImportProducts({
 
         <Field label="Categories available in this file" className="mt-4">
           <CategoryPicker all={categories} selected={categoryIds} onChange={setCategoryIds} />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-fine text-muted-foreground">
             The Category column becomes a dropdown of exactly these. Pick every category the
             delivery covers — a brand&apos;s shirts and its bags can share one file. Choose
             one and the column is pre-filled, so it never has to be touched.
@@ -306,7 +306,7 @@ export function ImportProducts({
         </Field>
 
         {system ? (
-          <p className="mt-3 text-xs text-muted-foreground">
+          <p className="mt-3 text-fine text-muted-foreground">
             The Size column will only accept:{" "}
             <span className="font-mono">
               {system.entries
@@ -329,7 +329,7 @@ export function ImportProducts({
               Download the template
             </Button>
           )}
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-fine text-muted-foreground">
             One row per size. Repeat the style and colourway on every row of that colourway;
             price in, price out and category are per colourway, so they have to agree across
             its rows.
@@ -345,7 +345,7 @@ export function ImportProducts({
       >
         <div className="mb-4 flex flex-wrap items-center gap-4">
           {PUBLISH_CHANNELS.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm">
+            <label key={c} className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
                 checked={channels[c]}
@@ -367,10 +367,10 @@ export function ImportProducts({
         ) : null}
 
         {!brand ? (
-          <p className="text-xs text-muted-foreground">Choose a brand to see its defaults.</p>
+          <p className="text-fine text-muted-foreground">Choose a brand to see its defaults.</p>
         ) : brandIncomplete.length ? (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
-            <p className="font-medium">
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
+            <p>
               {brand.name} is missing {brandIncomplete.join(", ")}.
             </p>
             <p className="mt-1">
@@ -379,14 +379,14 @@ export function ImportProducts({
               cosmetic one. Nothing can be generated or imported until they are filled in.{" "}
               <Link
                 href={`/catalog/brands/${brand.id}`}
-                className="font-medium underline underline-offset-2"
+                className="underline underline-offset-2"
               >
                 Open {brand.name}&apos;s settings
               </Link>
             </p>
           </div>
         ) : (
-          <dl className="grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+          <dl className="grid gap-x-6 gap-y-2 text-fine sm:grid-cols-2">
             <Fact label="HS code" value={brand.defaults.hsCode} />
             <Fact label="Country of origin" value={brand.defaults.countryOfOrigin} />
             <Fact label="Weight" value={`${brand.defaults.weightKg} kg`} />
@@ -424,13 +424,13 @@ export function ImportProducts({
               setReport(null);
               setDecisions({});
             }}
-            className="text-sm file:mr-3 file:rounded-md file:border file:bg-transparent file:px-3 file:py-1.5 file:text-sm"
+            className="text-body file:mr-3 file:rounded-md file:border file:bg-transparent file:px-3 file:py-1.5 file:text-body"
           />
           <Button size="sm" variant="outline" onClick={() => post(true)} disabled={busy !== null}>
             {busy === "parse" ? "Reading…" : "Check the file"}
           </Button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-fine text-muted-foreground">
           Checking writes nothing. It reads the file, groups it into styles and colourways, and
           says what would be created.
         </p>
@@ -447,7 +447,7 @@ export function ImportProducts({
 
       {report ? (
         <div className="flex items-center justify-between border-t pt-4">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-fine text-muted-foreground">
             Importing creates one draft per style. Nothing reaches the catalogue until each
             draft is finalized.
           </p>
@@ -487,23 +487,23 @@ function ReportView({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border p-5">
-        <h2 className="text-sm font-semibold">
+        <h2 className="text-body">
           {report.context.brandName} · {report.context.seasonCode} · {report.context.kind}
         </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-fine text-muted-foreground">
           {report.counts.rows} rows → {report.counts.styles} styles, {report.counts.colorways}{" "}
           colourways, {report.counts.variants} sizes · sizes from {report.context.sizeSystemName}
         </p>
 
         {report.errors.length ? (
-          <ul className="mt-4 space-y-1.5 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+          <ul className="mt-4 space-y-1.5 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
             {report.errors.map((e, i) => (
               <li key={i}>{e}</li>
             ))}
           </ul>
         ) : null}
         {report.warnings.length ? (
-          <ul className="mt-3 space-y-1.5 rounded-md border p-3 text-xs text-muted-foreground">
+          <ul className="mt-3 space-y-1.5 rounded-md border p-3 text-fine text-muted-foreground">
             {report.warnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
@@ -513,8 +513,8 @@ function ReportView({
 
       {report.categories.length ? (
         <div className="rounded-lg border p-5">
-          <h3 className="text-sm font-semibold">Categories in the file</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <h3 className="text-body">Categories in the file</h3>
+          <p className="mt-1 text-fine text-muted-foreground">
             A value that already exists is matched by name. Anything else needs a decision —
             the category is what the push maps outward to Shopify&apos;s product type,
             Loom&apos;s vocabulary and Sitoo&apos;s navigation.
@@ -531,8 +531,8 @@ function ReportView({
                   className="grid items-center gap-2 rounded-md border p-3 sm:grid-cols-[1fr_1.4fr_auto]"
                 >
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{c.value}</div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="truncate text-body">{c.value}</div>
+                    <div className="text-fine text-muted-foreground">
                       {c.rowCount} row{c.rowCount === 1 ? "" : "s"}
                       {c.matchedId ? ` · matches “${c.matchedName}”` : " · not in the master"}
                       {c.missingSitooId ? " · no Sitoo id" : ""}
@@ -552,7 +552,7 @@ function ReportView({
                     />
                   ) : (
                     <select
-                      className="h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+                      className="h-9 w-full rounded-md border bg-transparent px-3 text-body"
                       value={resolvedId}
                       onChange={(e) => {
                         const id = e.target.value;
@@ -577,7 +577,7 @@ function ReportView({
 
                   <button
                     type="button"
-                    className="justify-self-start text-xs underline underline-offset-2 sm:justify-self-end"
+                    className="justify-self-start text-fine underline underline-offset-2 sm:justify-self-end"
                     onClick={() =>
                       setDecisions((prev) => {
                         const next = { ...prev };
@@ -591,7 +591,7 @@ function ReportView({
                   </button>
 
                   {creating ? (
-                    <p className="text-[11px] text-muted-foreground sm:col-span-3">
+                    <p className="text-fine text-muted-foreground sm:col-span-3">
                       A new category starts with no Sitoo navigation id and no Loom value. That
                       is deliberate, not an oversight — set them on{" "}
                       <Link href="/catalog/categories" className="underline underline-offset-2">
@@ -608,26 +608,26 @@ function ReportView({
       ) : null}
 
       <div className="rounded-lg border p-5">
-        <h3 className="text-sm font-semibold">What would be created</h3>
+        <h3 className="text-body">What would be created</h3>
         <div className="mt-3 space-y-3">
           {report.styles.map((s) => (
             <div key={s.styleSku} className="rounded-md border p-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className="text-sm font-medium">
+                <div className="text-body">
                   {s.styleName}{" "}
-                  <span className="ml-1 rounded-full border px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+                  <span className="ml-1 rounded-full border px-2 py-0.5 text-fine text-muted-foreground">
                     {s.mode === "existing" ? "existing style" : "new style"}
                   </span>
                 </div>
-                <code className="font-mono text-xs text-muted-foreground">{s.styleSku}</code>
+                <code className="font-mono text-fine text-muted-foreground">{s.styleSku}</code>
               </div>
               <div className="mt-2 space-y-1">
                 {s.colorways.map((c) => (
                   <div
                     key={c.colorwaySku}
-                    className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-1.5 text-xs"
+                    className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-1.5 text-fine"
                   >
-                    <span className="font-medium">{c.name}</span>
+                    <span>{c.name}</span>
                     <code className="font-mono text-muted-foreground">{c.colorwaySku}</code>
                     <span className="text-muted-foreground">
                       {c.variants.length} size{c.variants.length === 1 ? "" : "s"} ·{" "}
@@ -719,17 +719,17 @@ function Result({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border p-5">
-        <h2 className="text-sm font-semibold">
+        <h2 className="text-body">
           {result.drafts.length} draft{result.drafts.length === 1 ? "" : "s"} created
         </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-fine text-muted-foreground">
           Nothing is in the catalogue yet. Each draft goes through the same pre-flight and
           create as a product typed by hand — SKU collisions, the barcode ledger and the Sitoo
           links are all checked there.
           {report ? ` From ${report.counts.rows} rows.` : ""}
         </p>
         {result.createdCategories.length ? (
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-fine text-muted-foreground">
             New categories:{" "}
             {result.createdCategories.map((c) => c.name).join(", ")} — they have no Sitoo
             navigation id yet, so set one on{" "}
@@ -757,7 +757,7 @@ function Result({
           </Button>
         </div>
         {createdIds === null ? (
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-fine text-muted-foreground">
             {channels.length
               ? `Creating writes the master and then pushes to ${channels
                   .map((c) => PUBLISH_CHANNEL_LABELS[c])
@@ -811,7 +811,7 @@ function Result({
           return (
             <div
               key={d.id}
-              className="flex items-center justify-between gap-4 border-b px-4 py-3 text-sm last:border-0"
+              className="flex items-center justify-between gap-4 border-b px-4 py-3 text-body last:border-0"
             >
               <div className="min-w-0">
                 <Link
@@ -820,21 +820,21 @@ function Result({
                       ? `/catalog/products/drafts/${d.id}/done`
                       : `/catalog/products/drafts/${d.id}`
                   }
-                  className="truncate font-medium underline-offset-4 hover:underline"
+                  className="truncate underline-offset-4 hover:underline"
                 >
                   {d.styleName}
                 </Link>
-                <div className="text-xs text-muted-foreground">
+                <div className="text-fine text-muted-foreground">
                   {d.colorways} colourways · {d.variants} sizes
                 </div>
-                {r?.error ? <div className="text-xs text-destructive">{r.error}</div> : null}
+                {r?.error ? <div className="text-fine text-destructive">{r.error}</div> : null}
                 {r && !r.ok && !r.error ? (
-                  <div className="text-xs text-destructive">
+                  <div className="text-fine text-destructive">
                     blocked — open the draft to see what.
                   </div>
                 ) : null}
               </div>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 text-fine text-muted-foreground">
                 {r?.created
                   ? batchId
                     ? "created · publishing"
@@ -892,14 +892,14 @@ function CategoryPicker({
               key={c.id}
               type="button"
               onClick={() => onChange(selected.filter((id) => id !== c.id))}
-              className="rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-muted"
+              className="rounded-full border px-2 py-0.5 text-fine transition-colors hover:bg-muted"
               title="Remove"
             >
               {c.name} ✕
             </button>
           ))
         ) : (
-          <span className="px-1 text-xs text-muted-foreground">None chosen yet</span>
+          <span className="px-1 text-fine text-muted-foreground">None chosen yet</span>
         )}
       </div>
       <Input
@@ -914,7 +914,7 @@ function CategoryPicker({
           return (
             <label
               key={c.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted"
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-body hover:bg-muted"
             >
               <input
                 type="checkbox"
@@ -925,7 +925,7 @@ function CategoryPicker({
               />
               <span style={{ paddingLeft: c.depth * 12 }}>{c.name}</span>
               {c.sitooCategoryId ? null : (
-                <span className="ml-auto text-[10px] text-ink">
+                <span className="ml-auto text-fine text-ink">
                   no Sitoo id
                 </span>
               )}
@@ -933,7 +933,7 @@ function CategoryPicker({
           );
         })}
         {shown.length === 0 ? (
-          <p className="px-2 py-3 text-xs text-muted-foreground">Nothing matches.</p>
+          <p className="px-2 py-3 text-fine text-muted-foreground">Nothing matches.</p>
         ) : null}
       </div>
     </div>
@@ -962,13 +962,13 @@ function Section({
 }) {
   return (
     <section className="rounded-lg border p-5">
-      <h2 className="text-sm font-semibold">
-        <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px]">
+      <h2 className="text-body">
+        <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border text-fine">
           {step}
         </span>
         {title}
       </h2>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-fine text-muted-foreground">{hint}</p> : null}
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -985,7 +985,7 @@ function Field({
 }) {
   return (
     <div className={`space-y-1.5 ${className}`}>
-      <Label className="text-xs">{label}</Label>
+      <Label className="text-fine">{label}</Label>
       {children}
     </div>
   );

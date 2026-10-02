@@ -88,8 +88,8 @@ export function CutoverPanel() {
           <div key={a.key} className="rounded-lg border p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="font-medium">{a.label}</div>
-                <p className="mt-0.5 text-xs text-muted-foreground">{a.note}</p>
+                <div>{a.label}</div>
+                <p className="mt-0.5 text-fine text-muted-foreground">{a.note}</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button
@@ -122,10 +122,10 @@ export function CutoverPanel() {
                     {outcome.error ? "failed" : outcome.dryRun ? "preview" : "applied"}
                   </Badge>
                   {outcome.error ? (
-                    <span className="text-xs text-destructive">{outcome.error}</span>
+                    <span className="text-fine text-destructive">{outcome.error}</span>
                   ) : null}
                 </div>
-                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs leading-relaxed">
+                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-fine leading-relaxed">
                   {JSON.stringify(outcome.body, null, 2)}
                 </pre>
               </div>

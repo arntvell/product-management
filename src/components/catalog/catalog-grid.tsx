@@ -831,7 +831,7 @@ export function CatalogGrid({
               key={v}
               onClick={() => setView(v)}
               className={cn(
-                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                "rounded-full border px-3 py-1 text-fine transition-colors",
                 view === v
                   ? "border-foreground bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted"
@@ -857,7 +857,7 @@ export function CatalogGrid({
               key={f}
               onClick={() => setDroppedFilter(f)}
               className={cn(
-                "rounded-full border px-2.5 py-1 text-xs font-medium capitalize transition-colors",
+                "rounded-full border px-2.5 py-1 text-fine capitalize transition-colors",
                 droppedFilter === f
                   ? "border-foreground bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted"
@@ -871,17 +871,17 @@ export function CatalogGrid({
           {selected.size > 0 && (
             <button
               onClick={() => setSelected(new Set())}
-              className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+              className="text-fine text-muted-foreground underline underline-offset-4"
             >
               Clear {selected.size} selected
             </button>
           )}
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="text-fine text-muted-foreground tabular-nums">
             {selected.size > 0 && `${selected.size} selected · `}
             {visibleRows.length} rows · {dirty.size} unsaved
           </span>
           <label
-            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+            className="flex items-center gap-1.5 text-fine text-muted-foreground"
             title="Saves to the master a moment after you stop typing. Nothing here reaches Shopify or Loom until you push."
           >
             <input
@@ -958,7 +958,7 @@ export function CatalogGrid({
             onClick={() =>
               setFilters({ vendor: "", productType: "", gender: "", status: "", source: "", needs: "", drop: "", origin: "" })
             }
-            className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+            className="text-fine text-muted-foreground underline underline-offset-4"
           >
             Clear filters
           </button>
@@ -970,7 +970,7 @@ export function CatalogGrid({
           Prices are per-season — select a season above to edit NOK prices.
         </p>
       )}
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-fine text-muted-foreground">
         Tip: click a description, details or tagline cell to write it in a full
         panel — and apply it to a whole selection from there · <b>Enter</b> /{" "}
         <b>Shift+Enter</b> move down/up a column · paste a tab-separated block
@@ -994,28 +994,28 @@ export function CatalogGrid({
           />
           <button
             onClick={() => setCopyOpen(true)}
-            className="h-7 rounded border px-2 text-xs font-medium hover:bg-muted"
+            className="h-7 rounded border px-2 text-fine hover:bg-muted"
             title="Take the description and other fields off a product that is already written"
           >
             Copy fields from a product…
           </button>
           <button
             onClick={() => setSelected(new Set())}
-            className="text-xs font-medium text-muted-foreground underline underline-offset-4"
+            className="text-fine text-muted-foreground underline underline-offset-4"
           >
             Clear selection
           </button>
         </div>
       )}
       {!isBase && !isRefs && (
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-fine text-muted-foreground">
           Editing <b>{CHANNEL_LABELS[layer as "SHOPIFY" | "LOOM"]}</b> overrides.
           Empty cells inherit the base value (shown as placeholder).
         </p>
       )}
       {isRefs && (
         <div className="mt-2 space-y-2">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-fine text-muted-foreground">
             References. Edit inline, fill-down (↓), or use the bulk bar. Bulk
             actions apply to {selected.size > 0 ? `the ${selected.size} selected` : `all ${visibleRows.length} filtered`} rows.
           </p>
@@ -1131,19 +1131,19 @@ export function CatalogGrid({
                     <div className="min-w-0 leading-tight">
                       <a
                         href={`/catalog/colorways/${row.id}`}
-                        className="block truncate text-xs font-medium hover:underline"
+                        className="block truncate text-fine hover:underline"
                       >
                         {row.dropped && (
                           <span
                             title="Dropped from Threadflow for this season"
-                            className="mr-1 border border-line px-1 text-[10px] uppercase text-muted-foreground"
+                            className="mr-1 border border-line px-1 text-fine uppercase text-muted-foreground"
                           >
                             Dropped
                           </span>
                         )}
                         {row.name}
                       </a>
-                      <span className="block truncate text-[10px] text-muted-foreground">
+                      <span className="block truncate text-fine text-muted-foreground">
                         {row.styleName}
                         {row.drop && <> · {row.drop}</>}
                         {row.origin === "CARRYOVER" && (
@@ -1183,7 +1183,7 @@ export function CatalogGrid({
                       value={cellValue(row, "BASE", "swatchHex")}
                       placeholder="#hex"
                       onChange={(e) => setCell(row, "swatchHex", e.target.value, "BASE")}
-                      className="w-full bg-transparent text-xs outline-none focus:bg-background"
+                      className="w-full bg-transparent text-fine outline-none focus:bg-background"
                     />
                   </div>
                   <div
@@ -1200,13 +1200,13 @@ export function CatalogGrid({
                       placeholder={seasonId ? "NOK" : "season"}
                       onChange={(e) => setCell(row, "priceNok", e.target.value, "BASE")}
                       title={seasonId ? "NOK MSRP for this season" : "Select a season to edit price"}
-                      className="h-full w-full bg-transparent px-2 text-xs tabular-nums outline-none focus:bg-background disabled:opacity-40"
+                      className="h-full w-full bg-transparent px-2 text-fine tabular-nums outline-none focus:bg-background disabled:opacity-40"
                     />
                   </div>
                   <a
                     href={`/catalog/colorways/${row.id}/media`}
                     style={{ width: FIXED_COLS[2].width }}
-                    className="flex shrink-0 items-center justify-center gap-1 border-l text-xs text-muted-foreground hover:bg-muted hover:underline"
+                    className="flex shrink-0 items-center justify-center gap-1 border-l text-fine text-muted-foreground hover:bg-muted hover:underline"
                     title="Manage media"
                   >
                     ▦ {row.mediaCount}
@@ -1228,7 +1228,7 @@ export function CatalogGrid({
                               {...cellHandlers(vi.index, row, c.key, "select")}
                               value={value}
                               onChange={(e) => setCell(row, c.key, e.target.value, "BASE")}
-                              className="h-full w-full bg-transparent px-1 text-xs outline-none"
+                              className="h-full w-full bg-transparent px-1 text-fine outline-none"
                             >
                               <option value="">—</option>
                               {refOptions[c.src].map((o) => (
@@ -1254,7 +1254,7 @@ export function CatalogGrid({
                             key={c.key}
                             style={{ width: c.width }}
                             className={cn(
-                              "flex shrink-0 items-center justify-between gap-1 border-l px-2 text-xs",
+                              "flex shrink-0 items-center justify-between gap-1 border-l px-2 text-fine",
                               isDirty && dirtyCell
                             )}
                           >
@@ -1298,7 +1298,7 @@ export function CatalogGrid({
                               value={value}
                               disabled={disabled}
                               onChange={(e) => setCell(row, c.key, e.target.value)}
-                              className="h-full w-full bg-transparent px-2 text-xs outline-none disabled:opacity-40"
+                              className="h-full w-full bg-transparent px-2 text-fine outline-none disabled:opacity-40"
                             >
                               {PRODUCT_STATUSES.map((s) => (
                                 <option key={s} value={s}>
@@ -1345,7 +1345,7 @@ export function CatalogGrid({
                               disabled={disabled}
                               placeholder={placeholder}
                               onChange={(e) => setCell(row, c.key, e.target.value)}
-                              className="h-full w-full bg-transparent px-2 text-xs outline-none placeholder:text-muted-foreground/50 focus:bg-background disabled:opacity-40"
+                              className="h-full w-full bg-transparent px-2 text-fine outline-none placeholder:text-muted-foreground/50 focus:bg-background disabled:opacity-40"
                             />
                           )}
                         </div>
@@ -1439,7 +1439,7 @@ function FieldBulkPicker({
       <PopoverTrigger asChild>
         <button
           disabled={selectedCount < 1}
-          className="h-7 rounded border px-2 text-xs font-medium hover:bg-muted disabled:opacity-40"
+          className="h-7 rounded border px-2 text-fine hover:bg-muted disabled:opacity-40"
           title="Copy chosen fields from one selected row to the rest, or clear them"
         >
           Copy down / clear…
@@ -1447,8 +1447,8 @@ function FieldBulkPicker({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-0">
         <div className="border-b px-3 py-2">
-          <p className="text-sm font-medium">Which fields?</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-body">Which fields?</p>
+          <p className="text-fine text-muted-foreground">
             {source ? (
               <>
                 Copying takes them from <b>{source.styleName} · {source.name}</b>{" "}
@@ -1465,7 +1465,7 @@ function FieldBulkPicker({
           {fields.map((f) => (
             <label
               key={f.key}
-              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50"
+              className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-body hover:bg-muted/50"
             >
               <input
                 type="checkbox"
@@ -1479,14 +1479,14 @@ function FieldBulkPicker({
         <div className="flex items-center gap-2 border-t px-3 py-2">
           <button
             onClick={() => setChosen(new Set(fields.map((f) => f.key)))}
-            className="text-xs text-muted-foreground underline underline-offset-4"
+            className="text-fine text-muted-foreground underline underline-offset-4"
           >
             Select all
           </button>
           <button
             onClick={() => run(onClear)}
             disabled={!chosen.size || selectedCount < 1}
-            className="ml-auto rounded border px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-40"
+            className="ml-auto rounded border px-2 py-1 text-fine text-destructive hover:bg-destructive/10 disabled:opacity-40"
             title={
               layer === "BASE"
                 ? "Empty these fields on every selected row"
@@ -1527,11 +1527,11 @@ function SaveStatus({
 }) {
   if (error)
     return (
-      <span className="text-xs font-medium text-destructive" title={error}>
+      <span className="text-fine text-destructive" title={error}>
         Not saved — {pending} pending
       </span>
     );
-  if (saving) return <span className="text-xs text-muted-foreground">Saving…</span>;
+  if (saving) return <span className="text-fine text-muted-foreground">Saving…</span>;
   if (pending > 0)
     return (
       <span className="text-meta uppercase text-ink">
@@ -1540,7 +1540,7 @@ function SaveStatus({
     );
   if (savedAt)
     return (
-      <span className="text-xs text-muted-foreground">
+      <span className="text-fine text-muted-foreground">
         Saved {savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
       </span>
     );
@@ -1573,12 +1573,12 @@ function AddTagToSelected({
           }
         }}
         placeholder="Add a tag…"
-        className="h-7 w-32 rounded border bg-transparent px-2 text-xs"
+        className="h-7 w-32 rounded border bg-transparent px-2 text-fine"
       />
       <button
         onClick={submit}
         disabled={!tag.trim()}
-        className="h-7 rounded border px-2 text-xs font-medium hover:bg-muted disabled:opacity-40"
+        className="h-7 rounded border px-2 text-fine hover:bg-muted disabled:opacity-40"
       >
         Add to {count}
       </button>
@@ -1606,8 +1606,8 @@ function FilterSelect({
       onChange={(e) => onChange(e.target.value)}
       title={label}
       className={cn(
-        "h-8 rounded-md border bg-transparent px-2 text-xs",
-        value ? "border-foreground font-medium" : "text-muted-foreground"
+        "h-8 rounded-md border bg-transparent px-2 text-fine",
+        value ? "border-foreground" : "text-muted-foreground"
       )}
     >
       <option value="">{label}: all</option>
@@ -1673,11 +1673,11 @@ function BulkRefApply({
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-2">
-      <span className="px-1 text-xs font-medium">Bulk set</span>
+      <span className="px-1 text-fine">Bulk set</span>
       <select
         value={fieldKey}
         onChange={(e) => changeField(e.target.value)}
-        className="h-8 rounded-md border bg-transparent px-2 text-xs"
+        className="h-8 rounded-md border bg-transparent px-2 text-fine"
       >
         {REF_FIELDS.map((f) => (
           <option key={f.key} value={f.key}>
@@ -1708,7 +1708,7 @@ function BulkRefApply({
                     setQ("");
                   }
                 }}
-                className="block w-full truncate px-3 py-1.5 text-left text-xs hover:bg-muted"
+                className="block w-full truncate px-3 py-1.5 text-left text-fine hover:bg-muted"
               >
                 {o.label}
               </button>
@@ -1720,7 +1720,7 @@ function BulkRefApply({
       {field.kind === "multi" && ids.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {ids.map((id) => (
-            <span key={id} className="flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-[11px]">
+            <span key={id} className="flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-fine">
               {labelById.get(id) ?? id}
               <button onClick={() => setIds((p) => p.filter((x) => x !== id))} className="text-muted-foreground hover:text-destructive">✕</button>
             </span>
@@ -1735,7 +1735,7 @@ function BulkRefApply({
               key={m}
               onClick={() => setMode(m)}
               className={cn(
-                "rounded-full border px-2.5 py-1 text-xs capitalize",
+                "rounded-full border px-2.5 py-1 text-fine capitalize",
                 mode === m ? "border-foreground bg-foreground text-background" : "text-muted-foreground"
               )}
             >

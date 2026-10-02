@@ -19,7 +19,7 @@ export function InlineCellEditor({
   return (
     <div
       className={cn(
-        "px-2 py-1.5 min-h-[32px] cursor-pointer text-sm truncate hover:bg-muted/40 transition-colors",
+        "px-2 py-1.5 min-h-[32px] cursor-pointer text-body truncate hover:bg-muted/40 transition-colors",
         isDirty && dirtyCell,
         !value && !isProductRef && "text-muted-foreground"
       )}
@@ -27,7 +27,7 @@ export function InlineCellEditor({
       title={value || undefined}
     >
       {isProductRef ? (
-        <span className="text-xs text-muted-foreground">
+        <span className="text-fine text-muted-foreground">
           {value ? `${parseGidList(value).length} linked` : "None"}
         </span>
       ) : (

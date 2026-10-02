@@ -144,7 +144,7 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
           }
           placeholder="Link Status"
         />
-        <span className="text-sm text-muted-foreground ml-auto">
+        <span className="text-body text-muted-foreground ml-auto">
           {filtered.length} group{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
@@ -161,7 +161,7 @@ export function GroupList({ groups, onAutoLink, isLinking }: GroupListProps) {
       </div>
 
       {filtered.length === 0 && (
-        <p className="text-center text-sm text-muted-foreground py-12">
+        <p className="text-center text-body text-muted-foreground py-12">
           No product groups found.
         </p>
       )}

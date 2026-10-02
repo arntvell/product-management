@@ -20,26 +20,26 @@ export default async function DuplicatesPage() {
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Duplicates</h1>
-          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          <h1 className="text-page">Duplicates</h1>
+          <span className="rounded-full border px-2.5 py-0.5 text-fine text-muted-foreground">
             one garment, two SKUs
           </span>
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
       </div>
 
-      <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+      <p className="mt-3 max-w-3xl text-body text-muted-foreground">
         Found by matching style, colourway name and colour — not by SKU or
         barcode, because the defining feature of these pairs is that one record
         has no barcode at all. The usual shape is a Cin7 import carrying the
         barcodes and a Threadflow sync of the same garment under the retired{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-xs">LIV-M-</code>/
-        <code className="rounded bg-muted px-1 py-0.5 text-xs">LIV-W-</code> SKU
+        <code className="rounded bg-muted px-1 py-0.5 text-fine">LIV-M-</code>/
+        <code className="rounded bg-muted px-1 py-0.5 text-fine">LIV-W-</code> SKU
         carrying none.
       </p>
 
@@ -51,8 +51,8 @@ export default async function DuplicatesPage() {
           { label: "vintage skipped", value: String(report.vintageSkipped) },
         ].map((s) => (
           <div key={s.label} className="flex items-baseline gap-1.5">
-            <span className="text-lg font-semibold tabular-nums">{s.value}</span>
-            <span className="text-xs text-muted-foreground">{s.label}</span>
+            <span className="text-section tabular-nums">{s.value}</span>
+            <span className="text-fine text-muted-foreground">{s.label}</span>
           </div>
         ))}
       </div>
@@ -66,7 +66,7 @@ export default async function DuplicatesPage() {
       </p>
 
       {pio ? (
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-fine text-muted-foreground">
           The <strong className="text-foreground">Pio</strong> column is the
           warehouse&rsquo;s own quantity for each SKU, from{" "}
           <code className="rounded bg-muted px-1 py-0.5">{pio.source}</code> (
@@ -76,10 +76,10 @@ export default async function DuplicatesPage() {
       ) : null}
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-body uppercase tracking-wide text-muted-foreground">
           High confidence — {high.length}
         </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-fine text-muted-foreground">
           Identical size runs, and every barcode on one side with none on the
           other. That is both the signal and the answer to which record to keep.
         </p>
@@ -92,10 +92,10 @@ export default async function DuplicatesPage() {
 
       {medium.length ? (
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-body uppercase tracking-wide text-muted-foreground">
             Worth a look — {medium.length}
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-fine text-muted-foreground">
             Same style, name and colour under different SKUs, but without the
             clean barcode split. Some of these are genuinely different products
             that happen to share a name.

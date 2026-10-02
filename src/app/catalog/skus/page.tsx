@@ -7,19 +7,19 @@ function Group({ g }: { g: StemGroup }) {
   return (
     <div className="rounded-lg border p-3">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-medium">{g.styleName}</span>
+        <span>{g.styleName}</span>
         <span className="flex flex-wrap gap-1.5">
           {g.stems.map((s) => (
             <code
               key={s}
-              className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium"
+              className="rounded bg-muted px-1.5 py-0.5 text-fine"
             >
               {s}
             </code>
           ))}
         </span>
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-fine text-muted-foreground">
         {g.skus.map((s) => (
           <code key={s}>{s}</code>
         ))}
@@ -29,9 +29,9 @@ function Group({ g }: { g: StemGroup }) {
 }
 
 function List({ items, empty }: { items: string[]; empty: string }) {
-  if (!items.length) return <p className="text-xs text-muted-foreground">{empty}</p>;
+  if (!items.length) return <p className="text-fine text-muted-foreground">{empty}</p>;
   return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-fine">
       {items.map((s) => (
         <code key={s} className="rounded bg-muted px-1.5 py-0.5">
           {s}
@@ -48,20 +48,20 @@ export default async function SkusPage() {
     <div className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">SKU conventions</h1>
-          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          <h1 className="text-page">SKU conventions</h1>
+          <span className="rounded-full border px-2.5 py-0.5 text-fine text-muted-foreground">
             where the master disagrees with itself
           </span>
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
       </div>
 
-      <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+      <p className="mt-3 max-w-3xl text-body text-muted-foreground">
         A report, not a migration. A SKU is an identifier other systems have
         already stored, printed and picked stock against, so rewriting one is a
         real change — it belongs behind a decision rather than a script. What
@@ -78,17 +78,17 @@ export default async function SkusPage() {
           { label: "merge tombstones", value: a.tombstones.length },
         ].map((s) => (
           <div key={s.label} className="flex items-baseline gap-1.5">
-            <span className="text-lg font-semibold tabular-nums">{s.value}</span>
-            <span className="text-xs text-muted-foreground">{s.label}</span>
+            <span className="text-section tabular-nums">{s.value}</span>
+            <span className="text-fine text-muted-foreground">{s.label}</span>
           </div>
         ))}
       </div>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-body uppercase tracking-wide text-muted-foreground">
           Abbreviation drift — {a.stemDrift.length} styles
         </h2>
-        <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+        <p className="mt-1 max-w-3xl text-fine text-muted-foreground">
           One style, two or more abbreviations of its own name. These are the
           ones worth settling, because the same garment family is unfindable by
           prefix.
@@ -101,10 +101,10 @@ export default async function SkusPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-body uppercase tracking-wide text-muted-foreground">
           Retired scheme — {a.legacyScheme.length} styles
         </h2>
-        <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+        <p className="mt-1 max-w-3xl text-fine text-muted-foreground">
           Carrying a <code className="rounded bg-muted px-1">LIV-M-</code> or{" "}
           <code className="rounded bg-muted px-1">LIV-W-</code> gender-prefixed
           SKU alongside a modern one. Most of these are the duplicate pairs on
@@ -123,21 +123,21 @@ export default async function SkusPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="text-body uppercase tracking-wide text-muted-foreground">
           Channel aliases — {a.aliases.length}
         </h2>
-        <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+        <p className="mt-1 max-w-3xl text-fine text-muted-foreground">
           One garment, two names. The master holds one record; a channel calls it
           something else. Recorded rather than merged — there is only one record
           to begin with.
         </p>
         <div className="mt-3 overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-fine">
             <thead className="border-b bg-muted/40">
               <tr>
-                <th className="px-3 py-2 font-medium">Origio</th>
-                <th className="px-3 py-2 font-medium">Channel</th>
-                <th className="px-3 py-2 font-medium">calls it</th>
+                <th className="px-3 py-2">Origio</th>
+                <th className="px-3 py-2">Channel</th>
+                <th className="px-3 py-2">calls it</th>
               </tr>
             </thead>
             <tbody>
@@ -155,10 +155,10 @@ export default async function SkusPage() {
 
       <section className="mt-8 grid gap-6 md:grid-cols-2">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-body uppercase tracking-wide text-muted-foreground">
             Mixed case — {a.mixedCase.length}
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-fine text-muted-foreground">
             Compares unequal to the same SKU typed in capitals. This is how{" "}
             <code className="rounded bg-muted px-1">LIV-Needle-W</code> and{" "}
             <code className="rounded bg-muted px-1">LIV-NEEDLE-W</code> became
@@ -169,10 +169,10 @@ export default async function SkusPage() {
           </div>
         </div>
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-body uppercase tracking-wide text-muted-foreground">
             Slashed sizes — {a.slashedSize.length}
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-fine text-muted-foreground">
             <code className="rounded bg-muted px-1">28/34</code> where the rest
             of the catalogue writes <code className="rounded bg-muted px-1">2834</code>.
             Matching normalises both, but the two spellings coexist in the data.
@@ -185,10 +185,10 @@ export default async function SkusPage() {
 
       {a.tombstones.length ? (
         <section className="mt-8">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <h2 className="text-body uppercase tracking-wide text-muted-foreground">
             Merge tombstones — {a.tombstones.length}
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-fine text-muted-foreground">
             Left behind by earlier merges. Harmless, but they show up in any SKU
             listing.
           </p>

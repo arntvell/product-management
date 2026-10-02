@@ -44,13 +44,13 @@ export function GroupCard({ group, onAutoLink, isLinking }: GroupCardProps) {
     <div className="border rounded-lg p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="font-medium">{group.baseName}</h3>
-          <p className="text-xs text-muted-foreground">
+          <h3>{group.baseName}</h3>
+          <p className="text-fine text-muted-foreground">
             {group.vendor} &middot; {group.productType} &middot;{" "}
             {group.members.length} products
           </p>
         </div>
-        <Badge className={cn("text-xs", statusColor[group.linkStatus])}>
+        <Badge className={cn("text-fine", statusColor[group.linkStatus])}>
           {statusLabel[group.linkStatus]}
         </Badge>
       </div>
@@ -110,7 +110,7 @@ function ProductChip({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded border text-sm",
+        "flex items-center gap-1.5 px-2 py-1 rounded border text-body",
         excluded && "opacity-40 line-through"
       )}
     >

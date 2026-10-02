@@ -42,7 +42,7 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit} className="w-full max-w-sm space-y-4 p-6">
         <div className="text-center mb-6">
           <h1 className="font-display text-page uppercase">Origo</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-body text-muted-foreground mt-1">
             Enter password to continue
           </p>
         </div>
@@ -57,7 +57,7 @@ export default function LoginPage() {
             autoFocus
           />
         </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="text-body text-destructive">{error}</p>}
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Signing in..." : "Sign In"}
         </Button>

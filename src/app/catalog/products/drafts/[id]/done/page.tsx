@@ -46,8 +46,8 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="text-2xl font-semibold">Created</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <h1 className="text-page">Created</h1>
+      <p className="mt-1 text-body text-muted-foreground">
         {colorways.length} colourway{colorways.length === 1 ? "" : "s"}, {variants} variants
         are in the master. Publishing is a separate, retryable step — the product exists
         whether or not a channel is reachable.
@@ -69,13 +69,13 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
 
       <div className="mt-6 rounded-md border">
         {colorways.map((c) => (
-          <div key={c.id} className="border-b px-4 py-3 text-sm last:border-0">
+          <div key={c.id} className="border-b px-4 py-3 text-body last:border-0">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <code className="font-mono text-xs">{c.colorwaySku}</code>
+                <code className="font-mono text-fine">{c.colorwaySku}</code>
                 <div className="truncate text-muted-foreground">{c.name}</div>
               </div>
-              <div className="shrink-0 text-xs text-muted-foreground">
+              <div className="shrink-0 text-fine text-muted-foreground">
                 {c._count.variants} sizes
               </div>
             </div>
@@ -83,7 +83,7 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
               {c.publications.map((p) => (
                 <span
                   key={p.channel}
-                  className="rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground"
+                  className="rounded-full border px-2 py-0.5 text-fine text-muted-foreground"
                 >
                   {p.channel} · {p.published ? "published" : "queued"}
                 </span>
@@ -96,19 +96,19 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
       <div className="mt-6 flex flex-wrap gap-2">
         <Link
           href="/catalog/products/new"
-          className="rounded-md border bg-foreground px-3 py-1.5 text-sm font-medium text-background"
+          className="rounded-md border bg-foreground px-3 py-1.5 text-body text-background"
         >
           + Another product
         </Link>
         <Link
           href="/catalog/publishing"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Publishing
         </Link>
         <Link
           href="/catalog/products/drafts"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           All drafts
         </Link>

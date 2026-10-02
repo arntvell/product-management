@@ -23,13 +23,13 @@ export default async function StylesPage({
         <div>
           <Link
             href="/catalog"
-            className="text-xs text-muted-foreground underline underline-offset-4"
+            className="text-fine text-muted-foreground underline underline-offset-4"
           >
             ← Catalog
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold">Styles</h1>
+          <h1 className="mt-1 text-page">Styles</h1>
         </div>
-        <span className="text-sm text-muted-foreground tabular-nums">
+        <span className="text-body text-muted-foreground tabular-nums">
           {styles.length} styles
         </span>
       </div>
@@ -42,7 +42,7 @@ export default async function StylesPage({
             <Link
               key={f.label}
               href={f.code ? `/catalog/styles?season=${f.code}` : "/catalog/styles"}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-full border px-3 py-1 text-fine transition-colors ${
                 active
                   ? "border-foreground bg-foreground text-background"
                   : "text-muted-foreground hover:bg-muted"
@@ -55,7 +55,7 @@ export default async function StylesPage({
       </div>
 
       {styles.length === 0 ? (
-        <p className="mt-8 text-sm text-muted-foreground">
+        <p className="mt-8 text-body text-muted-foreground">
           No styles yet — run a Threadflow sync from the{" "}
           <Link href="/catalog" className="underline underline-offset-4">
             Catalog
@@ -64,9 +64,9 @@ export default async function StylesPage({
         </p>
       ) : (
         <div className="mt-6 overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
+          <table className="w-full text-body">
             <thead>
-              <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">
                 <th className="w-14 p-3"></th>
                 <th className="p-3">Style</th>
                 <th className="p-3">SKU</th>
@@ -95,7 +95,7 @@ export default async function StylesPage({
                         )}
                       </div>
                     </td>
-                    <td className="p-3 font-medium">
+                    <td className="p-3">
                       <Link
                         href={`/catalog/styles/${s.id}`}
                         className="hover:underline"
@@ -103,7 +103,7 @@ export default async function StylesPage({
                         {s.styleName}
                       </Link>
                     </td>
-                    <td className="p-3 font-mono text-xs text-muted-foreground">
+                    <td className="p-3 font-mono text-fine text-muted-foreground">
                       {s.styleSku}
                     </td>
                     <td className="p-3 capitalize text-muted-foreground">

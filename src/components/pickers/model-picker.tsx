@@ -58,9 +58,9 @@ export function ModelPicker({
             >
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{currentValue}</p>
+                  <p className="text-body truncate">{currentValue}</p>
                 </div>
-                <Badge variant="destructive" className="text-xs">
+                <Badge variant="destructive" className="text-fine">
                   Remove
                 </Badge>
               </div>
@@ -76,8 +76,8 @@ export function ModelPicker({
             >
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{model.fields.name}</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-body truncate">{model.fields.name}</p>
+                  <p className="text-fine text-muted-foreground">
                     {model.fields.height}
                     {model.fields.size_worn &&
                       ` · ${model.fields.size_worn}`}

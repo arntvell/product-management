@@ -91,7 +91,7 @@ export default function MediaPage() {
       <div className="flex items-center justify-center h-[calc(100vh-56px)]">
         <div className="text-center space-y-3">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading products...</p>
+          <p className="text-body text-muted-foreground">Loading products...</p>
         </div>
       </div>
     );
@@ -101,8 +101,8 @@ export default function MediaPage() {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-56px)]">
         <div className="text-center space-y-3">
-          <p className="text-sm text-destructive">Failed to load products</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-body text-destructive">Failed to load products</p>
+          <p className="text-fine text-muted-foreground">
             {error instanceof Error ? error.message : "Unknown error"}
           </p>
           <Button variant="outline" size="sm" onClick={() => refetch()}>

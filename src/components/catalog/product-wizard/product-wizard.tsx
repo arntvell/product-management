@@ -114,7 +114,7 @@ export function ProductWizard({
               disabled={!reachable && !active}
               onClick={() => goToStep(s)}
               className={
-                "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors " +
+                "rounded-md border px-2.5 py-1 text-fine transition-colors " +
                 (active
                   ? "border-foreground bg-foreground text-background"
                   : reachable
@@ -127,7 +127,7 @@ export function ProductWizard({
             </button>
           );
         })}
-        <span className="ml-auto text-xs text-muted-foreground">{saveLabel(state)}</span>
+        <span className="ml-auto text-fine text-muted-foreground">{saveLabel(state)}</span>
       </nav>
 
       <div className="min-h-[18rem]">

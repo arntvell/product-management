@@ -25,9 +25,9 @@ function Seasons({ codes }: { codes: string[] }) {
 
 function TargetLine({ style, renameTo }: { style: SplitStyle; renameTo?: string }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-muted/50 px-3 py-2 text-sm">
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md bg-muted/50 px-3 py-2 text-body">
       <Badge>keep</Badge>
-      <span className="font-medium">
+      <span>
         {renameTo && renameTo !== style.styleName ? (
           <>
             <span className="text-muted-foreground line-through">{style.styleName}</span>
@@ -38,17 +38,17 @@ function TargetLine({ style, renameTo }: { style: SplitStyle; renameTo?: string 
           style.styleName
         )}
       </span>
-      <code className="text-xs">{style.styleSku}</code>
-      <span className="text-xs text-muted-foreground">
+      <code className="text-fine">{style.styleSku}</code>
+      <span className="text-fine text-muted-foreground">
         {style.colorways.length} colourway{style.colorways.length === 1 ? "" : "s"}
       </span>
       {style.threadflowId ? (
-        <span className="text-xs text-muted-foreground">Threadflow</span>
+        <span className="text-fine text-muted-foreground">Threadflow</span>
       ) : (
-        <span className="text-xs text-muted-foreground">{style.source}</span>
+        <span className="text-fine text-muted-foreground">{style.source}</span>
       )}
-      <span className="text-xs text-muted-foreground">{style.category}</span>
-      {style.inLoom ? <span className="text-xs text-muted-foreground">in Loom</span> : null}
+      <span className="text-fine text-muted-foreground">{style.category}</span>
+      {style.inLoom ? <span className="text-fine text-muted-foreground">in Loom</span> : null}
     </div>
   );
 }
@@ -114,7 +114,7 @@ function Outcome({
 
   return (
     <div
-      className={`mt-3 rounded-md border p-3 text-xs ${
+      className={`mt-3 rounded-md border p-3 text-fine ${
         pushFailed
           ? "border-ink bg-paper"
           : "border-line bg-paper"
@@ -397,20 +397,20 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{p.targetRename ?? p.target.styleName}</span>
+            <span>{p.targetRename ?? p.target.styleName}</span>
             <span
-              className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${CONFIDENCE_STYLE[p.confidence]}`}
+              className={`rounded-full border px-2 py-0.5 text-fine ${CONFIDENCE_STYLE[p.confidence]}`}
             >
               {p.confidence}
             </span>
-            <span className="text-[11px] text-muted-foreground">{KIND_LABEL[p.kind]}</span>
+            <span className="text-fine text-muted-foreground">{KIND_LABEL[p.kind]}</span>
             {done ? (
               <span className="inline-flex h-6 items-center border border-line px-2 text-meta uppercase text-ink">
                 done — applied and pushed
               </span>
             ) : null}
           </div>
-          <p className="mt-1 max-w-3xl text-xs text-muted-foreground">{p.reason}</p>
+          <p className="mt-1 max-w-3xl text-fine text-muted-foreground">{p.reason}</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" size="sm" disabled={!!busy} onClick={preview}>
@@ -438,13 +438,13 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
         <TargetLine style={p.target} renameTo={p.targetRename} />
         {rename && p.targetColorways?.length ? (
           <div className="mt-1.5 space-y-1 rounded-md border border-dashed px-3 py-2">
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-fine text-muted-foreground">
               The promoted style&rsquo;s own colourways need the same strip, or it
               reads &ldquo;{p.targetColorways[0].name}&rdquo; beside &ldquo;
               {p.absorb[0]?.colorways[0]?.proposedName ?? "Navy"}&rdquo;.
             </p>
             {p.targetColorways.map((c) => (
-              <label key={c.colorwayId} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+              <label key={c.colorwayId} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fine">
                 <Checkbox
                   checked={chosen.has(c.colorwayId)}
                   onCheckedChange={() => toggle(c.colorwayId)}
@@ -469,16 +469,16 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
             key={a.styleId}
             className={`rounded-md border px-3 py-2 ${dismissed.has(a.styleSku) ? "opacity-40" : ""}`}
           >
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-body">
               <Badge variant="outline">move out of</Badge>
               <span>{a.styleName}</span>
-              <code className="text-xs">{a.styleSku}</code>
-              <span className="text-xs text-muted-foreground">{a.source}</span>
-              {a.brand ? <span className="text-xs text-muted-foreground">{a.brand}</span> : null}
-              <span className="text-xs text-muted-foreground">{a.category}</span>
+              <code className="text-fine">{a.styleSku}</code>
+              <span className="text-fine text-muted-foreground">{a.source}</span>
+              {a.brand ? <span className="text-fine text-muted-foreground">{a.brand}</span> : null}
+              <span className="text-fine text-muted-foreground">{a.category}</span>
               <button
                 type="button"
-                className="ml-auto text-xs underline underline-offset-4 text-muted-foreground hover:text-foreground"
+                className="ml-auto text-fine underline underline-offset-4 text-muted-foreground hover:text-foreground"
                 onClick={() => keepSeparate(a.styleSku)}
               >
                 not this one
@@ -488,7 +488,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
               {a.colorways.map((c) => (
                 <label
                   key={c.colorwayId}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fine"
                 >
                   <Checkbox
                     checked={chosen.has(c.colorwayId)}
@@ -516,7 +516,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
         ))}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-4 text-xs">
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-fine">
         <label className="flex items-center gap-2">
           <Checkbox checked={rename} onCheckedChange={(v) => setRename(Boolean(v))} />
           Strip the garment name from the colourway names
@@ -547,16 +547,16 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
       {p.blockers.map((b) => (
         <p
           key={b}
-          className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs"
+          className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-2 text-fine"
         >
           {b}
         </p>
       ))}
 
-      {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="mt-3 text-fine text-destructive">{error}</p> : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-fine text-muted-foreground">
           Loom on its own, when the Origio change is already made:
         </span>
         <Button variant="outline" size="sm" disabled={!!busy} onClick={() => verifyOnly(true)}>
@@ -583,10 +583,10 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
 
       {raw ? (
         <details className="mt-2">
-          <summary className="cursor-pointer text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer text-fine text-muted-foreground">
             Raw response
           </summary>
-          <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs">
+          <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-muted p-3 text-fine">
             {JSON.stringify(raw, null, 2)}
           </pre>
         </details>

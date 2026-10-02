@@ -20,13 +20,13 @@ export function TextEditor({
 }: TextEditorProps) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
+      <Label className="text-fine">{label}</Label>
       <Textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={multiline ? 6 : 2}
         placeholder={placeholder}
-        className="text-sm"
+        className="text-body"
       />
     </div>
   );

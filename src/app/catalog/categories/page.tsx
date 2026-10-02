@@ -13,15 +13,15 @@ export default async function CategoriesPage() {
     <main className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Categories</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-page">Categories</h1>
+          <p className="mt-1 text-body text-muted-foreground">
             One vocabulary, mapped outward. Archive what should never be offered again —
             historic products keep pointing at it.
           </p>
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Back to catalog
         </Link>

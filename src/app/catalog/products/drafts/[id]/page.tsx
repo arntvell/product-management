@@ -44,21 +44,21 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
     <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{draft.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-page">{draft.title}</h1>
+          <p className="mt-1 text-body text-muted-foreground">
             External brands only — Livid product arrives through the Threadflow feed.
           </p>
         </div>
         <Link
           href="/catalog/products/drafts"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="rounded-md border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           All drafts
         </Link>
       </div>
 
       {draft.status === "FINALIZING" ? (
-        <div className="mb-6 border border-ink bg-paper p-4 text-sm text-ink">
+        <div className="mb-6 border border-ink bg-paper p-4 text-body text-ink">
           This draft was interrupted while being created. Pressing create again will finish
           it — the ids were reserved before the write, so nothing can be created twice.
         </div>

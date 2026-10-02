@@ -191,28 +191,28 @@ export function PricesTable({
                 )}
               >
                 <div
-                  className="flex items-center px-3 border-r text-sm gap-2"
+                  className="flex items-center px-3 border-r text-body gap-2"
                   style={{ width: COL_TITLE, minWidth: COL_TITLE }}
                 >
                   <span className="truncate" title={product.title}>
                     {product.title}
                   </span>
                   {mixed && (
-                    <span className="text-xs text-muted-foreground bg-muted rounded px-1 shrink-0">
+                    <span className="text-fine text-muted-foreground bg-muted rounded px-1 shrink-0">
                       mixed
                     </span>
                   )}
                 </div>
 
                 <div
-                  className="flex items-center px-3 border-r text-sm text-muted-foreground truncate"
+                  className="flex items-center px-3 border-r text-body text-muted-foreground truncate"
                   style={{ width: COL_VENDOR, minWidth: COL_VENDOR }}
                 >
                   {product.vendor}
                 </div>
 
                 <div
-                  className="flex items-center px-3 border-r text-sm text-muted-foreground truncate"
+                  className="flex items-center px-3 border-r text-body text-muted-foreground truncate"
                   style={{ width: COL_TYPE, minWidth: COL_TYPE }}
                 >
                   {product.productType || "—"}

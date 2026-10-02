@@ -68,8 +68,8 @@ export function CellPanel({
     <Sheet open onOpenChange={(open) => !open && close()}>
       <SheetContent className="flex w-[560px] flex-col sm:max-w-[560px]">
         <SheetHeader>
-          <SheetTitle className="text-base">{target.rowLabel}</SheetTitle>
-          <p className="text-sm text-muted-foreground">
+          <SheetTitle className="text-body">{target.rowLabel}</SheetTitle>
+          <p className="text-body text-muted-foreground">
             {target.fieldLabel}
             {channel && <> · {target.layer} override</>}
           </p>
@@ -78,8 +78,8 @@ export function CellPanel({
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
           {confirmDiscard && (
             <div className="space-y-2 border border-ink bg-paper p-3">
-              <p className="text-sm font-medium">You have unsaved changes here</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-body">You have unsaved changes here</p>
+              <p className="text-fine text-muted-foreground">
                 Closing discards what you typed in this panel. Anything already
                 applied is kept and still needs Save.
               </p>
@@ -105,7 +105,7 @@ export function CellPanel({
           <div className="flex min-h-0 flex-1 flex-col">
             <Label htmlFor="cell-panel-value">{target.fieldLabel}</Label>
             {channel && (
-              <p className="mb-1 mt-0.5 text-xs text-muted-foreground">
+              <p className="mb-1 mt-0.5 text-fine text-muted-foreground">
                 {target.inherited
                   ? "Leave this empty to use the base value below."
                   : "No base value to fall back on."}
@@ -117,14 +117,14 @@ export function CellPanel({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={channel ? target.inherited || "" : "Write here…"}
-              className="min-h-[240px] flex-1 text-sm"
+              className="min-h-[240px] flex-1 text-body"
             />
             {channel && target.inherited && (
               <div className="mt-2 rounded-md border bg-muted/30 p-2">
-                <p className="text-[11px] font-medium uppercase text-muted-foreground">
+                <p className="text-fine uppercase text-muted-foreground">
                   Base value
                 </p>
-                <p className="mt-0.5 whitespace-pre-wrap text-xs text-muted-foreground">
+                <p className="mt-0.5 whitespace-pre-wrap text-fine text-muted-foreground">
                   {target.inherited}
                 </p>
               </div>
@@ -163,7 +163,7 @@ export function CellPanel({
             <Button variant="outline" onClick={close}>
               Cancel
             </Button>
-            <span className="ml-auto text-xs text-muted-foreground">
+            <span className="ml-auto text-fine text-muted-foreground">
               Still needs <b>Save</b> afterwards
             </span>
           </div>

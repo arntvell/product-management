@@ -138,7 +138,7 @@ export function CopyFieldsDialog({
       <DialogContent className="flex max-h-[85vh] w-[720px] max-w-[92vw] flex-col">
         <DialogHeader>
           <DialogTitle>Copy fields from a product</DialogTitle>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             Find a product that is already written — Shopify included, which is
             where the older copy lives — and take the fields worth taking onto
             the {targetCount} selected {targetCount === 1 ? "product" : "products"}.
@@ -153,22 +153,22 @@ export function CopyFieldsDialog({
             reset();
           }}
           placeholder="Search by product name, handle or SKU — e.g. Brass"
-          className="w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+          className="w-full rounded-md border bg-transparent px-3 py-2 text-body"
         />
 
         {warnings.map((w) => (
-          <p key={w} className="text-xs text-ink">
+          <p key={w} className="text-fine text-ink">
             {w}
           </p>
         ))}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {searching && (
-            <p className="py-4 text-center text-xs text-muted-foreground">Searching…</p>
+            <p className="py-4 text-center text-fine text-muted-foreground">Searching…</p>
           )}
 
           {!searching && sources?.length === 0 && (
-            <p className="py-4 text-center text-xs text-muted-foreground">
+            <p className="py-4 text-center text-fine text-muted-foreground">
               Nothing found with fields to copy. Products with no copy at all are
               not listed.
             </p>
@@ -186,7 +186,7 @@ export function CopyFieldsDialog({
               >
                 <span
                   className={cn(
-                    "mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+                    "mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-fine uppercase",
                     s.origin === "shopify"
                       ? "bg-hover text-muted-foreground"
                       : "bg-muted text-muted-foreground"
@@ -195,8 +195,8 @@ export function CopyFieldsDialog({
                   {s.origin}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{s.title}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
+                  <span className="block truncate text-body">{s.title}</span>
+                  <span className="block truncate text-fine text-muted-foreground">
                     {s.reference}
                     {s.vendor && <> · {s.vendor}</>} ·{" "}
                     {Object.keys(s.values).length} field(s) to copy
@@ -209,14 +209,14 @@ export function CopyFieldsDialog({
           {picked && (
             <div>
               <div className="flex items-center gap-2 border-b pb-2">
-                <span className="text-sm font-medium">{picked.title}</span>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-body">{picked.title}</span>
+                <span className="text-fine text-muted-foreground">
                   {picked.origin} · {picked.reference}
                 </span>
                 <button
                   type="button"
                   onClick={reset}
-                  className="ml-auto text-xs text-muted-foreground underline underline-offset-4"
+                  className="ml-auto text-fine text-muted-foreground underline underline-offset-4"
                 >
                   Pick another
                 </button>
@@ -237,23 +237,23 @@ export function CopyFieldsDialog({
                           className="mt-1"
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="text-xs font-medium">{label}</span>
+                          <span className="text-fine">{label}</span>
                           {value !== preview && (
                             <span
-                              className="ml-1 text-[10px] uppercase text-muted-foreground"
+                              className="ml-1 text-fine uppercase text-muted-foreground"
                               title="The value is HTML; the preview has the tags removed. The markup itself is what gets copied, because Shopify renders it."
                             >
                               html
                             </span>
                           )}
-                          <span className="mt-0.5 block whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+                          <span className="mt-0.5 block whitespace-pre-wrap break-words text-fine text-muted-foreground">
                             {preview.slice(0, 300)}
                             {preview.length > 300 && "…"}
                           </span>
                         </span>
                       </label>
                       {field === "tags" && fields.has("tags") && (
-                        <div className="ml-6 mt-1 flex gap-3 text-[11px]">
+                        <div className="ml-6 mt-1 flex gap-3 text-fine">
                           {(["add", "replace"] as const).map((m) => (
                             <label key={m} className="flex items-center gap-1">
                               <input
@@ -284,7 +284,7 @@ export function CopyFieldsDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <span className="ml-auto text-xs text-muted-foreground">
+          <span className="ml-auto text-fine text-muted-foreground">
             Lands as pending edits — review, then <b>Save</b>
           </span>
         </DialogFooter>

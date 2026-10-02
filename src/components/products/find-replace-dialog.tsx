@@ -167,7 +167,7 @@ export function FindReplaceDialog({
                   key={col.key}
                   type="button"
                   onClick={() => toggleField(col.key)}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                  className={`px-2.5 py-1 rounded-full text-fine border transition-colors ${
                     selectedFields.has(col.key)
                       ? "bg-primary text-primary-foreground border-primary"
                       : "border-border text-muted-foreground hover:border-foreground"
@@ -181,17 +181,17 @@ export function FindReplaceDialog({
 
           {findText && (
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-body text-muted-foreground">
                 {matches.length === 0 ? (
                   "No matches found."
                 ) : (
                   <>
-                    <span className="font-medium text-foreground">
+                    <span className="text-foreground">
                       {totalOccurrences} occurrence
                       {totalOccurrences !== 1 ? "s" : ""}
                     </span>{" "}
                     across{" "}
-                    <span className="font-medium text-foreground">
+                    <span className="text-foreground">
                       {uniqueProducts} product
                       {uniqueProducts !== 1 ? "s" : ""}
                     </span>
@@ -213,11 +213,11 @@ export function FindReplaceDialog({
               </p>
 
               {matches.length > 0 && (
-                <div className="border rounded divide-y max-h-72 overflow-auto text-xs">
+                <div className="border rounded divide-y max-h-72 overflow-auto text-fine">
                   {matches.map((m, i) => (
                     <div key={i} className="px-3 py-2 space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium">{m.product.title}</span>
+                        <span>{m.product.title}</span>
                         <span className="text-muted-foreground">·</span>
                         <span className="text-muted-foreground">{m.fieldLabel}</span>
                         {m.occurrences > 1 && (
@@ -229,7 +229,7 @@ export function FindReplaceDialog({
                       {m.snippets.slice(0, 2).map((s, j) => (
                         <p
                           key={j}
-                          className="font-mono text-[11px] text-muted-foreground leading-relaxed"
+                          className="font-mono text-fine text-muted-foreground leading-relaxed"
                         >
                           {s.before}
                           <mark className="bg-selected px-0 not-italic text-ink">

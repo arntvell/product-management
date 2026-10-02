@@ -71,7 +71,7 @@ export default function ModelsPage() {
       <div className="flex items-center justify-center h-[calc(100vh-56px)]">
         <div className="text-center space-y-3">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading models...</p>
+          <p className="text-body text-muted-foreground">Loading models...</p>
         </div>
       </div>
     );
@@ -81,8 +81,8 @@ export default function ModelsPage() {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-56px)]">
         <div className="text-center space-y-3">
-          <p className="text-sm text-destructive">Failed to load models</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-body text-destructive">Failed to load models</p>
+          <p className="text-fine text-muted-foreground">
             {error instanceof Error ? error.message : "Unknown error"}
           </p>
         </div>
@@ -93,8 +93,8 @@ export default function ModelsPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold">Models</h2>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h2 className="text-section">Models</h2>
+        <p className="text-body text-muted-foreground mt-1">
           Manage model metaobjects for product model info references.
         </p>
       </div>
@@ -107,7 +107,7 @@ export default function ModelsPage() {
           className="max-w-xs"
         />
         <Button onClick={handleCreate}>Create Model</Button>
-        <span className="text-sm text-muted-foreground ml-auto">
+        <span className="text-body text-muted-foreground ml-auto">
           {filtered.length} model{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>

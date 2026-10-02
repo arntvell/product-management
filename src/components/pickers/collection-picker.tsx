@@ -73,11 +73,11 @@ export function CollectionPicker({
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">
+                  <p className="text-body truncate">
                     {selectedCollection.title}
                   </p>
                 </div>
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-fine">
                   Selected
                 </Badge>
               </div>
@@ -102,8 +102,8 @@ export function CollectionPicker({
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{collection.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="text-body truncate">{collection.title}</p>
+                    <p className="text-fine text-muted-foreground truncate">
                       /{collection.handle}
                     </p>
                   </div>

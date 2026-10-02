@@ -60,7 +60,7 @@ export function ReferenceCell({
 }: ReferenceCellProps) {
   if (disabled) {
     return (
-      <div className="px-2 py-1.5 min-h-[32px] text-sm text-muted-foreground">
+      <div className="px-2 py-1.5 min-h-[32px] text-body text-muted-foreground">
         N/A
       </div>
     );
@@ -71,7 +71,7 @@ export function ReferenceCell({
   return (
     <div
       className={cn(
-        "px-2 py-1.5 min-h-[32px] cursor-pointer text-sm",
+        "px-2 py-1.5 min-h-[32px] cursor-pointer text-body",
         isDirty && dirtyCell
       )}
       onClick={onClick}
@@ -79,7 +79,7 @@ export function ReferenceCell({
       {resolved ? (
         <div className="flex items-center gap-1">
           <span className="size-1.5 shrink-0 rounded-full bg-ink" />
-          <span className="text-xs truncate">{resolved}</span>
+          <span className="text-fine truncate">{resolved}</span>
         </div>
       ) : (
         <span className="text-muted-foreground">—</span>
