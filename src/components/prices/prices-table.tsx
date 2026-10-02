@@ -38,7 +38,7 @@ function PriceCell({ value, isDirty, onChange }: PriceCellProps) {
     return (
       <input
         autoFocus
-        className="w-full h-full px-2 text-sm bg-white border border-blue-400 focus:outline-none font-mono"
+        className="h-full w-full border border-ink bg-paper px-2 text-body tabular-nums"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => commit(draft)}
@@ -121,8 +121,8 @@ export function PricesTable({
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {dirtyCount > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-sm shrink-0">
-          <span className="text-yellow-800 font-medium">
+        <div className="flex shrink-0 items-center gap-3 border-b border-line bg-selected px-4 py-2 text-body">
+          <span className="text-meta uppercase tabular-nums">
             {dirtyCount} unsaved price {dirtyCount === 1 ? "change" : "changes"}
           </span>
           <Button size="sm" onClick={onSave} disabled={isSaving}>

@@ -20,7 +20,7 @@ export function FileCell({ value, isDirty, onClick }: FileCellProps) {
     >
       {value ? (
         <div className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+          <span className="size-1.5 shrink-0 rounded-full bg-ink" />
           <span className="text-xs truncate">Flat set</span>
         </div>
       ) : (

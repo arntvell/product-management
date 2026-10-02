@@ -23,6 +23,7 @@ import { COLUMN_DEFINITIONS } from "@/lib/columns";
 import type { ColumnDef } from "@/lib/columns";
 import type { SortKey } from "@/hooks/use-product-search";
 import { parseGidList, serializeGidList, cn } from "@/lib/utils";
+import { StatusBadge, type ProductStatus } from "@/components/ui/status-badge";
 import {  gridHead,
   gridRow,
   gridRowSelected,
@@ -101,11 +102,11 @@ function StatusCell({
   onChange: (s: Product["status"]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const colorClass = {
-    ACTIVE: "bg-green-100 text-green-800",
-    DRAFT: "bg-yellow-100 text-yellow-800",
-    ARCHIVED: "bg-gray-100 text-gray-800",
-  }[status];
+  const statusGlyph = {
+    ACTIVE: "live",
+    DRAFT: "draft",
+    ARCHIVED: "archived",
+  }[status] as ProductStatus;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -116,9 +117,7 @@ function StatusCell({
             isDirty && dirtyCell
           )}
         >
-          <span className={cn("text-xs px-1.5 py-0.5 rounded", colorClass)}>
-            {status}
-          </span>
+          <StatusBadge status={statusGlyph} label={status} />
         </div>
       </PopoverTrigger>
       <PopoverContent className="w-36 p-1" align="start">
@@ -649,8 +648,8 @@ export function ProductTable({
       />
 
       {dirtyCount > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b">
-          <span className="text-sm">
+        <div className="flex items-center gap-3 border-b border-line bg-selected px-4 py-2">
+          <span className="text-meta uppercase tabular-nums">
             {dirtyCount} unsaved change{dirtyCount !== 1 ? "s" : ""}
           </span>
           <Button size="sm" onClick={onSaveAll} disabled={isSaving}>

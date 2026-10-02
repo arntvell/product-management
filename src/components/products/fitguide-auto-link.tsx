@@ -172,7 +172,7 @@ export function FitguideAutoLink({
                       <span className="truncate flex-1 min-w-0">
                         {m.product.title}
                         {m.isOverride && (
-                          <span className="ml-1 text-xs text-yellow-600">(update)</span>
+                          <span className="ml-1 text-meta uppercase text-ink">(update)</span>
                         )}
                       </span>
                       <span className="text-muted-foreground shrink-0">&rarr;</span>

@@ -70,7 +70,7 @@ export function SidePanel({
         </SheetHeader>
         <div className="mt-6 space-y-4">
           {showConfirm && (
-            <div className="rounded-md border border-yellow-300 bg-yellow-50 p-3 space-y-2">
+            <div className="space-y-2 border border-ink bg-paper p-3">
               <p className="text-sm font-medium">You have unsaved changes</p>
               <p className="text-xs text-muted-foreground">
                 Closing will discard your edits.
