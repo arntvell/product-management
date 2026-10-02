@@ -1695,7 +1695,7 @@ function BulkRefApply({
           className="h-8 w-64"
         />
         {matches.length > 0 && (
-          <div className="absolute z-20 mt-1 w-64 overflow-hidden border bg-background shadow-md">
+          <div className="absolute z-20 mt-1 w-64 overflow-hidden border border-line bg-paper shadow-overlay">
             {matches.map((o) => (
               <button
                 key={o.id}

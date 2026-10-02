@@ -212,7 +212,7 @@ export function CollectionsTable({
   }
 
   const selectCls =
-    "h-8 border bg-background px-2 text-fine text-foreground shadow-sm";
+    "h-8 border border-line bg-paper px-2 text-fine text-ink";
 
   return (
     <div className="mt-4 flex min-h-0 flex-1 flex-col">

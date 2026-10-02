@@ -23,7 +23,21 @@
    --------------------------------------------------------------------------- */
 
 @theme inline {
+  /* The namespaces are closed. `initial` clears Tailwind's defaults, so only
+     what is redefined below exists as a utility: bg-blue-500, text-xs,
+     font-bold and rounded-lg are not off-limits by convention, they do not
+     compile. This is the enforcement §11 asks for, and it is why the palette,
+     the scale and the one weight can be relied on rather than remembered. */
+  --color-*: initial;
+  --text-*: initial;
+  --font-weight-*: initial;
+  --radius-*: initial;
+
   /* Design-system palette — use these names in new code. */
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-inherit: inherit;
+
   --color-ink: var(--ink);
   --color-ecru: var(--ecru);
   --color-paper: var(--paper);
@@ -63,6 +77,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* One weight. §4 */
+  --font-weight-normal: 400;
+
   /* Two families, one weight. Hierarchy comes from size, case and family. */
   --font-display: var(--font-forma-display), "Helvetica Neue", Arial, sans-serif;
   --font-sans: var(--font-forma-text), "Helvetica Neue", Arial, sans-serif;
@@ -81,15 +98,9 @@
   --text-page--line-height: 32px;
   --text-page--letter-spacing: -0.01em;
 
-  /* Radius 0 everywhere. `full` survives for the one pill: FilterChip. */
-  --radius-xs: 0px;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --radius-2xl: 0px;
-  --radius-3xl: 0px;
-  --radius-4xl: 0px;
+  /* Radius 0 everywhere. `full` survives for the one pill — FilterChip — and
+     for the status dots, which are circles because they are dots. */
+  --radius-full: 9999px;
 
   /* The Drawer is the only element with a shadow. */
   --shadow-overlay: 0 0 48px rgba(0, 0, 0, 0.12);

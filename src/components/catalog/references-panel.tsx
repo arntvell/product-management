@@ -185,7 +185,7 @@ function ProductMulti({
           className="h-8"
         />
         {matches.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full overflow-hidden border bg-background shadow-md">
+          <div className="absolute z-10 mt-1 w-full overflow-hidden border border-line bg-paper shadow-overlay">
             {matches.map((o) => (
               <button
                 key={o.id}

@@ -246,7 +246,7 @@ function SortableTile({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "group relative overflow-hidden border bg-muted",
-        isDragging && "z-10 opacity-80 shadow-lg"
+        isDragging && "z-10 opacity-80 shadow-overlay"
       )}
     >
       <div
