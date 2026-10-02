@@ -234,7 +234,7 @@ export function DraftPushPanel({
       </div>
 
       {blocked.length ? (
-        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           {blocked.length} item{blocked.length === 1 ? "" : "s"} held back:
           <ul className="mt-1 list-inside list-disc">
             {blocked.slice(0, 6).map((b, i) => (

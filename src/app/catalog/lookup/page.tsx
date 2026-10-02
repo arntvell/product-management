@@ -19,7 +19,7 @@ function Cell({ value, origio }: { value: ChannelValue; origio: string | null })
   return (
     <td
       className={`px-3 py-1.5 font-mono ${
-        differs ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"
+        differs ? "font-medium text-amber-700" : "text-muted-foreground"
       }`}
     >
       {value.raw}
@@ -87,7 +87,7 @@ export default async function LookupPage({
                     <span className="text-xs text-muted-foreground">{r.brand}</span>
                   ) : null}
                   {r.kind !== "MERCHANDISE" ? (
-                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700 dark:text-amber-400">
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase text-amber-700">
                       {r.kind}
                     </span>
                   ) : null}

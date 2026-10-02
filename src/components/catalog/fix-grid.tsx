@@ -212,7 +212,7 @@ export function FixGrid({
           className="ml-2 w-56 rounded-full border bg-background px-3 py-1 text-xs"
         />
         {touched.size > 0 && (
-          <span className="ml-2 text-xs text-green-700 dark:text-green-500">
+          <span className="ml-2 text-xs text-green-700">
             {touched.size} edited this session · rows stay listed until you reload
           </span>
         )}
@@ -404,7 +404,7 @@ function Row({
           {row.origin ? ` · ${row.origin.toLowerCase()}` : ""}
         </div>
         {row.warnings.map((w) => (
-          <div key={w} className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-500">
+          <div key={w} className="mt-0.5 text-[11px] text-amber-700">
             ⚠ {w}
           </div>
         ))}
@@ -443,19 +443,19 @@ function Row({
       />
       <td className="p-2">
         {rowFailed && (
-          <div className="mb-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700 dark:text-rose-400">
+          <div className="mb-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-rose-700">
             not saved
           </div>
         )}
         {row.missing.length === 0 ? (
-          <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-green-700 dark:text-green-500">
+          <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-green-700">
             ready
           </span>
         ) : (
           <div className="text-[11px] text-muted-foreground">
             needs {row.missing.join(", ")}
             {row.unfixableHere.length > 0 && (
-              <div className="mt-0.5 text-rose-700 dark:text-rose-400">
+              <div className="mt-0.5 text-rose-700">
                 {row.unfixableHere.join(" + ")} — not fixable here
               </div>
             )}

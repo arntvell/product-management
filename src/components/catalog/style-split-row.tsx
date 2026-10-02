@@ -7,8 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { SplitProposal, SplitStyle } from "@/lib/master/style-splits";
 
 const CONFIDENCE_STYLE: Record<string, string> = {
-  high: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  medium: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  high: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700",
+  medium: "border-amber-500/40 bg-amber-500/10 text-amber-700",
   low: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
@@ -43,7 +43,7 @@ function TargetLine({ style, renameTo }: { style: SplitStyle; renameTo?: string 
         {style.colorways.length} colourway{style.colorways.length === 1 ? "" : "s"}
       </span>
       {style.threadflowId ? (
-        <span className="text-xs text-emerald-600 dark:text-emerald-400">Threadflow</span>
+        <span className="text-xs text-emerald-600">Threadflow</span>
       ) : (
         <span className="text-xs text-muted-foreground">{style.source}</span>
       )}
@@ -405,7 +405,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
             </span>
             <span className="text-[11px] text-muted-foreground">{KIND_LABEL[p.kind]}</span>
             {done ? (
-              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+              <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                 done — applied and pushed
               </span>
             ) : null}
@@ -504,7 +504,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
                   <Seasons codes={c.seasons} />
                   {c.archived ? <span className="text-muted-foreground">archived</span> : null}
                   {c.threadflowId ? (
-                    <span className="text-amber-600 dark:text-amber-400">Threadflow</span>
+                    <span className="text-amber-600">Threadflow</span>
                   ) : null}
                   {c.publishedTo.length ? (
                     <span className="text-muted-foreground">{c.publishedTo.join(", ")}</span>
@@ -522,7 +522,7 @@ export function StyleSplitRow({ proposal: p, defaultChecked }: RowProps) {
           Strip the garment name from the colourway names
         </label>
         {rename && publishedCount > 0 ? (
-          <label className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
+          <label className="flex items-center gap-2 text-amber-700">
             <Checkbox
               checked={renamePublished}
               onCheckedChange={(v) => setRenamePublished(Boolean(v))}

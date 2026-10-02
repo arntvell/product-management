@@ -164,7 +164,7 @@ export function StepColorways({ payload, update }: StepProps) {
                   {cw.colorwaySku || "—"}
                 </code>
                 {cw.manualSku ? (
-                  <span className="rounded-full border border-amber-400 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-400">
+                  <span className="rounded-full border border-amber-400 px-2 py-0.5 text-[10px] text-amber-700">
                     edited by hand
                   </span>
                 ) : (
@@ -206,7 +206,7 @@ export function StepColorways({ payload, update }: StepProps) {
               </div>
 
               {clash ? (
-                <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                <p className="mt-2 text-xs text-amber-700">
                   {style.styleName} already has a colourway called “{clash.name}” (
                   <code className="font-mono">{clash.colorwaySku}</code>). Creating a second
                   one is only right if it is genuinely a different garment.

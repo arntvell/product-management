@@ -159,13 +159,13 @@ export function StepStyle({ payload, update }: StepProps) {
           {query.trim() ? (
             <div className="border-t px-3 py-2">
               {exactNameMatch ? (
-                <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                <p className="mb-2 text-xs text-amber-700">
                   {payload.brand.name} already has a style called “{exactNameMatch.styleName}”.
                   Pick it above unless this really is a different garment.
                 </p>
               ) : null}
               {!exactNameMatch && parentMatch ? (
-                <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                <p className="mb-2 text-xs text-amber-700">
                   This reads like a colour of “{parentMatch.styleName}”, not a garment
                   of its own — pick that style above and add “
                   {query.trim().slice(parentMatch.styleName.length).trim()}” as a

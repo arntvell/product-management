@@ -31,11 +31,11 @@ function editsKey(edits: Edits): string {
 }
 
 const TONE: Record<ChannelOutcome["state"], string> = {
-  write: "text-blue-700 dark:text-blue-400",
-  written: "text-emerald-700 dark:text-emerald-400",
+  write: "text-blue-700",
+  written: "text-emerald-700",
   agrees: "text-muted-foreground",
   "not-live": "text-muted-foreground",
-  refused: "text-amber-700 dark:text-amber-400",
+  refused: "text-amber-700",
   failed: "text-destructive",
   "n/a": "text-muted-foreground",
 };
@@ -412,7 +412,7 @@ export function VariantBarcodeEditor({
                                 ? "text-destructive"
                                 : plan.master === "unchanged"
                                   ? "text-muted-foreground"
-                                  : "text-blue-700 dark:text-blue-400"
+                                  : "text-blue-700"
                             }`}
                             title={plan.note}
                           >

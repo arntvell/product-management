@@ -100,7 +100,7 @@ export function IdentityPanel({
         />
       </div>
 
-      <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+      <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
         <b>{counts.identityNotSentToLoom}</b> colorways have never had their channel ids
         transmitted to Loom. That says <b>sent</b>, not stored: Loom answered{" "}
         <code>updated: 0</code> to all 355 identity rows sent so far, so whether it keeps
@@ -184,7 +184,7 @@ function Frac({ have, of }: { have: number; of: number }) {
     <div
       className={
         "text-right tabular-nums text-xs " +
-        (complete ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400")
+        (complete ? "text-muted-foreground" : "text-amber-700")
       }
     >
       {have}/{of}
@@ -211,7 +211,7 @@ function Stat({
       <div
         className={
           "text-xl font-semibold tabular-nums " +
-          (warn && value ? "text-amber-700 dark:text-amber-400" : "")
+          (warn && value ? "text-amber-700" : "")
         }
       >
         {value.toLocaleString()}

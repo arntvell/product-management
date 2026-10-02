@@ -102,7 +102,7 @@ export default async function ImportGapsPage() {
                     <td className="px-3 py-1.5">
                       {r.name}
                       {r.note ? (
-                        <span className="ml-2 text-amber-600 dark:text-amber-400">{r.note}</span>
+                        <span className="ml-2 text-amber-600">{r.note}</span>
                       ) : null}
                     </td>
                     <td className="px-3 py-1.5 text-muted-foreground">{r.brand ?? "—"}</td>

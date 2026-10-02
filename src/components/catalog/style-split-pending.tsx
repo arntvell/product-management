@@ -344,7 +344,7 @@ export function StyleSplitPending() {
                   {t.state === "running" ? (
                     <Loader2Icon className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                   ) : t.state === "ok" ? (
-                    <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" />
                   ) : (
                     <XCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
                   )}

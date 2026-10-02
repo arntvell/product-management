@@ -27,7 +27,7 @@ export interface CandidateView {
 function Pio({ qty }: { qty: number | null }) {
   if (qty === null) return <span className="text-muted-foreground">not in Pio</span>;
   if (qty === 0) return <span className="text-muted-foreground">Pio 0</span>;
-  return <span className="font-medium text-emerald-600 dark:text-emerald-400">Pio {qty}</span>;
+  return <span className="font-medium text-emerald-600">Pio {qty}</span>;
 }
 
 function Side({

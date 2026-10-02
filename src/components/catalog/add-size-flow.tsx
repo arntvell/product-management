@@ -14,12 +14,12 @@ import type {
 } from "@/lib/master/add-size";
 
 const TONE: Record<StepState, string> = {
-  write: "text-blue-700 dark:text-blue-400",
-  written: "text-emerald-700 dark:text-emerald-400",
+  write: "text-blue-700",
+  written: "text-emerald-700",
   exists: "text-muted-foreground",
   "not-live": "text-muted-foreground",
-  refused: "text-amber-700 dark:text-amber-400",
-  skipped: "text-amber-700 dark:text-amber-400",
+  refused: "text-amber-700",
+  skipped: "text-amber-700",
   failed: "text-destructive",
   "n/a": "text-muted-foreground",
 };
@@ -491,7 +491,7 @@ export function AddSizeFlow({
 
             {system.skuNote ? (
               <p
-                className={`mt-2 text-xs ${system.skuStem ? "text-muted-foreground" : "text-amber-700 dark:text-amber-400"}`}
+                className={`mt-2 text-xs ${system.skuStem ? "text-muted-foreground" : "text-amber-700"}`}
               >
                 {system.skuNote}
               </p>
@@ -555,7 +555,7 @@ export function AddSizeFlow({
                           {reason ? (
                             <div className="text-[11px] text-destructive">{reason}</div>
                           ) : !value.trim() ? (
-                            <div className="text-[11px] text-amber-700 dark:text-amber-400">
+                            <div className="text-[11px] text-amber-700">
                               No barcode: the till cannot scan it until one is added.
                             </div>
                           ) : null}
@@ -638,7 +638,7 @@ export function AddSizeFlow({
             </ul>
           ) : null}
           {report.warnings.length ? (
-            <ul className="border-b bg-amber-500/5 px-4 py-2 text-xs text-amber-800 dark:text-amber-300">
+            <ul className="border-b bg-amber-500/5 px-4 py-2 text-xs text-amber-800">
               {report.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}

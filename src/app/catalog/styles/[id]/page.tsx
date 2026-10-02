@@ -88,7 +88,7 @@ export default async function StyleDetailPage({
                     </Badge>
                   )}
                   {entry?.approvedForProduction ? (
-                    <Badge className="border-green-600/40 text-green-700 dark:text-green-500">
+                    <Badge className="border-green-600/40 text-green-700">
                       Approved
                     </Badge>
                   ) : (

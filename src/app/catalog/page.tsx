@@ -61,7 +61,7 @@ export default async function CatalogPage() {
         ) : (
           <div className="inline-flex items-center gap-2 rounded-full border border-green-600/30 bg-green-600/5 px-3 py-1">
             <span className="h-2 w-2 rounded-full bg-green-600" />
-            <span className="text-xs font-medium text-green-700 dark:text-green-500">
+            <span className="text-xs font-medium text-green-700">
               Connected to Postgres
             </span>
           </div>

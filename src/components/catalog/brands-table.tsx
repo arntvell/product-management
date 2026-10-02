@@ -46,7 +46,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
       </div>
 
       {(dupes || noToken || noSitoo || manySitoo) && !onlyIssues ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
           {noToken ? (
             <div>
               {noToken} brand{noToken === 1 ? " has" : "s have"} no SKU token — a new style
@@ -112,7 +112,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
                   ) : null}
                 </div>
                 {b.possibleDuplicateOf.length ? (
-                  <div className="truncate text-[11px] text-amber-700 dark:text-amber-400">
+                  <div className="truncate text-[11px] text-amber-700">
                     looks like {b.possibleDuplicateOf.join(", ")}
                   </div>
                 ) : null}
@@ -132,7 +132,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
                         ? "What the rule would give if the token were cleared"
                         : "No token set — this is what a new style would use"
                     }
-                    className={b.skuToken ? "" : "text-amber-700 dark:text-amber-400"}
+                    className={b.skuToken ? "" : "text-amber-700"}
                   >
                     {b.derivedToken}
                   </span>
@@ -144,7 +144,7 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
               <div className="font-mono text-xs">
                 {b.sitooManufacturerIds.length ? (
                   <span
-                    className={b.sitooManufacturerIds.length > 1 ? "text-amber-700 dark:text-amber-400" : ""}
+                    className={b.sitooManufacturerIds.length > 1 ? "text-amber-700" : ""}
                     title={
                       b.sitooManufacturerIds.length > 1
                         ? "Linked to more than one Sitoo manufacturer — a Sitoo create will refuse rather than guess"

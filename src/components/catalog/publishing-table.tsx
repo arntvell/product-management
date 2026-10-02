@@ -419,7 +419,7 @@ export function PublishingTable({
           )}
 
           {preview.failedEventId && (
-            <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 p-2 text-[13px] text-rose-800 dark:text-rose-300">
+            <div className="mt-2 rounded border border-rose-500/40 bg-rose-500/10 p-2 text-[13px] text-rose-800">
               The last attempt failed and Loom has kept its delivery id
               (<code>{preview.failedEventId}</code>). Pushing again from here now
               sends a <b>new</b> id, so it will actually be retried rather than

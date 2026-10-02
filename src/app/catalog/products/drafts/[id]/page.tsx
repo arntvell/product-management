@@ -58,7 +58,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {draft.status === "FINALIZING" ? (
-        <div className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           This draft was interrupted while being created. Pressing create again will finish
           it — the ids were reserved before the write, so nothing can be created twice.
         </div>

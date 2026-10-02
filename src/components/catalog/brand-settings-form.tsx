@@ -88,7 +88,7 @@ export function BrandSettingsForm({
                 </div>
               ) : null}
               {!skuToken ? (
-                <div className="mt-1 text-amber-700 dark:text-amber-400">
+                <div className="mt-1 text-amber-700">
                   No token set, so the rule applies. Check that matches what this brand
                   already uses before creating anything.
                 </div>
