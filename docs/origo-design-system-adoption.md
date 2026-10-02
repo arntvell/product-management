@@ -330,34 +330,49 @@ style pages.
 `src/components` and `src/app`; the only remaining match in the repo is the
 word `bg-blue-500` inside a comment in `globals.css`.
 
-### Phase 6 — enforcement
+## Phase 6 — enforcement (done)
 
-Only once components are migrated: set the Tailwind namespaces to `initial` so
-off-palette utilities genuinely stop existing, then add a CI grep guard.
+`globals.css` clears Tailwind's colour, type-size, weight and radius namespaces
+with `initial` and defines only the system's own. **`bg-blue-500`, `text-xs`,
+`font-bold` and `rounded-lg` no longer compile.** The stylesheet went from
+112KB to 83KB.
 
-Outstanding at the time of writing:
+What moved first, so the lockdown had nothing to break:
 
-| To remove | Count |
+| Migrated | Count |
 |---|---|
-| `text-xs` / `text-sm` / `text-lg` / `text-xl` / `text-2xl` / `text-base` → the four DS sizes | 938 |
-| `rounded-*` utilities (incl. 64 `rounded-full`, 128 plain `rounded`) | 447 |
-| `font-medium` / `font-semibold` | 377 |
-| off-palette colours (amber, green, rose, blue, yellow…) | 340 |
-| `dark:` utilities (inert, but dead weight) | 117 |
+| type sizes → `text-meta` / `text-fine` / `text-body` / `text-section` / `text-page` | 828 |
+| `font-medium` / `font-semibold` / `font-bold` → removed | 321 |
+| `rounded-*` → removed (53 `rounded-full` kept) | 303 |
+| raw `white` / `black` → `paper` / `offwhite` / `ink` | 6 |
+| empty `className` attributes left behind | 38 |
 
----
+**`text-fine` is not a fifth size.** It is `meta` at the same 12px without the
+caps treatment — which the design system does itself in `FilterChip`, where the
+chip's value renders `normal-case tracking-normal`. A dense editing grid is full
+of 12px text that is not a label, and spelling that out at 484 call sites would
+have been the same thing said worse.
 
-## Feedback policy
+`rounded-full` survives for the filter chip §5 allows and for status dots, which
+are circles because they are dots.
 
-- **Sonner stays** for asynchronous outcomes that land after you have moved on —
-  channel pushes, imports, long jobs. 201 `toast.*` calls exist today, mostly
-  these.
-- **Form saves do not toast.** Per §9: the save button is disabled until dirty,
-  and after saving you show an inline `Notice` or "Saved" meta text. No stacking
-  toasts for work the user is watching happen.
+### The guard
 
-## Copy
+`scripts/check-design-system.ts`, run with **`npm run lint:ds`**. **Put it in
+CI.** An off-system utility that does not compile renders nothing and reports
+nothing — a quiet way to be wrong — and this turns that silence into a failure
+with a file, a line and the clause it breaks.
 
-British spelling, Norwegian number formatting. Buttons are UPPERCASE verbs.
-`formatNOK(2500)` → `2 500,- NOK`; `formatPercent(0.523)` → `52,3 %`; dates
-`DD.MM.YYYY`. No exclamation marks, no emoji. Errors say what and how to fix.
+It is deliberately separate from `npm run lint`: eslint exits non-zero on 106
+problems that predate this work, and chaining the two would have meant the
+guard never ran.
+
+It earned itself on its first run, finding four shadows nothing else had caught.
+
+### Still open
+
+- **The bulk editor's `dirtyCell` outline has never been checked by eye.** It
+  marks every unsaved edit in the app. One line in `src/components/ui/grid.ts`.
+- **The Forma DJR web licence** — the woff2 files are committed and served from
+  the deployment. Worth confirming that is covered.
+- §8 roles remain unbuildable: one `APP_PASSWORD`, nobody to assign a role to.
