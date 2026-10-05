@@ -1,6 +1,7 @@
 "use client";
 
 import { cn, parseGidList } from "@/lib/utils";
+import { dirtyCell } from "@/components/ui/grid";
 import type { RenderType } from "@/lib/columns";
 import type { ShopifyPage, ShopifyCollection, Model } from "@/types";
 
@@ -59,7 +60,7 @@ export function ReferenceCell({
 }: ReferenceCellProps) {
   if (disabled) {
     return (
-      <div className="px-2 py-1.5 min-h-[32px] text-sm text-muted-foreground">
+      <div className="px-2 py-1.5 min-h-[32px] text-body text-muted-foreground">
         N/A
       </div>
     );
@@ -70,15 +71,15 @@ export function ReferenceCell({
   return (
     <div
       className={cn(
-        "px-2 py-1.5 min-h-[32px] cursor-pointer text-sm",
-        isDirty && "bg-yellow-50"
+        "px-2 py-1.5 min-h-[32px] cursor-pointer text-body",
+        isDirty && dirtyCell
       )}
       onClick={onClick}
     >
       {resolved ? (
         <div className="flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-          <span className="text-xs truncate">{resolved}</span>
+          <span className="size-1.5 shrink-0 rounded-full bg-ink" />
+          <span className="text-fine truncate">{resolved}</span>
         </div>
       ) : (
         <span className="text-muted-foreground">—</span>

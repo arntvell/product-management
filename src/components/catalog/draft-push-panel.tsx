@@ -199,11 +199,11 @@ export function DraftPushPanel({
   }
 
   return (
-    <div className="mt-6 rounded-md border p-4">
+    <div className="mt-6 border p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-medium">{title}</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
+          <div className="text-body">{title}</div>
+          <div className="mt-0.5 text-fine text-muted-foreground">
             {channels.map((c) => PUBLISH_CHANNEL_LABELS[c]).join(", ") || "no channels"}
             {seasonCode ? ` · ${seasonCode}` : ""} · Shopify first, so Loom receives its
             inventory ids
@@ -234,7 +234,7 @@ export function DraftPushPanel({
       </div>
 
       {blocked.length ? (
-        <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <div className="mt-3 border border-ink bg-paper p-3 text-meta normal-case tracking-normal text-ink">
           {blocked.length} item{blocked.length === 1 ? "" : "s"} held back:
           <ul className="mt-1 list-inside list-disc">
             {blocked.slice(0, 6).map((b, i) => (
@@ -254,7 +254,7 @@ export function DraftPushPanel({
                 {lastDryRun ? "Dry run anyway" : "Push anyway"} (
                 {waivableReasons(waivable)})
               </Button>
-              <span className="text-[11px] opacity-80">
+              <span className="text-fine opacity-80">
                 {lastDryRun
                   ? "Still a dry run — the waiver is recorded on the batch, so the live push honours it."
                   : "Recorded on the batch."}{" "}
@@ -267,10 +267,10 @@ export function DraftPushPanel({
       ) : null}
 
       {progress ? (
-        <div className="mt-3 space-y-1.5 text-xs">
+        <div className="mt-3 space-y-1.5 text-fine">
           {Object.entries(progress.counts).map(([channel, states]) => (
             <div key={channel} className="flex gap-2">
-              <span className="w-20 font-medium">{channel}</span>
+              <span className="w-20">{channel}</span>
               <span className="text-muted-foreground">
                 {Object.entries(states)
                   .map(([s, n]) => `${n} ${s.toLowerCase()}`)

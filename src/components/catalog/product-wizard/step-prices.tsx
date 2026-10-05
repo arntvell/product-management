@@ -8,7 +8,7 @@ import type { StepProps } from "./types";
 
 export function StepPrices({ payload, update, options }: StepProps) {
   if (!payload.colorways.length)
-    return <p className="text-sm text-muted-foreground">Add a colourway first.</p>;
+    return <p className="text-body text-muted-foreground">Add a colourway first.</p>;
 
   function setPrice(key: string, field: "COST" | "MSRP", value: string) {
     update((p) => ({
@@ -30,14 +30,14 @@ export function StepPrices({ payload, update, options }: StepProps) {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
+      <p className="text-fine text-muted-foreground">
         NOK. Cost is what Livid pays, MSRP is the retail price — both stored against the
         chosen season, so a re-buy at a different landed cost does not overwrite history.
       </p>
 
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto border">
         <div className="min-w-[34rem]">
-          <div className="grid grid-cols-[1fr_9rem_9rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="grid grid-cols-[1fr_9rem_9rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
             <div>Colourway</div>
             <div className="flex items-center justify-between">
               Cost
@@ -70,8 +70,8 @@ export function StepPrices({ payload, update, options }: StepProps) {
               className="grid grid-cols-[1fr_9rem_9rem] items-center gap-3 border-b px-3 py-2 last:border-0"
             >
               <div className="min-w-0">
-                <div className="truncate text-sm">{cw.name || "Unnamed"}</div>
-                <code className="block truncate text-xs text-muted-foreground">
+                <div className="truncate text-body">{cw.name || "Unnamed"}</div>
+                <code className="block truncate text-fine text-muted-foreground">
                   {cw.colorwaySku}
                 </code>
               </div>
@@ -94,11 +94,11 @@ export function StepPrices({ payload, update, options }: StepProps) {
         </div>
       </div>
 
-      <details className="rounded-md border p-4">
-        <summary className="cursor-pointer text-sm font-medium">
+      <details className="border p-4">
+        <summary className="cursor-pointer text-body">
           Customs and classification
         </summary>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-fine text-muted-foreground">
           Prefilled from the brand and, for an existing style, from that style. Sent to Loom
           and Shopify — Sitoo has no field for any of it.
         </p>
@@ -147,7 +147,7 @@ function TemplateField({
   const value = payload.template[field];
   return (
     <div>
-      <Label className="text-xs">{label}</Label>
+      <Label className="text-fine">{label}</Label>
       <Input
         className="mt-1.5"
         value={typeof value === "string" ? value : ""}
@@ -213,7 +213,7 @@ function CategoryField({ payload, update, options }: StepProps) {
 
   return (
     <div>
-      <Label className="text-xs">Category</Label>
+      <Label className="text-fine">Category</Label>
       {creating ? (
         <div className="mt-1.5 flex gap-2">
           <Input
@@ -238,7 +238,7 @@ function CategoryField({ payload, update, options }: StepProps) {
         </div>
       ) : (
         <select
-          className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+          className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
           value={payload.template.categoryId}
           onChange={(e) => {
             if (e.target.value === "__new__") {
@@ -258,9 +258,9 @@ function CategoryField({ payload, update, options }: StepProps) {
           <option value="__new__">+ new category…</option>
         </select>
       )}
-      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
+      {error ? <p className="mt-1 text-fine text-destructive">{error}</p> : null}
       {!chosen && payload.template.category ? (
-        <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
+        <p className="mt-1 text-fine text-ink">
           &ldquo;{payload.template.category}&rdquo; is not a modelled category — pick one so
           Shopify and Loom get the mapped spelling rather than a guess.
         </p>

@@ -99,10 +99,10 @@ export function BrandIdentityManager({
     <div className="space-y-8">
       {duplicates.length ? (
         <section>
-          <h2 className="text-sm font-semibold">
+          <h2 className="text-body">
             Possible duplicates ({certain.length} certain, {likely.length} likely)
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-fine text-muted-foreground">
             Merging is a tombstone, not a delete — the loser keeps its row and points at the
             survivor, so the decision stays explainable. Pick which one survives.
           </p>
@@ -110,11 +110,11 @@ export function BrandIdentityManager({
             {duplicates.map((d, i) => (
               <div
                 key={i}
-                className="flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm"
+                className="flex flex-wrap items-center gap-3 border p-3 text-body"
               >
                 <span
                   className={
-                    "rounded-full border px-2 py-0.5 text-[10px] " +
+                    "rounded-full border px-2 py-0.5 text-fine " +
                     (d.confidence === "certain"
                       ? "border-destructive text-destructive"
                       : "text-muted-foreground")
@@ -131,7 +131,7 @@ export function BrandIdentityManager({
                         key={side.id}
                         size="sm"
                         variant="outline"
-                        className="h-7 text-xs"
+                        className="h-7 text-fine"
                         onClick={() =>
                           start(async () => {
                             if (
@@ -168,7 +168,7 @@ export function BrandIdentityManager({
 
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold">
+          <h2 className="text-body">
             Channel spellings waiting to be linked ({unlinked.length})
           </h2>
           <div className="flex items-center gap-2">
@@ -188,33 +188,33 @@ export function BrandIdentityManager({
             </Button>
           </div>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-fine text-muted-foreground">
           Sitoo&apos;s manufacturers carry real ids. Shopify&apos;s vendor is a free string
           with no id at all, so the spelling is the only thing to join on. A Sitoo row may
           be a factory rather than a brand — say so rather than linking it.
         </p>
-        <div className="mt-3 overflow-hidden rounded-md border">
+        <div className="mt-3 overflow-hidden border">
           {(showAll ? unlinked : unlinked.slice(0, 30)).map((r) => (
             <div
               key={r.id}
-              className="grid grid-cols-[5rem_1fr_4rem_minmax(14rem,1fr)_5rem] items-center gap-3 border-b px-3 py-2 text-sm last:border-0"
+              className="grid grid-cols-[5rem_1fr_4rem_minmax(14rem,1fr)_5rem] items-center gap-3 border-b px-3 py-2 text-body last:border-0"
             >
-              <span className="rounded-full border px-2 py-0.5 text-center text-[10px] text-muted-foreground">
+              <span className="rounded-full border px-2 py-0.5 text-center text-fine text-muted-foreground">
                 {r.system}
               </span>
               <div className="min-w-0">
                 <div className="truncate">{r.externalName}</div>
                 {r.externalId ? (
-                  <code className="text-[11px] text-muted-foreground">id {r.externalId}</code>
+                  <code className="text-fine text-muted-foreground">id {r.externalId}</code>
                 ) : (
-                  <span className="text-[11px] text-muted-foreground">no id in this system</span>
+                  <span className="text-fine text-muted-foreground">no id in this system</span>
                 )}
               </div>
-              <div className="text-right text-xs tabular-nums text-muted-foreground">
+              <div className="text-right text-fine tabular-nums text-muted-foreground">
                 {r.productCount || "—"}
               </div>
               <select
-                className="h-8 rounded-md border bg-transparent px-2 text-xs"
+                className="h-8 border bg-transparent px-2 text-fine"
                 defaultValue=""
                 onChange={(e) => {
                   const brandId = e.target.value;
@@ -249,7 +249,7 @@ export function BrandIdentityManager({
               </select>
               <button
                 type="button"
-                className="text-xs underline underline-offset-2 text-muted-foreground"
+                className="text-fine underline underline-offset-2 text-muted-foreground"
                 onClick={() =>
                   start(async () => {
                     try {
@@ -269,14 +269,14 @@ export function BrandIdentityManager({
           {!showAll && unlinked.length > 30 ? (
             <button
               type="button"
-              className="w-full px-3 py-2 text-xs underline underline-offset-2"
+              className="w-full px-3 py-2 text-fine underline underline-offset-2"
               onClick={() => setShowAll(true)}
             >
               show all {unlinked.length}
             </button>
           ) : null}
           {unlinked.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            <p className="px-3 py-6 text-center text-body text-muted-foreground">
               Every channel spelling is linked.
             </p>
           ) : null}
@@ -284,15 +284,15 @@ export function BrandIdentityManager({
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold">Linked identity</h2>
-        <div className="mt-3 overflow-hidden rounded-md border">
+        <h2 className="text-body">Linked identity</h2>
+        <div className="mt-3 overflow-hidden border">
           {brands
             .filter((b) => b.refs.length)
             .map((b) => (
-              <div key={b.id} className="border-b px-3 py-2 text-sm last:border-0">
+              <div key={b.id} className="border-b px-3 py-2 text-body last:border-0">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-medium">{b.name}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span>{b.name}</span>
+                  <span className="text-fine text-muted-foreground">
                     {b.colorways} colorways
                   </span>
                 </div>
@@ -300,7 +300,7 @@ export function BrandIdentityManager({
                   {b.refs.map((r) => (
                     <span
                       key={r.id}
-                      className="rounded border px-2 py-0.5 text-[11px] text-muted-foreground"
+                      className="border px-2 py-0.5 text-fine text-muted-foreground"
                     >
                       {r.system}: {r.externalName}
                       {r.externalId ? ` (${r.externalId})` : ""}
@@ -311,7 +311,7 @@ export function BrandIdentityManager({
               </div>
             ))}
           {brands.every((b) => !b.refs.length) ? (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+            <p className="px-3 py-6 text-center text-body text-muted-foreground">
               Nothing linked yet.
             </p>
           ) : null}

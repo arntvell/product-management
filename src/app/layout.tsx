@@ -1,24 +1,32 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
-import { Header } from "@/components/layout/header";
+import { AppShell } from "@/components/layout/app-shell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Two families, one weight (400). Display carries page and panel titles in
+// caps; Text carries everything else. See PRODUCT-MASTER-DESIGN.md §4.
+const formaDisplay = localFont({
+  src: "./fonts/FormaDJRLivid-Regular.woff2",
+  variable: "--font-forma-display",
+  weight: "400",
+  style: "normal",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const formaText = localFont({
+  src: "./fonts/FormaDJRLividText-Regular.woff2",
+  variable: "--font-forma-text",
+  weight: "400",
+  style: "normal",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Metafield Manager",
-  description: "Manage Shopify product metafields",
+  title: "Origo",
+  description: "Livid product master — import, enrich, price and publish every product",
 };
 
 export default function RootLayout({
@@ -29,12 +37,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${formaDisplay.variable} ${formaText.variable} antialiased`}
       >
         <QueryProvider>
           <TooltipProvider>
-            <Header />
-            {children}
+            <AppShell>{children}</AppShell>
             <Toaster />
           </TooltipProvider>
         </QueryProvider>

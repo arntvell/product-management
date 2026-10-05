@@ -37,7 +37,7 @@ export function StepColorways({ payload, update }: StepProps) {
     };
   }, [styleId]);
 
-  if (!style) return <p className="text-sm text-muted-foreground">Choose a style first.</p>;
+  if (!style) return <p className="text-body text-muted-foreground">Choose a style first.</p>;
 
   // Stale results from a previously-selected style must not leak into this one.
   const existingHere = styleId ? existing : [];
@@ -94,8 +94,8 @@ export function StepColorways({ payload, update }: StepProps) {
   return (
     <div className="space-y-5">
       {existingHere.length ? (
-        <div className="rounded-md border bg-muted/30 p-3">
-          <div className="text-xs font-medium">
+        <div className="border bg-muted/30 p-3">
+          <div className="text-fine">
             {style.styleName} already has {existingHere.length} colourway
             {existingHere.length === 1 ? "" : "s"}
           </div>
@@ -103,7 +103,7 @@ export function StepColorways({ payload, update }: StepProps) {
             {existingHere.map((e) => (
               <span
                 key={e.id}
-                className="rounded border bg-background px-2 py-0.5 text-xs"
+                className="border bg-background px-2 py-0.5 text-fine"
                 title={e.colorwaySku}
               >
                 {e.name}
@@ -117,10 +117,10 @@ export function StepColorways({ payload, update }: StepProps) {
         {payload.colorways.map((cw) => {
           const clash = taken.get(cw.name.trim().toLowerCase());
           return (
-            <div key={cw.key} className="rounded-md border p-3">
+            <div key={cw.key} className="border p-3">
               <div className="grid gap-3 sm:grid-cols-[2fr_1.5fr_5rem_auto] sm:items-end">
                 <div>
-                  <Label className="text-xs">Colourway name</Label>
+                  <Label className="text-fine">Colourway name</Label>
                   <Input
                     className="mt-1.5"
                     value={cw.name}
@@ -129,7 +129,7 @@ export function StepColorways({ payload, update }: StepProps) {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Colour</Label>
+                  <Label className="text-fine">Colour</Label>
                   <Input
                     className="mt-1.5"
                     value={cw.color ?? ""}
@@ -137,7 +137,7 @@ export function StepColorways({ payload, update }: StepProps) {
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Swatch</Label>
+                  <Label className="text-fine">Swatch</Label>
                   <Input
                     className="mt-1.5"
                     value={cw.swatchHex ?? ""}
@@ -160,17 +160,17 @@ export function StepColorways({ payload, update }: StepProps) {
               </div>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                <code className="bg-muted px-1.5 py-0.5 font-mono text-fine">
                   {cw.colorwaySku || "—"}
                 </code>
                 {cw.manualSku ? (
-                  <span className="rounded-full border border-amber-400 px-2 py-0.5 text-[10px] text-amber-700 dark:text-amber-400">
+                  <span className="inline-flex h-6 items-center border border-ink px-2 text-meta uppercase text-ink">
                     edited by hand
                   </span>
                 ) : (
                   <button
                     type="button"
-                    className="text-xs text-muted-foreground underline underline-offset-2"
+                    className="text-fine text-muted-foreground underline underline-offset-2"
                     onClick={() => patch(cw.key, { manualSku: true })}
                   >
                     edit
@@ -179,7 +179,7 @@ export function StepColorways({ payload, update }: StepProps) {
                 {cw.manualSku ? (
                   <>
                     <Input
-                      className="h-7 max-w-xs font-mono text-xs"
+                      className="h-7 max-w-xs font-mono text-fine"
                       value={cw.colorwaySku}
                       onChange={(e) =>
                         patch(cw.key, { colorwaySku: normalizeSku(e.target.value) })
@@ -187,7 +187,7 @@ export function StepColorways({ payload, update }: StepProps) {
                     />
                     <button
                       type="button"
-                      className="text-xs text-muted-foreground underline underline-offset-2"
+                      className="text-fine text-muted-foreground underline underline-offset-2"
                       onClick={() =>
                         update((p) => ({
                           ...p,
@@ -206,14 +206,14 @@ export function StepColorways({ payload, update }: StepProps) {
               </div>
 
               {clash ? (
-                <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                <p className="mt-2 text-fine text-ink">
                   {style.styleName} already has a colourway called “{clash.name}” (
                   <code className="font-mono">{clash.colorwaySku}</code>). Creating a second
                   one is only right if it is genuinely a different garment.
                 </p>
               ) : null}
               {isOneOfOne(cw.colorwaySku) ? (
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="mt-2 text-fine text-muted-foreground">
                   One-of-one SKU. Two garments here may share a name, so a SKU clash is
                   suffixed rather than refused.
                 </p>
@@ -228,7 +228,7 @@ export function StepColorways({ payload, update }: StepProps) {
           + Colourway
         </Button>
         <div className="min-w-[16rem] flex-1">
-          <Label htmlFor="bulk" className="text-xs">
+          <Label htmlFor="bulk" className="text-fine">
             Or paste a list, one name per line
           </Label>
           <div className="mt-1.5 flex gap-2">
@@ -259,7 +259,7 @@ export function StepColorways({ payload, update }: StepProps) {
       </div>
 
       {payload.colorways.length ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-fine text-muted-foreground">
           {payload.colorways.length} colourway
           {payload.colorways.length === 1 ? "" : "s"} · all under{" "}
           <code className="font-mono">{style.styleSku}</code>

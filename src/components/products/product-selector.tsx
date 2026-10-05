@@ -71,16 +71,16 @@ export function ProductSelector({
                       <img
                         src={product.featuredImage}
                         alt=""
-                        className="w-8 h-8 object-cover rounded"
+                        className="w-8 h-8 object-cover"
                       />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{product.title}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-body truncate">{product.title}</p>
+                      <p className="text-fine text-muted-foreground">
                         {product.vendor}
                       </p>
                     </div>
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="secondary" className="text-fine">
                       Selected
                     </Badge>
                   </div>
@@ -102,12 +102,12 @@ export function ProductSelector({
                     <img
                       src={product.featuredImage}
                       alt=""
-                      className="w-8 h-8 object-cover rounded"
+                      className="w-8 h-8 object-cover"
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{product.title}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-body truncate">{product.title}</p>
+                    <p className="text-fine text-muted-foreground">
                       {product.vendor} &middot; {product.productType}
                     </p>
                   </div>

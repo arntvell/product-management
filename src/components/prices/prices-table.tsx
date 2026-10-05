@@ -3,10 +3,13 @@
 import { useState, useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
+import { gridHead, gridRow, GRID_ROW_HEIGHT,
+  dirtyCell,
+} from "@/components/ui/grid";
 import { Button } from "@/components/ui/button";
 import type { Product, DirtyPrice } from "@/types";
 
-const ROW_HEIGHT = 40;
+const ROW_HEIGHT = GRID_ROW_HEIGHT;
 const COL_TITLE = 300;
 const COL_VENDOR = 160;
 const COL_TYPE = 130;
@@ -35,7 +38,7 @@ function PriceCell({ value, isDirty, onChange }: PriceCellProps) {
     return (
       <input
         autoFocus
-        className="w-full h-full px-2 text-sm bg-white border border-blue-400 focus:outline-none font-mono"
+        className="h-full w-full border border-ink bg-paper px-2 text-body tabular-nums"
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => commit(draft)}
@@ -50,8 +53,8 @@ function PriceCell({ value, isDirty, onChange }: PriceCellProps) {
   return (
     <div
       className={cn(
-        "px-2 h-full flex items-center text-sm cursor-pointer select-none hover:bg-muted/40 transition-colors font-mono",
-        isDirty && "bg-yellow-50"
+        "px-2 h-full flex items-center text-body tabular-nums cursor-pointer select-none hover:bg-hover transition-colors duration-150 ease-origo",
+        isDirty && dirtyCell
       )}
       onClick={() => {
         setDraft(value);
@@ -118,8 +121,8 @@ export function PricesTable({
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
       {dirtyCount > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-sm shrink-0">
-          <span className="text-yellow-800 font-medium">
+        <div className="flex shrink-0 items-center gap-3 border-b border-line bg-selected px-4 py-2 text-body">
+          <span className="text-meta uppercase tabular-nums">
             {dirtyCount} unsaved price {dirtyCount === 1 ? "change" : "changes"}
           </span>
           <Button size="sm" onClick={onSave} disabled={isSaving}>
@@ -129,7 +132,7 @@ export function PricesTable({
       )}
 
       <div
-        className="flex border-b bg-muted/30 text-xs font-medium text-muted-foreground uppercase tracking-wide shrink-0"
+        className={cn(gridHead, "flex shrink-0")}
         style={{ height: ROW_HEIGHT }}
       >
         <div
@@ -182,33 +185,34 @@ export function PricesTable({
                   height: ROW_HEIGHT,
                 }}
                 className={cn(
-                  "flex border-b hover:bg-muted/10",
-                  isDirty && "bg-yellow-50/50"
+                  gridRow,
+                  "flex",
+                  isDirty && dirtyCell
                 )}
               >
                 <div
-                  className="flex items-center px-3 border-r text-sm gap-2"
+                  className="flex items-center px-3 border-r text-body gap-2"
                   style={{ width: COL_TITLE, minWidth: COL_TITLE }}
                 >
                   <span className="truncate" title={product.title}>
                     {product.title}
                   </span>
                   {mixed && (
-                    <span className="text-xs text-muted-foreground bg-muted rounded px-1 shrink-0">
+                    <span className="text-fine text-muted-foreground bg-muted px-1 shrink-0">
                       mixed
                     </span>
                   )}
                 </div>
 
                 <div
-                  className="flex items-center px-3 border-r text-sm text-muted-foreground truncate"
+                  className="flex items-center px-3 border-r text-body text-muted-foreground truncate"
                   style={{ width: COL_VENDOR, minWidth: COL_VENDOR }}
                 >
                   {product.vendor}
                 </div>
 
                 <div
-                  className="flex items-center px-3 border-r text-sm text-muted-foreground truncate"
+                  className="flex items-center px-3 border-r text-body text-muted-foreground truncate"
                   style={{ width: COL_TYPE, minWidth: COL_TYPE }}
                 >
                   {product.productType || "—"}

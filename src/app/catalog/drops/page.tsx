@@ -2,6 +2,9 @@ import Link from "next/link";
 import { getDropBoard } from "@/lib/master/drops";
 import { listSeasons } from "@/lib/master/queries";
 import { DropBoard } from "@/components/catalog/drop-board";
+import { PageHeader, Page } from "@/components/ui/page-header";
+import { tabItemClass, tabListClass } from "@/components/ui/tab-styles";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -25,39 +28,41 @@ export default async function DropsPage({
   ]);
 
   return (
-    <div className="mx-auto max-w-[1500px] px-6 py-10">
-      <Link href="/catalog" className="text-xs text-muted-foreground underline underline-offset-4">
-        ← Catalog
-      </Link>
-      <h1 className="mt-1 text-2xl font-semibold">Drops</h1>
-      <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+    <>
+      <PageHeader eyebrow="Catalogue" title="Drops">
+        <nav className={tabListClass} aria-label="Season">
+          {seasons
+            .filter((s) => s.code !== "CONTINUITY")
+            .map((s) => (
+              <Link
+                key={s.code}
+                href={`/catalog/drops?season=${s.code}`}
+                aria-current={s.code === season ? "page" : undefined}
+                className={tabItemClass(s.code === season)}
+              >
+                {s.code}
+              </Link>
+            ))}
+        </nav>
+      </PageHeader>
+      <Page>
+      <p className="max-w-3xl text-body text-muted-foreground">
         Split a season into the waves it actually ships in, so the first drop can
         go live without waiting for products that have no photography yet. Edits
         save as you leave a field; <b>Ready</b> means the product has everything a
         storefront page needs, not just a price.
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-1.5 text-xs">
-        {seasons
-          .filter((s) => s.code !== "CONTINUITY")
-          .map((s) => (
-            <Link
-              key={s.code}
-              href={`/catalog/drops?season=${s.code}`}
-              className={`rounded-full border px-2.5 py-1 font-medium ${
-                s.code === season
-                  ? "border-foreground bg-foreground text-background"
-                  : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {s.code}
-            </Link>
-          ))}
+      {/* Livid-only is a filter, so it keeps the pill §5 reserves for one. */}
+      <div className="flex flex-wrap items-center gap-2">
         <Link
           href={`/catalog/drops?season=${season}${lividOnly ? "&all=1" : ""}`}
-          className={`ml-2 rounded-full border px-2.5 py-1 font-medium ${
-            lividOnly ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
-          }`}
+          className={cn(
+            "inline-flex h-8 items-center rounded-full border px-3 text-meta uppercase no-underline transition-colors duration-150 ease-origo",
+            lividOnly
+              ? "border-ink bg-ink text-offwhite"
+              : "border-line bg-paper text-ink hover:border-ink"
+          )}
         >
           Livid only
         </Link>
@@ -70,6 +75,7 @@ export default async function DropsPage({
         selectedDrop={board.selectedDrop}
         fieldGaps={board.fieldGaps}
       />
-    </div>
+      </Page>
+    </>
   );
 }

@@ -99,12 +99,12 @@ export function StepBrand({ payload, update, options }: StepProps) {
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="brand" className="text-xs">
+          <Label htmlFor="brand" className="text-fine">
             Brand
           </Label>
           <select
             id="brand"
-            className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+            className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
             value={payload.brand.id ?? ""}
             onChange={(e) => {
               const b = external.find((x) => x.id === e.target.value);
@@ -138,21 +138,21 @@ export function StepBrand({ payload, update, options }: StepProps) {
               </option>
             ))}
           </select>
-          <p className="mt-1.5 text-xs text-muted-foreground">
+          <p className="mt-1.5 text-fine text-muted-foreground">
             Livid is not listed: its product comes through the Threadflow feed.
           </p>
           {applied ? (
-            <p className="mt-1 text-xs text-muted-foreground">{applied}</p>
+            <p className="mt-1 text-fine text-muted-foreground">{applied}</p>
           ) : null}
         </div>
 
         <div>
-          <Label htmlFor="season" className="text-xs">
+          <Label htmlFor="season" className="text-fine">
             Season
           </Label>
           <select
             id="season"
-            className="mt-1.5 h-9 w-full rounded-md border bg-transparent px-3 text-sm"
+            className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
             value={payload.seasonId ?? ""}
             onChange={(e) => update((p) => ({ ...p, seasonId: e.target.value || null }))}
           >
@@ -167,12 +167,12 @@ export function StepBrand({ payload, update, options }: StepProps) {
       </div>
 
       <div>
-        <Label htmlFor="kind" className="text-xs">
+        <Label htmlFor="kind" className="text-fine">
           What these records are
         </Label>
         <select
           id="kind"
-          className="mt-1.5 h-9 w-full max-w-sm rounded-md border bg-transparent px-3 text-sm"
+          className="mt-1.5 h-9 w-full max-w-sm border bg-transparent px-3 text-body"
           value={payload.kind}
           onChange={(e) => update((p) => ({ ...p, kind: e.target.value as ProductKind }))}
         >
@@ -182,7 +182,7 @@ export function StepBrand({ payload, update, options }: StepProps) {
             </option>
           ))}
         </select>
-        <p className="mt-1.5 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-fine text-muted-foreground">
           Set here rather than guessed from the SKU. An individual vintage garment is
           MERCHANDISE even though its SKU shape matches the store-vintage bulk buckets —
           the choice is recorded and locked, so the classifier cannot overrule it later.
@@ -190,10 +190,10 @@ export function StepBrand({ payload, update, options }: StepProps) {
       </div>
 
       <div>
-        <Label className="text-xs">Publish to</Label>
+        <Label className="text-fine">Publish to</Label>
         <div className="mt-2 flex flex-wrap gap-4">
           {PUBLISH_CHANNELS.map((c) => (
-            <label key={c} className="flex items-center gap-2 text-sm">
+            <label key={c} className="flex items-center gap-2 text-body">
               <input
                 type="checkbox"
                 checked={payload.channels.includes(c)}
@@ -210,7 +210,7 @@ export function StepBrand({ payload, update, options }: StepProps) {
             </label>
           ))}
         </div>
-        <p className="mt-1.5 text-xs text-muted-foreground">
+        <p className="mt-1.5 text-fine text-muted-foreground">
           All three by default. Nothing is sent until you create — and each channel is
           pushed separately, so one failing does not hold up the others.
         </p>

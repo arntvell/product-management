@@ -71,7 +71,7 @@ export function MediaGrid({
 
   if (items.length === 0) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-12">
+      <p className="text-center text-body text-muted-foreground py-12">
         No media for this product.
       </p>
     );
@@ -80,8 +80,8 @@ export function MediaGrid({
   return (
     <div className="space-y-3">
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 p-2 bg-blue-50 rounded-lg">
-          <span className="text-sm">
+        <div className="flex items-center gap-3 bg-selected p-2">
+          <span className="text-body">
             {selectedIds.size} selected
           </span>
           <Button

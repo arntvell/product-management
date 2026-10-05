@@ -132,7 +132,7 @@ export function ProductFilters({
             onFiltersChange({ ...filters, missingFlat: !!checked })
           }
         />
-        <Label htmlFor="missing-flat" className="text-sm cursor-pointer">
+        <Label htmlFor="missing-flat" className="text-body cursor-pointer">
           Missing Flat
         </Label>
       </div>
@@ -141,7 +141,7 @@ export function ProductFilters({
           Clear
         </Button>
       )}
-      <span className="text-sm text-muted-foreground ml-auto">
+      <span className="text-body text-muted-foreground ml-auto">
         {filteredCount === totalCount
           ? `${totalCount} products`
           : `${filteredCount} / ${totalCount} products`}

@@ -3,7 +3,6 @@ import { getCatalogCounts, type CatalogCounts } from "@/lib/master/counts";
 import { listImportedVendors } from "@/lib/master/import-shopify";
 import { SyncPanel } from "@/components/catalog/sync-panel";
 import { ImportPanel } from "@/components/catalog/import-panel";
-import { CatalogNav } from "@/components/catalog/catalog-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -34,18 +33,17 @@ export default async function CatalogPage() {
     <div className="mx-auto max-w-4xl px-6 py-10">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Catalog</h1>
-          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          <h1 className="text-page">Catalog</h1>
+          <span className="rounded-full border px-2.5 py-0.5 text-fine text-muted-foreground">
             Product Master
           </span>
         </div>
-        <CatalogNav />
       </div>
-      <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+      <p className="mt-2 max-w-2xl text-body text-muted-foreground">
         The single source of truth for product data — Livid products synced from
         Threadflow, plus external brands created here — published out to Shopify
         and Loom. See{" "}
-        <code className="rounded bg-muted px-1 py-0.5 text-xs">
+        <code className="bg-muted px-1 py-0.5 text-fine">
           docs/product-master-architecture.md
         </code>{" "}
         for the full plan.
@@ -54,16 +52,16 @@ export default async function CatalogPage() {
       {/* Database status */}
       <div className="mt-8">
         {dbError ? (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
-            <p className="text-sm font-medium text-destructive">
+          <div className="border border-destructive/40 bg-destructive/5 p-4">
+            <p className="text-body text-destructive">
               Database not reachable
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">{dbError}</p>
+            <p className="mt-1 text-fine text-muted-foreground">{dbError}</p>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-2 rounded-full border border-green-600/30 bg-green-600/5 px-3 py-1">
-            <span className="h-2 w-2 rounded-full bg-green-600" />
-            <span className="text-xs font-medium text-green-700 dark:text-green-500">
+          <div className="inline-flex items-center gap-2 border border-line bg-paper px-3 py-1">
+            <span className="size-2 rounded-full bg-ink" />
+            <span className="text-fine text-muted-foreground">
               Connected to Postgres
             </span>
           </div>
@@ -76,10 +74,10 @@ export default async function CatalogPage() {
           {ENTITIES.map(({ key, label }) => {
             const card = (
               <>
-                <div className="text-2xl font-semibold tabular-nums">
+                <div className="text-page tabular-nums">
                   {counts![key]}
                 </div>
-                <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+                <div className="mt-1 text-fine uppercase tracking-wide text-muted-foreground">
                   {label}
                 </div>
               </>
@@ -88,15 +86,15 @@ export default async function CatalogPage() {
               <Link
                 key={key}
                 href="/catalog/styles"
-                className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                className="border p-4 transition-colors hover:bg-muted/50"
               >
                 {card}
-                <span className="mt-2 block text-xs font-medium underline underline-offset-4">
+                <span className="mt-2 block text-fine underline underline-offset-4">
                   Browse →
                 </span>
               </Link>
             ) : (
-              <div key={key} className="rounded-lg border p-4">
+              <div key={key} className="border p-4">
                 {card}
               </div>
             );
@@ -112,7 +110,7 @@ export default async function CatalogPage() {
 
       <Link
         href="/"
-        className="mt-8 inline-block text-sm font-medium underline underline-offset-4"
+        className="mt-8 inline-block text-body underline underline-offset-4"
       >
         ← Back to the live-Shopify editor
       </Link>

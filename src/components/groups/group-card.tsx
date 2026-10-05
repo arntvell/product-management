@@ -29,9 +29,9 @@ export function GroupCard({ group, onAutoLink, isLinking }: GroupCardProps) {
   };
 
   const statusColor = {
-    linked: "bg-green-100 text-green-800",
-    partially_linked: "bg-yellow-100 text-yellow-800",
-    not_linked: "bg-gray-100 text-gray-800",
+    linked: "bg-ink text-offwhite",
+    partially_linked: "border border-ink text-ink",
+    not_linked: "bg-hover text-muted-foreground",
   };
 
   const statusLabel = {
@@ -41,16 +41,16 @@ export function GroupCard({ group, onAutoLink, isLinking }: GroupCardProps) {
   };
 
   return (
-    <div className="border rounded-lg p-4 space-y-3">
+    <div className="border p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="font-medium">{group.baseName}</h3>
-          <p className="text-xs text-muted-foreground">
+          <h3>{group.baseName}</h3>
+          <p className="text-fine text-muted-foreground">
             {group.vendor} &middot; {group.productType} &middot;{" "}
             {group.members.length} products
           </p>
         </div>
-        <Badge className={cn("text-xs", statusColor[group.linkStatus])}>
+        <Badge className={cn("text-fine", statusColor[group.linkStatus])}>
           {statusLabel[group.linkStatus]}
         </Badge>
       </div>
@@ -110,7 +110,7 @@ function ProductChip({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded border text-sm",
+        "flex items-center gap-1.5 px-2 py-1 border text-body",
         excluded && "opacity-40 line-through"
       )}
     >
@@ -121,7 +121,7 @@ function ProductChip({
         <img
           src={product.featuredImage}
           alt=""
-          className="w-6 h-6 rounded object-cover"
+          className="w-6 h-6 object-cover"
         />
       )}
       <span className="max-w-[180px] truncate">{product.title}</span>

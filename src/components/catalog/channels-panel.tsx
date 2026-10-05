@@ -176,9 +176,9 @@ export function ChannelsPanel({
 
   return (
     <div className="mx-auto mt-6 max-w-3xl px-6">
-      <section className="rounded-lg border p-5">
-        <h2 className="text-sm font-semibold">Channels</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
+      <section className="border p-5">
+        <h2 className="text-body">Channels</h2>
+        <p className="mt-1 text-fine text-muted-foreground">
           Choose where this product publishes. Pushing to the channel is done
           separately (Phase 3) — this sets the target.
         </p>
@@ -186,16 +186,16 @@ export function ChannelsPanel({
           {CHANNELS.map((c) => {
             const pub = pubFor(c);
             return (
-              <label key={c} className="flex items-center gap-3 text-sm">
+              <label key={c} className="flex items-center gap-3 text-body">
                 <input
                   type="checkbox"
                   checked={targeted(c)}
                   disabled={saving}
                   onChange={() => toggle(c)}
                 />
-                <span className="font-medium">{CHANNEL_LABELS[c]}</span>
+                <span>{CHANNEL_LABELS[c]}</span>
                 {pub && (
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-fine text-muted-foreground">
                     {pub.published ? "published" : "targeted (not pushed)"}
                     {pub.externalId ? ` · ${pub.externalId.slice(0, 24)}…` : ""}
                   </span>
@@ -214,12 +214,12 @@ export function ChannelsPanel({
               <Button size="sm" onClick={pushToShopify} disabled={pushing}>
                 {pushing ? "Pushing…" : "Push to Shopify"}
               </Button>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-fine text-muted-foreground">
                 Preview is a dry-run; Push writes to the live store.
               </span>
             </div>
             {pushResult && (
-              <p className="mt-2 text-xs text-green-700 dark:text-green-500">
+              <p className="mt-2 text-fine text-muted-foreground">
                 ✓ {pushResult.action} · {pushResult.variants} variants ·{" "}
                 {pushResult.metafields} metafields ·{" "}
                 <a href={pushResult.adminUrl} target="_blank" rel="noreferrer" className="underline">
@@ -235,20 +235,20 @@ export function ChannelsPanel({
             <Button size="sm" onClick={pushToLoom} disabled={pushingLoom}>
               {pushingLoom ? "Pushing…" : "Push to Loom"}
             </Button>
-            <span className="ml-2 text-xs text-muted-foreground">
+            <span className="ml-2 text-fine text-muted-foreground">
               Pushes to Loom for season(s): {seasonCodes.join(", ") || "—"} (B2B).
             </span>
           </div>
         )}
 
         {preview && (
-          <div className="mt-4 space-y-3 rounded-md border bg-muted/30 p-4 text-xs">
-            <div className="font-medium">
+          <div className="mt-4 space-y-3 border bg-muted/30 p-4 text-fine">
+            <div>
               Would {preview.action} product
               {preview.externalId ? ` (${preview.externalId})` : ""}
             </div>
             {preview.warnings.length > 0 && (
-              <ul className="list-disc pl-4 text-amber-600 dark:text-amber-500">
+              <ul className="list-disc pl-4 text-ink">
                 {preview.warnings.map((w, i) => (
                   <li key={i}>{w}</li>
                 ))}
@@ -263,7 +263,7 @@ export function ChannelsPanel({
               <dt className="text-muted-foreground">Tags</dt><dd>{preview.product.tags.join(", ") || "—"}<span className="ml-1 text-muted-foreground">(merged additively with existing Shopify tags)</span></dd>
             </dl>
             <div>
-              <div className="font-medium">Metafields ({preview.metafields.length})</div>
+              <div>Metafields ({preview.metafields.length})</div>
               <div className="mt-1 space-y-0.5">
                 {preview.metafields.map((m) => (
                   <div key={m.key} className="font-mono">
@@ -275,7 +275,7 @@ export function ChannelsPanel({
               </div>
             </div>
             <div>
-              <div className="font-medium">
+              <div>
                 Variants ({preview.variants.length}) · Gallery media ({preview.media.length})
               </div>
               <div className="mt-1 font-mono text-muted-foreground">

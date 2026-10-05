@@ -103,7 +103,7 @@ export default function GroupsPage() {
       <div className="flex items-center justify-center h-[calc(100vh-56px)]">
         <div className="text-center space-y-3">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground mx-auto" />
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             Loading product groups...
           </p>
         </div>
@@ -115,8 +115,8 @@ export default function GroupsPage() {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-56px)]">
         <div className="text-center space-y-3">
-          <p className="text-sm text-destructive">Failed to load products</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-body text-destructive">Failed to load products</p>
+          <p className="text-fine text-muted-foreground">
             {error instanceof Error ? error.message : "Unknown error"}
           </p>
         </div>
@@ -128,8 +128,8 @@ export default function GroupsPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Product Groups</h2>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h2 className="text-section">Product Groups</h2>
+          <p className="text-body text-muted-foreground mt-1">
             Auto-detected groups of the same product in different colors/variants.
             Link them to populate the &ldquo;Same Product&rdquo; metafield.
           </p>
@@ -146,11 +146,11 @@ export default function GroupsPage() {
       </div>
 
       {autoLinkCount !== null && (
-        <div className="mb-6 rounded-md border border-yellow-300 bg-yellow-50 p-4 space-y-2">
-          <p className="text-sm font-medium">
+        <div className="mb-6 space-y-2 border border-ink bg-paper p-4">
+          <p className="text-body">
             Auto-populate {autoLinkCount} Livid products?
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-fine text-muted-foreground">
             This will update the &ldquo;Same Product&rdquo; metafield for{" "}
             {autoLinkCount} Livid products based on detected name groups.
           </p>

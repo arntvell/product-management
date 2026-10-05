@@ -33,5 +33,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["_scratch", "node_modules"]
+  "exclude": ["_scratch", "_front-end-design-system", "node_modules"]
 }

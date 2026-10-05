@@ -27,7 +27,15 @@ export const maxDuration = 300;
 // with `revealedAt` null is visible on the schedule listing: a drop that
 // should have opened and did not is the thing to notice.
 
-export async function GET() {
+export async function GET(req: Request) {
+  // VERCEL CRON SENDS GET. `vercel.json` schedules `?run=due`, and a cron job
+  // is invoked with a GET request — so the due-run has to be reachable here,
+  // not only on POST. It was POST-only, which meant the scheduled path listed
+  // the schedule every ten minutes and revealed nothing: a drop would sit at
+  // `revealAt` in the past with `revealedAt` null until somebody noticed.
+  const run = new URL(req.url).searchParams.get("run");
+  if (run === "due") return runDue();
+
   const rows = await prisma.vintageDropReveal.findMany({ orderBy: { revealAt: "asc" } });
   return NextResponse.json({
     ok: true,

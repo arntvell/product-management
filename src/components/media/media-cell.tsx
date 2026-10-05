@@ -46,7 +46,7 @@ export function MediaCell({
 
   if (disabled) {
     return (
-      <div className="flex items-center justify-center h-full px-2 text-xs text-muted-foreground">
+      <div className="flex items-center justify-center h-full px-2 text-fine text-muted-foreground">
         N/A
       </div>
     );
@@ -61,7 +61,7 @@ export function MediaCell({
       }}
       className={cn(
         "flex items-center gap-2 h-full px-2 cursor-pointer hover:bg-muted/30 transition-colors",
-        isDragActive && "bg-blue-50 ring-1 ring-blue-400",
+        isDragActive && "bg-selected outline outline-1 -outline-offset-1 outline-ink",
         isUploading && "opacity-50"
       )}
     >
@@ -70,14 +70,14 @@ export function MediaCell({
         <img
           src={thumbnailUrl}
           alt=""
-          className="w-8 h-8 object-cover rounded shrink-0"
+          className="w-8 h-8 object-cover shrink-0"
         />
       ) : (
-        <div className="w-8 h-8 bg-muted rounded shrink-0 flex items-center justify-center text-muted-foreground text-[10px]">
+        <div className="w-8 h-8 bg-muted shrink-0 flex items-center justify-center text-muted-foreground text-fine">
           —
         </div>
       )}
-      <span className="text-xs text-muted-foreground truncate">
+      <span className="text-fine text-muted-foreground truncate">
         {isUploading ? "Uploading..." : `${count} image${count !== 1 ? "s" : ""}`}
       </span>
     </div>

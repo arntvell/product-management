@@ -112,9 +112,9 @@ export function ImportPanel({
   }
 
   return (
-    <div className="rounded-lg border p-5">
-      <h2 className="text-sm font-semibold">Import carry-over from Shopify</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
+    <div className="border p-5">
+      <h2 className="text-body">Import carry-over from Shopify</h2>
+      <p className="mt-1 text-body text-muted-foreground">
         Bring products that exist in Shopify but not yet in the master (external
         brands, carry-over goods) into the Continuity season. Products already
         here — matched by handle or SKU — are skipped, so Threadflow products are
@@ -132,13 +132,13 @@ export function ImportPanel({
       </div>
 
       {preview && (
-        <div className="mt-4 rounded-md border bg-muted/30 p-3 text-sm">
+        <div className="mt-4 border bg-muted/30 p-3 text-body">
           <p className="tabular-nums">
             {preview.total} in Shopify · <b>{preview.toImport}</b> not in master
             · {preview.skipped} already here · {preview.excluded} excluded
             (archived / sold-out sale)
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-fine text-muted-foreground">
             Pick vendors to import (the Shopify catalogue also contains vintage
             and fit-guide entries — leave those unchecked):
           </p>
@@ -146,7 +146,7 @@ export function ImportPanel({
             {preview.byVendor.map((v) => (
               <label
                 key={v.vendor}
-                className="flex items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-background"
+                className="flex items-center gap-2 px-1.5 py-1 text-fine hover:bg-background"
               >
                 <input
                   type="checkbox"
@@ -167,7 +167,7 @@ export function ImportPanel({
       {importedVendors.length > 0 && (
         <div className="mt-5 border-t pt-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <h3 className="text-fine uppercase tracking-wide text-muted-foreground">
               Imported from Shopify
             </h3>
             {removeSel.size > 0 && (
@@ -186,7 +186,7 @@ export function ImportPanel({
             {importedVendors.map((v) => (
               <label
                 key={v.vendor}
-                className="flex items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/50"
+                className="flex items-center gap-2 px-1.5 py-1 text-fine hover:bg-muted/50"
               >
                 <input
                   type="checkbox"

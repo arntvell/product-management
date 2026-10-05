@@ -52,21 +52,21 @@ export function ProductSidebar({
               <img
                 src={product.featuredImage}
                 alt=""
-                className="w-8 h-8 object-cover rounded shrink-0"
+                className="w-8 h-8 object-cover shrink-0"
               />
             ) : (
-              <div className="w-8 h-8 bg-muted rounded shrink-0" />
+              <div className="w-8 h-8 bg-muted shrink-0" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="text-sm truncate">{product.title}</p>
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="text-body truncate">{product.title}</p>
+              <p className="text-fine text-muted-foreground truncate">
                 {product.vendor}
               </p>
             </div>
           </button>
         ))}
         {filtered.length === 0 && (
-          <p className="text-center text-sm text-muted-foreground py-6">
+          <p className="text-center text-body text-muted-foreground py-6">
             No products found.
           </p>
         )}

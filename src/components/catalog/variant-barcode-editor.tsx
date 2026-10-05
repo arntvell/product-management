@@ -31,11 +31,11 @@ function editsKey(edits: Edits): string {
 }
 
 const TONE: Record<ChannelOutcome["state"], string> = {
-  write: "text-blue-700 dark:text-blue-400",
-  written: "text-emerald-700 dark:text-emerald-400",
+  write: "text-muted-foreground",
+  written: "text-muted-foreground",
   agrees: "text-muted-foreground",
   "not-live": "text-muted-foreground",
-  refused: "text-amber-700 dark:text-amber-400",
+  refused: "text-ink",
   failed: "text-destructive",
   "n/a": "text-muted-foreground",
 };
@@ -52,13 +52,13 @@ const LABEL: Record<ChannelOutcome["state"], string> = {
 
 function Outcome({ o }: { o: ChannelOutcome }) {
   return (
-    <td className={`px-2 py-1.5 text-xs ${TONE[o.state]}`} title={o.note}>
-      <div className="font-medium">{LABEL[o.state]}</div>
+    <td className={`px-2 py-1.5 text-fine ${TONE[o.state]}`} title={o.note}>
+      <div>{LABEL[o.state]}</div>
       {o.from !== undefined && (o.state === "write" || o.state === "written") ? (
-        <div className="font-mono text-[10px] text-muted-foreground">was {o.from ?? "empty"}</div>
+        <div className="font-mono text-fine text-muted-foreground">was {o.from ?? "empty"}</div>
       ) : null}
       {o.note && o.state !== "write" ? (
-        <div className="max-w-48 truncate text-[10px]">{o.note}</div>
+        <div className="max-w-48 truncate text-fine">{o.note}</div>
       ) : null}
     </td>
   );
@@ -76,7 +76,7 @@ const MASTER_LABEL: Record<RowPlan["master"], string> = {
 function Live({ on, label }: { on: boolean; label: string }) {
   return (
     <span
-      className={`rounded border px-1 text-[10px] font-medium ${
+      className={` border px-1 text-fine ${
         on ? "border-foreground/30" : "border-dashed text-muted-foreground/60 line-through"
       }`}
       title={on ? `Live in ${label}` : `Not live in ${label}`}
@@ -313,9 +313,9 @@ export function VariantBarcodeEditor({
 
   return (
     <div className="mt-6 space-y-4">
-      <details className="rounded-md border p-3">
-        <summary className="cursor-pointer text-sm font-medium">Paste corrections</summary>
-        <p className="mt-2 text-xs text-muted-foreground">
+      <details className="border p-3">
+        <summary className="cursor-pointer text-body">Paste corrections</summary>
+        <p className="mt-2 text-fine text-muted-foreground">
           One size per line: SKU, then the correct barcode — tab, comma or space
           between. Rows not on the page are loaded.
         </p>
@@ -324,7 +324,7 @@ export function VariantBarcodeEditor({
           onChange={(e) => setPaste(e.target.value)}
           rows={5}
           placeholder={"EXT-PNT-BCK-ANTHR-M\t0884597246191\nEXT-PNT-BCK-ANTHR-L\t0884597246207"}
-          className="mt-2 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs"
+          className="mt-2 w-full border bg-background px-3 py-2 font-mono text-fine"
         />
         <Button size="sm" variant="outline" onClick={applyPaste} disabled={!!busy || !paste.trim()}>
           Add to editor
@@ -332,25 +332,25 @@ export function VariantBarcodeEditor({
       </details>
 
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body text-muted-foreground">
           {searched ? "Nothing matches." : "Search for a SKU, colourway or product — or paste corrections."}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+        <div className="overflow-x-auto border">
+          <table className="w-full text-body">
+            <thead className="bg-muted/50 text-left text-fine text-muted-foreground">
               <tr>
-                <th className="px-2 py-2 font-medium">Variant</th>
-                <th className="px-2 py-2 font-medium">Size</th>
-                <th className="px-2 py-2 font-medium">Live in</th>
-                <th className="px-2 py-2 font-medium">Barcode</th>
-                <th className="px-2 py-2 font-medium">New barcode</th>
+                <th className="px-2 py-2">Variant</th>
+                <th className="px-2 py-2">Size</th>
+                <th className="px-2 py-2">Live in</th>
+                <th className="px-2 py-2">Barcode</th>
+                <th className="px-2 py-2">New barcode</th>
                 {report ? (
                   <>
-                    <th className="px-2 py-2 font-medium">Master</th>
-                    <th className="px-2 py-2 font-medium">Shopify</th>
-                    <th className="px-2 py-2 font-medium">Sitoo</th>
-                    <th className="px-2 py-2 font-medium">Loom</th>
+                    <th className="px-2 py-2">Master</th>
+                    <th className="px-2 py-2">Shopify</th>
+                    <th className="px-2 py-2">Sitoo</th>
+                    <th className="px-2 py-2">Loom</th>
                   </>
                 ) : null}
               </tr>
@@ -364,9 +364,9 @@ export function VariantBarcodeEditor({
                 return (
                   <tr key={r.id} className={newGroup ? "border-t" : ""}>
                     <td className="px-2 py-1.5">
-                      <div className="font-mono text-xs">{r.variantSku}</div>
+                      <div className="font-mono text-fine">{r.variantSku}</div>
                       {newGroup ? (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-fine text-muted-foreground">
                           {r.name.toLowerCase().includes(r.styleName.toLowerCase())
                             ? r.name
                             : `${r.styleName} — ${r.name}`}
@@ -375,7 +375,7 @@ export function VariantBarcodeEditor({
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-2 py-1.5 text-xs">{r.sizeLabel}</td>
+                    <td className="px-2 py-1.5 text-fine">{r.sizeLabel}</td>
                     <td className="px-2 py-1.5">
                       <div className="flex gap-1">
                         <Live on={r.shopify} label="Shopify" />
@@ -383,10 +383,10 @@ export function VariantBarcodeEditor({
                         <Live on={r.loom} label="Loom" />
                       </div>
                     </td>
-                    <td className="px-2 py-1.5 font-mono text-xs">
+                    <td className="px-2 py-1.5 font-mono text-fine">
                       {r.barcode ?? <span className="text-muted-foreground">—</span>}
                       {r.barcodeManual ? (
-                        <span className="ml-1 text-[10px] text-muted-foreground" title="Set by hand — Threadflow will not overwrite it">
+                        <span className="ml-1 text-fine text-muted-foreground" title="Set by hand — Threadflow will not overwrite it">
                           manual
                         </span>
                       ) : null}
@@ -397,29 +397,29 @@ export function VariantBarcodeEditor({
                         onChange={(e) => setEdit(r.variantSku, e.target.value, r.barcode)}
                         placeholder={r.barcode ?? ""}
                         inputMode="numeric"
-                        className={`w-40 rounded border bg-background px-2 py-1 font-mono text-xs ${
-                          invalid ? "border-destructive" : value ? "border-blue-500" : ""
+                        className={`w-40 border bg-background px-2 py-1 font-mono text-fine ${
+                          invalid ? "border-destructive" : value ? "border-ink" : ""
                         }`}
                       />
-                      {invalid ? <div className="max-w-56 text-[10px] text-destructive">{invalid}</div> : null}
+                      {invalid ? <div className="max-w-56 text-fine text-destructive">{invalid}</div> : null}
                     </td>
                     {report ? (
                       plan ? (
                         <>
                           <td
-                            className={`px-2 py-1.5 text-xs ${
+                            className={`px-2 py-1.5 text-fine ${
                               ["rejected", "collision", "unknown"].includes(plan.master)
                                 ? "text-destructive"
                                 : plan.master === "unchanged"
                                   ? "text-muted-foreground"
-                                  : "text-blue-700 dark:text-blue-400"
+                                  : "text-muted-foreground"
                             }`}
                             title={plan.note}
                           >
-                            <div className="font-medium">
+                            <div>
                               {report.dryRun ? MASTER_LABEL[plan.master] : MASTER_LABEL[plan.master].replace("will ", "") }
                             </div>
-                            {plan.note ? <div className="max-w-48 truncate text-[10px]">{plan.note}</div> : null}
+                            {plan.note ? <div className="max-w-48 truncate text-fine">{plan.note}</div> : null}
                           </td>
                           <Outcome o={plan.shopify} />
                           <Outcome o={plan.sitoo} />
@@ -437,35 +437,35 @@ export function VariantBarcodeEditor({
         </div>
       )}
       {truncated ? (
-        <p className="text-xs text-muted-foreground">Showing the first 500 matches — narrow the search.</p>
+        <p className="text-fine text-muted-foreground">Showing the first 500 matches — narrow the search.</p>
       ) : null}
 
       {Object.entries(errors).filter(([, v]) => v).length ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+        <div className="border border-destructive/40 bg-destructive/5 p-3 text-fine text-destructive">
           {Object.entries(errors).map(([ch, msg]) =>
             msg ? (
               <div key={ch}>
-                <span className="font-medium capitalize">{ch}:</span> {msg}
+                <span className="capitalize">{ch}:</span> {msg}
               </div>
             ) : null
           )}
         </div>
       ) : null}
       {report?.unwound.length ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-fine text-muted-foreground">
           Rotation: {report.unwound.join(", ")} give up their current code first, so the swap can land.
         </p>
       ) : null}
 
       <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t bg-background py-3">
-        <span className="text-sm">
+        <span className="text-body">
           {pending} pending change{pending === 1 ? "" : "s"}
         </span>
         <input
           value={evidence}
           onChange={(e) => setEvidence(e.target.value)}
           placeholder="Evidence (optional) — e.g. supplier sheet 23.09, scanned label"
-          className="w-80 rounded-md border bg-background px-3 py-1.5 text-sm"
+          className="w-80 border bg-background px-3 py-1.5 text-body"
         />
         <Button variant="outline" onClick={preview} disabled={!!busy || !pending}>
           Preview
@@ -486,14 +486,14 @@ export function VariantBarcodeEditor({
             Discard
           </Button>
         ) : null}
-        {busy ? <span className="text-sm text-muted-foreground">{busy}</span> : null}
+        {busy ? <span className="text-body text-muted-foreground">{busy}</span> : null}
         {applyBlocked && !busy ? (
-          <span className="text-xs text-muted-foreground">{applyBlocked}</span>
+          <span className="text-fine text-muted-foreground">{applyBlocked}</span>
         ) : null}
         {showConfirm && report ? (
-          <div className="flex basis-full flex-wrap items-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm">
+          <div className="flex basis-full flex-wrap items-center gap-2 border border-ink bg-paper px-3 py-2 text-body">
             <span>
-              {writeSummary(report)} <span className="font-medium">These are live systems.</span>
+              {writeSummary(report)} <span>These are live systems.</span>
             </span>
             <Button size="sm" onClick={apply}>
               Confirm and write

@@ -27,7 +27,7 @@ export function StepBarcodes({
   const blank = variants.filter((x) => !x.v.barcode).length;
 
   if (!variants.length)
-    return <p className="text-sm text-muted-foreground">Add sizes first.</p>;
+    return <p className="text-body text-muted-foreground">Add sizes first.</p>;
 
   function setBarcode(cwKey: string, vKey: string, value: string) {
     update((p) => ({
@@ -81,7 +81,7 @@ export function StepBarcodes({
       <div className="flex flex-wrap items-center gap-3">
         <a
           href={`/api/catalog/drafts/${draftId}/barcodes`}
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Export CSV
         </a>
@@ -103,14 +103,14 @@ export function StepBarcodes({
             if (f) void importCsv(f);
           }}
         />
-        <span className="text-xs text-muted-foreground">
+        <span className="text-fine text-muted-foreground">
           {blank
             ? `${blank} of ${variants.length} still blank`
             : `all ${variants.length} have a barcode`}
         </span>
       </div>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="text-fine text-muted-foreground">
         Optional. External brands carry their own EAN — paste it here, or export the file,
         fill the barcode column in Excel and import it back. The export is sorted style →
         colourway → size position, so it matches a physical size run; the import joins on
@@ -118,7 +118,7 @@ export function StepBarcodes({
       </p>
 
       {payload.channels.includes("LOOM") && blank ? (
-        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <p className="border border-ink bg-paper px-3 py-2 text-meta normal-case tracking-normal text-ink">
           Loom&apos;s stock registry carries barcoded variants only, so the {blank} blank
           size{blank === 1 ? "" : "s"} will not reach it until a code is filled in. The
           product is still created, and re-pushing later picks them up.
@@ -127,8 +127,8 @@ export function StepBarcodes({
 
       <div className="space-y-3">
         {payload.colorways.map((cw) => (
-          <div key={cw.key} className="rounded-md border">
-            <div className="border-b bg-muted/40 px-3 py-2 text-xs font-medium">
+          <div key={cw.key} className="border">
+            <div className="border-b bg-muted/40 px-3 py-2 text-fine">
               {cw.name || "Unnamed"} · <code>{cw.colorwaySku}</code>
             </div>
             {cw.variants.map((v) => {
@@ -137,16 +137,16 @@ export function StepBarcodes({
               return (
                 <div
                   key={v.key}
-                  className="grid grid-cols-[5rem_1fr_11rem] items-center gap-3 border-b px-3 py-1.5 text-sm last:border-0"
+                  className="grid grid-cols-[5rem_1fr_11rem] items-center gap-3 border-b px-3 py-1.5 text-body last:border-0"
                 >
-                  <div className="font-medium">{v.sizeLabel}</div>
-                  <code className="truncate text-xs text-muted-foreground">
+                  <div>{v.sizeLabel}</div>
+                  <code className="truncate text-fine text-muted-foreground">
                     {v.variantSku}
                   </code>
                   <div>
                     <Input
                       className={
-                        "h-8 font-mono text-xs " +
+                        "h-8 font-mono text-fine " +
                         (bad ? "border-destructive text-destructive" : "")
                       }
                       value={value}
@@ -155,7 +155,7 @@ export function StepBarcodes({
                       onChange={(e) => setBarcode(cw.key, v.key, e.target.value.trim())}
                     />
                     {bad ? (
-                      <p className="mt-0.5 text-[11px] text-destructive">
+                      <p className="mt-0.5 text-fine text-destructive">
                         {rejectionReason(value)}
                       </p>
                     ) : null}

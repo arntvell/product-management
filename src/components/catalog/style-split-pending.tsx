@@ -282,7 +282,7 @@ export function StyleSplitPending() {
 
   if (error) {
     return (
-      <div className="mt-5 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-xs">
+      <div className="mt-5 border border-destructive/40 bg-destructive/5 p-4 text-fine">
         <strong className="text-foreground">
           Could not check what is waiting to go to Loom.
         </strong>{" "}
@@ -305,12 +305,12 @@ export function StyleSplitPending() {
   return (
     <div className="mt-5 space-y-3">
       {tasks.length ? (
-        <div className="rounded-lg border bg-background p-4">
+        <div className="border bg-background p-4">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">
+            <h2 className="text-body">
               Pushing to Loom
               {running ? (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                <span className="ml-2 text-fine text-muted-foreground">
                   {tasks.filter((t) => t.state === "running").length} in progress — leaving this
                   page abandons the result, not the push
                 </span>
@@ -332,11 +332,11 @@ export function StyleSplitPending() {
               <div
                 key={t.styleId}
                 className={
-                  "rounded-md border px-3 py-2 text-sm " +
+                  " border px-3 py-2 text-body " +
                   (t.state === "running"
                     ? "border-border bg-muted/40"
                     : t.state === "ok"
-                      ? "border-emerald-500/40 bg-emerald-500/5"
+                      ? "border-line bg-paper"
                       : "border-destructive/40 bg-destructive/5")
                 }
               >
@@ -344,14 +344,14 @@ export function StyleSplitPending() {
                   {t.state === "running" ? (
                     <Loader2Icon className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
                   ) : t.state === "ok" ? (
-                    <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                   ) : (
                     <XCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <span className="font-medium">{t.styleName}</span>{" "}
-                    <code className="text-xs">{t.styleSku}</code>
-                    <div className="text-xs text-muted-foreground">
+                    <span>{t.styleName}</span>{" "}
+                    <code className="text-fine">{t.styleSku}</code>
+                    <div className="text-fine text-muted-foreground">
                       {t.state === "running" ? (
                         <>
                           waiting for Loom&rsquo;s job to settle · {secs(t.startedAt, now)}s ·{" "}
@@ -364,7 +364,7 @@ export function StyleSplitPending() {
                       )}
                     </div>
                     {t.detail.length ? (
-                      <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                      <ul className="mt-1 space-y-0.5 text-fine text-muted-foreground">
                         {t.detail.map((d, i) => (
                           <li key={i}>· {d}</li>
                         ))}
@@ -384,11 +384,11 @@ export function StyleSplitPending() {
       ) : null}
 
       {waiting.length ? (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
-          <h2 className="text-sm font-semibold">
+        <div className="border border-ink bg-paper p-4">
+          <h2 className="text-body">
             Applied here, not yet in Loom — {waiting.length}
           </h2>
-          <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
+          <p className="mt-1 max-w-3xl text-fine text-muted-foreground">
             The colourways have moved in Origio, so the proposal is gone from the list
             below. Loom still holds the old grouping until these are pushed.
           </p>
@@ -396,12 +396,12 @@ export function StyleSplitPending() {
             {waiting.map((s) => (
               <div
                 key={s.styleId}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-background px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-3 border bg-background px-3 py-2"
               >
-                <div className="min-w-0 text-sm">
-                  <span className="font-medium">{s.styleName}</span>{" "}
-                  <code className="text-xs">{s.styleSku}</code>
-                  <div className="text-xs text-muted-foreground">
+                <div className="min-w-0 text-body">
+                  <span>{s.styleName}</span>{" "}
+                  <code className="text-fine">{s.styleSku}</code>
+                  <div className="text-fine text-muted-foreground">
                     {s.notPushed} of {s.colorways} colourways unsent · {s.seasons.join(", ")} ·
                     applied {new Date(s.appliedAt).toLocaleString("en-GB")}
                   </div>

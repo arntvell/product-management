@@ -163,17 +163,17 @@ export function MediaManager({
     <div className="mx-auto max-w-4xl px-6 py-10">
       <a
         href={`/catalog/colorways/${colorwayId}`}
-        className="text-xs text-muted-foreground underline underline-offset-4"
+        className="text-fine text-muted-foreground underline underline-offset-4"
       >
         ← {colorwayName}
       </a>
-      <h1 className="mt-1 text-2xl font-semibold">Media</h1>
+      <h1 className="mt-1 text-page">Media</h1>
 
       {/* Dropzone */}
       <div
         {...getRootProps()}
         className={cn(
-          "mt-6 cursor-pointer rounded-lg border-2 border-dashed p-8 text-center text-sm transition-colors",
+          "mt-6 cursor-pointer border-2 border-dashed p-8 text-center text-body transition-colors",
           isDragActive ? "border-foreground bg-muted/50" : "border-muted-foreground/30",
           uploading && "pointer-events-none opacity-60"
         )}
@@ -187,7 +187,7 @@ export function MediaManager({
       </div>
 
       {externalCount > 0 && (
-        <p className="mt-3 text-xs text-muted-foreground">
+        <p className="mt-3 text-fine text-muted-foreground">
           {externalCount} image{externalCount !== 1 ? "s" : ""} referenced from
           an external source. Adopt them into Blob so the master owns them
           (required before a Loom push).
@@ -212,12 +212,12 @@ export function MediaManager({
       </DndContext>
 
       {items.length === 0 && (
-        <p className="mt-6 text-sm text-muted-foreground">No media yet.</p>
+        <p className="mt-6 text-body text-muted-foreground">No media yet.</p>
       )}
 
       <a
         href={`/catalog/styles/${styleId}`}
-        className="mt-8 inline-block text-sm text-muted-foreground underline underline-offset-4"
+        className="mt-8 inline-block text-body text-muted-foreground underline underline-offset-4"
       >
         Back to style
       </a>
@@ -245,8 +245,8 @@ function SortableTile({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group relative overflow-hidden rounded-lg border bg-muted",
-        isDragging && "z-10 opacity-80 shadow-lg"
+        "group relative overflow-hidden border bg-muted",
+        isDragging && "z-10 opacity-80 shadow-overlay"
       )}
     >
       <div
@@ -260,16 +260,16 @@ function SortableTile({
         )}
         <span
           className={cn(
-            "absolute left-1.5 top-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium",
+            "absolute left-1.5 top-1.5 px-1.5 py-0.5 text-fine",
             item.source === "BLOB"
-              ? "bg-green-600/90 text-white"
+              ? "bg-ink text-offwhite"
               : "bg-background/90 text-muted-foreground"
           )}
         >
           {SOURCE_LABEL[item.source]}
         </span>
         {item.role !== "GALLERY" && (
-          <span className="absolute bottom-1.5 left-1.5 rounded bg-foreground/90 px-1.5 py-0.5 text-[10px] font-medium text-background">
+          <span className="absolute bottom-1.5 left-1.5 bg-foreground/90 px-1.5 py-0.5 text-fine text-background">
             {item.role}
           </span>
         )}
@@ -278,7 +278,7 @@ function SortableTile({
             <button
               onClick={onAdopt}
               title="Adopt into Blob"
-              className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium hover:bg-background"
+              className="bg-background/90 px-1.5 py-0.5 text-fine hover:bg-background"
             >
               Adopt
             </button>
@@ -286,7 +286,7 @@ function SortableTile({
           <button
             onClick={onRemove}
             title="Remove"
-            className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-destructive hover:bg-background"
+            className="bg-background/90 px-1.5 py-0.5 text-fine text-destructive hover:bg-background"
           >
             ✕
           </button>
@@ -297,7 +297,7 @@ function SortableTile({
       <select
         value={item.role}
         onChange={(e) => onRole(e.target.value as MediaRole)}
-        className="w-full border-t bg-background px-2 py-1 text-[11px]"
+        className="w-full border-t bg-background px-2 py-1 text-fine"
         title="How this image is used on push"
       >
         {ROLE_OPTIONS.map((r) => (

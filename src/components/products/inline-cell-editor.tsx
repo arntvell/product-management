@@ -1,6 +1,7 @@
 "use client";
 
 import { cn, parseGidList } from "@/lib/utils";
+import { dirtyCell } from "@/components/ui/grid";
 
 interface InlineCellEditorProps {
   value: string;
@@ -18,15 +19,15 @@ export function InlineCellEditor({
   return (
     <div
       className={cn(
-        "px-2 py-1.5 min-h-[32px] cursor-pointer text-sm truncate hover:bg-muted/40 transition-colors",
-        isDirty && "bg-yellow-50",
+        "px-2 py-1.5 min-h-[32px] cursor-pointer text-body truncate hover:bg-muted/40 transition-colors",
+        isDirty && dirtyCell,
         !value && !isProductRef && "text-muted-foreground"
       )}
       onClick={onClick}
       title={value || undefined}
     >
       {isProductRef ? (
-        <span className="text-xs text-muted-foreground">
+        <span className="text-fine text-muted-foreground">
           {value ? `${parseGidList(value).length} linked` : "None"}
         </span>
       ) : (

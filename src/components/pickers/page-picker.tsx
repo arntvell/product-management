@@ -72,9 +72,9 @@ export function PagePicker({
             >
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{selectedPage.title}</p>
+                  <p className="text-body truncate">{selectedPage.title}</p>
                 </div>
-                <Badge variant="secondary" className="text-xs">
+                <Badge variant="secondary" className="text-fine">
                   Selected
                 </Badge>
               </div>
@@ -89,9 +89,9 @@ export function PagePicker({
             >
               <div className="flex items-center gap-2 w-full">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{suggestedPage.title}</p>
+                  <p className="text-body truncate">{suggestedPage.title}</p>
                 </div>
-                <Badge className="text-xs bg-blue-100 text-blue-800">
+                <Badge className="text-meta border border-line px-2 text-ink">
                   Suggested
                 </Badge>
               </div>
@@ -109,8 +109,8 @@ export function PagePicker({
               >
                 <div className="flex items-center gap-2 w-full">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{page.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">
+                    <p className="text-body truncate">{page.title}</p>
+                    <p className="text-fine text-muted-foreground truncate">
                       /{page.handle}
                     </p>
                   </div>

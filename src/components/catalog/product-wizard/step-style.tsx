@@ -83,12 +83,12 @@ export function StepStyle({ payload, update }: StepProps) {
   }
 
   if (!brandId)
-    return <p className="text-sm text-muted-foreground">Choose a brand first.</p>;
+    return <p className="text-body text-muted-foreground">Choose a brand first.</p>;
 
   return (
     <div className="space-y-4">
       <div>
-        <Label htmlFor="style-q" className="text-xs">
+        <Label htmlFor="style-q" className="text-fine">
           Style name
         </Label>
         <Input
@@ -102,20 +102,20 @@ export function StepStyle({ payload, update }: StepProps) {
       </div>
 
       {selected ? (
-        <div className="rounded-md border bg-muted/40 p-3 text-sm">
+        <div className="border bg-muted/40 p-3 text-body">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-medium">
+              <div>
                 {selected.styleName}{" "}
-                <span className="ml-1 rounded-full border px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+                <span className="ml-1 rounded-full border px-2 py-0.5 text-fine text-muted-foreground">
                   {selected.mode === "existing" ? "existing style" : "new style"}
                 </span>
               </div>
-              <code className="mt-1 block font-mono text-xs text-muted-foreground">
+              <code className="mt-1 block font-mono text-fine text-muted-foreground">
                 {selected.styleSku}
               </code>
               {selected.mode === "existing" ? (
-                <p className="mt-1.5 text-xs text-muted-foreground">
+                <p className="mt-1.5 text-fine text-muted-foreground">
                   Its SKU is inherited exactly as it is. Existing SKUs are never rewritten,
                   so new colourways stay consistent with what this style is already called.
                 </p>
@@ -131,24 +131,24 @@ export function StepStyle({ payload, update }: StepProps) {
           </div>
         </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="border">
           {searching && hits.length === 0 ? (
-            <p className="px-3 py-3 text-sm text-muted-foreground">Searching…</p>
+            <p className="px-3 py-3 text-body text-muted-foreground">Searching…</p>
           ) : null}
           {hits.map((h) => (
             <button
               key={h.id}
               type="button"
               onClick={() => pickExisting(h)}
-              className="flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left text-sm transition-colors last:border-0 hover:bg-muted/50"
+              className="flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left text-body transition-colors last:border-0 hover:bg-muted/50"
             >
               <div className="min-w-0">
-                <div className="truncate font-medium">{h.styleName}</div>
-                <code className="block truncate font-mono text-xs text-muted-foreground">
+                <div className="truncate">{h.styleName}</div>
+                <code className="block truncate font-mono text-fine text-muted-foreground">
                   {h.styleSku}
                 </code>
               </div>
-              <div className="shrink-0 text-right text-xs text-muted-foreground">
+              <div className="shrink-0 text-right text-fine text-muted-foreground">
                 <div>
                   {h.colorways} colourway{h.colorways === 1 ? "" : "s"}
                 </div>
@@ -159,13 +159,13 @@ export function StepStyle({ payload, update }: StepProps) {
           {query.trim() ? (
             <div className="border-t px-3 py-2">
               {exactNameMatch ? (
-                <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                <p className="mb-2 text-fine text-ink">
                   {payload.brand.name} already has a style called “{exactNameMatch.styleName}”.
                   Pick it above unless this really is a different garment.
                 </p>
               ) : null}
               {!exactNameMatch && parentMatch ? (
-                <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+                <p className="mb-2 text-fine text-ink">
                   This reads like a colour of “{parentMatch.styleName}”, not a garment
                   of its own — pick that style above and add “
                   {query.trim().slice(parentMatch.styleName.length).trim()}” as a
@@ -179,7 +179,7 @@ export function StepStyle({ payload, update }: StepProps) {
             </div>
           ) : null}
           {!searching && hits.length === 0 && !query.trim() ? (
-            <p className="px-3 py-3 text-sm text-muted-foreground">
+            <p className="px-3 py-3 text-body text-muted-foreground">
               No styles for this brand yet — type a name to create the first.
             </p>
           ) : null}

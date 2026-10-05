@@ -29,7 +29,7 @@ export function StepReview({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-5">
+      <div className="grid gap-3 border p-4 sm:grid-cols-5">
         <Stat label="Brand" value={payload.brand.name || "—"} />
         <Stat label="Season" value={season?.code ?? "—"} />
         <Stat
@@ -49,17 +49,17 @@ export function StepReview({
         <Stat label="Will create" value={`${payload.colorways.length} × ${variants}`} sub="colourways × sizes" />
       </div>
 
-      <div className="rounded-md border p-4">
-        <div className="text-xs font-medium text-muted-foreground">Publishing to</div>
+      <div className="border p-4">
+        <div className="text-fine text-muted-foreground">Publishing to</div>
         <div className="mt-1.5 flex flex-wrap gap-2">
           {payload.channels.length ? (
             payload.channels.map((c) => (
-              <span key={c} className="rounded-full border px-2.5 py-0.5 text-xs">
+              <span key={c} className="rounded-full border px-2.5 py-0.5 text-fine">
                 {PUBLISH_CHANNEL_LABELS[c]}
               </span>
             ))
           ) : (
-            <span className="text-xs text-muted-foreground">nothing selected</span>
+            <span className="text-fine text-muted-foreground">nothing selected</span>
           )}
         </div>
       </div>
@@ -67,12 +67,12 @@ export function StepReview({
       {report ? (
         <div className="space-y-3">
           {report.collisions.length ? (
-            <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4">
-              <div className="text-sm font-medium text-destructive">
+            <div className="border border-destructive/50 bg-destructive/5 p-4">
+              <div className="text-body text-destructive">
                 {report.collisions.length} collision
                 {report.collisions.length === 1 ? "" : "s"} — nothing will be created
               </div>
-              <ul className="mt-2 space-y-1.5 text-xs">
+              <ul className="mt-2 space-y-1.5 text-fine">
                 {report.collisions.map((c, i) => (
                   <li key={i}>
                     <code className="font-mono">{c.proposed}</code>{" "}
@@ -97,9 +97,9 @@ export function StepReview({
           ) : null}
 
           {report.errors.length ? (
-            <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4">
-              <div className="text-sm font-medium text-destructive">Not ready</div>
-              <ul className="mt-2 list-inside list-disc space-y-1 text-xs">
+            <div className="border border-destructive/50 bg-destructive/5 p-4">
+              <div className="text-body text-destructive">Not ready</div>
+              <ul className="mt-2 list-inside list-disc space-y-1 text-fine">
                 {report.errors.map((e) => (
                   <li key={e}>{e}</li>
                 ))}
@@ -108,11 +108,11 @@ export function StepReview({
           ) : null}
 
           {report.warnings.length ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950">
-              <div className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            <div className="border border-ink bg-paper p-4">
+              <div className="text-body text-ink">
                 Worth knowing
               </div>
-              <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-amber-900 dark:text-amber-200">
+              <ul className="mt-2 list-inside list-disc space-y-1 text-fine text-ink">
                 {report.warnings.map((w) => (
                   <li key={w}>{w}</li>
                 ))}
@@ -121,7 +121,7 @@ export function StepReview({
           ) : null}
 
           {report.ok ? (
-            <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+            <div className="border border-line bg-paper p-3 text-body text-muted-foreground">
               Ready. {report.counts.styles ? "1 new style, " : "Existing style, "}
               {report.counts.colorways} colourways, {report.counts.variants} variants,{" "}
               {report.counts.prices} prices.
@@ -130,37 +130,37 @@ export function StepReview({
         </div>
       ) : null}
 
-      <div className="rounded-md border">
+      <div className="border">
         <button
           type="button"
-          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium"
+          className="flex w-full items-center justify-between px-4 py-2.5 text-left text-body"
           onClick={() => setOpen((v) => !v)}
         >
           Everything that will be created
-          <span className="text-xs text-muted-foreground">{open ? "hide" : "show"}</span>
+          <span className="text-fine text-muted-foreground">{open ? "hide" : "show"}</span>
         </button>
         {open ? (
-          <div className="space-y-3 border-t px-4 py-3 text-sm">
+          <div className="space-y-3 border-t px-4 py-3 text-body">
             {payload.style ? (
               <div>
-                <code className="font-mono text-xs">{payload.style.styleSku}</code>{" "}
+                <code className="font-mono text-fine">{payload.style.styleSku}</code>{" "}
                 <span className="text-muted-foreground">{payload.style.styleName}</span>
               </div>
             ) : null}
             {payload.colorways.map((cw) => (
               <div key={cw.key} className="pl-4">
                 <div>
-                  <code className="font-mono text-xs">{cw.colorwaySku}</code>{" "}
+                  <code className="font-mono text-fine">{cw.colorwaySku}</code>{" "}
                   <span className="text-muted-foreground">{cw.name}</span>
                   {cw.prices.MSRP ? (
-                    <span className="ml-2 text-xs text-muted-foreground">
+                    <span className="ml-2 text-fine text-muted-foreground">
                       {cw.prices.COST ? `${cw.prices.COST} / ` : ""}
                       {cw.prices.MSRP} NOK
                     </span>
                   ) : null}
                   {cw.category ? (
                     <span
-                      className="ml-2 rounded-full border px-2 py-0.5 text-[10px] text-muted-foreground"
+                      className="ml-2 rounded-full border px-2 py-0.5 text-fine text-muted-foreground"
                       title="This colourway's own category, not the batch's"
                     >
                       {cw.category}
@@ -173,7 +173,7 @@ export function StepReview({
                       key={v.key}
                       title={v.variantSku}
                       className={
-                        "rounded border px-1.5 py-0.5 font-mono text-[11px] " +
+                        " border px-1.5 py-0.5 font-mono text-fine " +
                         (v.barcode ? "" : "border-dashed text-muted-foreground")
                       }
                     >
@@ -202,9 +202,9 @@ export function StepReview({
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="truncate text-sm font-medium">{value}</div>
-      {sub ? <div className="text-[11px] text-muted-foreground">{sub}</div> : null}
+      <div className="text-fine text-muted-foreground">{label}</div>
+      <div className="truncate text-body">{value}</div>
+      {sub ? <div className="text-fine text-muted-foreground">{sub}</div> : null}
     </div>
   );
 }

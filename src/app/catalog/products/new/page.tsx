@@ -16,12 +16,12 @@ export default function NewProductPage() {
     <main className="mx-auto max-w-4xl px-6 py-10">
       <Link
         href="/catalog/products/drafts"
-        className="text-xs text-muted-foreground underline underline-offset-4"
+        className="text-fine text-muted-foreground underline underline-offset-4"
       >
         ← Drafts
       </Link>
-      <h1 className="mt-2 text-2xl font-semibold">New product</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
+      <h1 className="mt-2 text-page">New product</h1>
+      <p className="mt-1 text-body text-muted-foreground">
         External brands only — Livid product arrives through the Threadflow feed.
       </p>
 
@@ -68,12 +68,12 @@ function Choice({
   return (
     <Link
       href={href}
-      className="group flex flex-col rounded-lg border p-5 transition-colors hover:bg-muted/50"
+      className="group flex flex-col border p-5 transition-colors hover:bg-muted/50"
     >
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <p className="mt-1 text-sm">{lead}</p>
-      <p className="mt-2 flex-1 text-xs text-muted-foreground">{body}</p>
-      <span className="mt-4 text-sm font-medium underline underline-offset-4 group-hover:no-underline">
+      <h2 className="text-body">{title}</h2>
+      <p className="mt-1 text-body">{lead}</p>
+      <p className="mt-2 flex-1 text-fine text-muted-foreground">{body}</p>
+      <span className="mt-4 text-body underline underline-offset-4 group-hover:no-underline">
         {cta} →
       </span>
     </Link>

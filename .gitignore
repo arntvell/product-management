@@ -53,3 +53,6 @@ __pycache__/
 
 # Local dev-server launch config (editor/agent tooling)
 .claude/
+
+# Design-system source drop (licensed desktop fonts, zip). Web woff2 lives in src/app/fonts/.
+_front-end-design-system/

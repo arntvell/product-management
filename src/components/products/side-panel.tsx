@@ -65,14 +65,14 @@ export function SidePanel({
     <Sheet open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <SheetContent className="w-[500px] sm:max-w-[500px]">
         <SheetHeader>
-          <SheetTitle className="text-base">{product.title}</SheetTitle>
-          <p className="text-sm text-muted-foreground">{def?.label}</p>
+          <SheetTitle className="text-body">{product.title}</SheetTitle>
+          <p className="text-body text-muted-foreground">{def?.label}</p>
         </SheetHeader>
         <div className="mt-6 space-y-4">
           {showConfirm && (
-            <div className="rounded-md border border-yellow-300 bg-yellow-50 p-3 space-y-2">
-              <p className="text-sm font-medium">You have unsaved changes</p>
-              <p className="text-xs text-muted-foreground">
+            <div className="space-y-2 border border-ink bg-paper p-3">
+              <p className="text-body">You have unsaved changes</p>
+              <p className="text-fine text-muted-foreground">
                 Closing will discard your edits.
               </p>
               <div className="flex gap-2">
@@ -95,14 +95,14 @@ export function SidePanel({
           )}
           <div>
             <Label htmlFor="field-value">{def?.label}</Label>
-            <p className="text-xs text-muted-foreground mb-2">
+            <p className="text-fine text-muted-foreground mb-2">
               {def?.description}
             </p>
             <Textarea
               id="field-value"
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              className="min-h-[200px] font-mono text-sm"
+              className="min-h-[200px] font-mono text-body"
               placeholder={`Enter ${def?.label?.toLowerCase()}...`}
             />
           </div>

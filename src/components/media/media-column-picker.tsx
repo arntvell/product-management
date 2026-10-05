@@ -38,7 +38,7 @@ export function MediaColumnPicker({
       </PopoverTrigger>
       <PopoverContent className="w-56 p-3" align="end">
         <div className="space-y-1">
-          <p className="text-sm font-medium mb-2">Toggle columns</p>
+          <p className="text-body mb-2">Toggle columns</p>
           {MEDIA_COLUMN_DEFINITIONS.map((col) => (
             <div key={col.key} className="flex items-center gap-2 py-0.5">
               <Checkbox
@@ -48,7 +48,7 @@ export function MediaColumnPicker({
               />
               <Label
                 htmlFor={`media-col-${col.key}`}
-                className="text-sm cursor-pointer flex-1"
+                className="text-body cursor-pointer flex-1"
               >
                 {col.label}
               </Label>
@@ -60,7 +60,7 @@ export function MediaColumnPicker({
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 h-7 text-fine"
             onClick={onReset}
           >
             Defaults
@@ -68,7 +68,7 @@ export function MediaColumnPicker({
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-7 text-xs"
+            className="flex-1 h-7 text-fine"
             onClick={onShowAll}
           >
             Show All

@@ -13,15 +13,15 @@ export default async function IdentityPage() {
     <main className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Channel identity</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-page">Channel identity</h1>
+          <p className="mt-1 text-body text-muted-foreground">
             Which products are missing which id. None of this shows up anywhere until stock
             disagrees, by which point it is an investigation rather than a gap.
           </p>
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Back to catalog
         </Link>

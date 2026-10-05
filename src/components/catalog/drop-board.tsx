@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
 import type { DropRow, DropSummary } from "@/lib/master/drops";
 
 type Field =
@@ -257,7 +258,7 @@ export function DropBoard({
         <a
           href={dropHref(undefined)}
           className={cn(
-            "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+            "rounded-full border px-3 py-1 text-fine transition-colors",
             selectedDrop === undefined
               ? "border-foreground bg-foreground text-background"
               : "text-muted-foreground hover:bg-muted"
@@ -270,7 +271,7 @@ export function DropBoard({
             key={d.label}
             href={dropHref(d.drop)}
             className={cn(
-              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+              "rounded-full border px-3 py-1 text-fine transition-colors",
               selectedDrop === d.drop
                 ? "border-foreground bg-foreground text-background"
                 : "text-muted-foreground hover:bg-muted"
@@ -286,21 +287,21 @@ export function DropBoard({
 
       {/* What is blocking this view */}
       {fieldGaps.length > 0 && (
-        <div className="mt-3 rounded-lg border bg-muted/20 p-3">
-          <p className="text-sm">
+        <div className="mt-3 border bg-muted/20 p-3">
+          <p className="text-body">
             <b>{readyCount}</b> of {rows.length} ready to publish. Blocking, most common first:
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {fieldGaps.map((g) => (
               <span
                 key={g.field}
-                className="rounded bg-rose-500/10 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-400"
+                className="inline-flex h-6 items-center border border-line px-2 text-meta uppercase tabular-nums text-ink"
               >
                 {GAP_LABEL[g.field] ?? g.field} · {g.missing}
               </span>
             ))}
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
+          <p className="mt-2 text-fine text-muted-foreground">
             Images come from photography, not from here — everything else can be set below,
             and the reference fields are usually the same for the whole drop.
           </p>
@@ -308,11 +309,11 @@ export function DropBoard({
       )}
 
       {/* Bulk bar */}
-      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-        <span className="text-xs font-medium">
+      <div className="mt-3 flex flex-wrap items-center gap-2 border bg-muted/30 px-3 py-2">
+        <span className="text-fine">
           {selected.size} selected
           {selectedHidden > 0 && (
-            <span className="ml-1 font-normal text-muted-foreground">
+            <span className="ml-1 text-muted-foreground">
               ({selectedHidden} hidden by filter)
             </span>
           )}
@@ -321,7 +322,7 @@ export function DropBoard({
           type="button"
           onClick={() => setSelected(new Set())}
           disabled={!selected.size}
-          className="rounded border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-2 py-1 text-fine text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
         >
           Clear
         </button>
@@ -330,13 +331,13 @@ export function DropBoard({
           value={dropValue}
           onChange={(e) => setDropValue(e.target.value)}
           placeholder="Drop 1"
-          className="w-24 rounded border bg-background px-2 py-1 text-xs"
+          className="w-24 border bg-background px-2 py-1 text-fine"
         />
         <button
           type="button"
           onClick={() => assignDrop(dropValue || null)}
           disabled={busy || !selected.size}
-          className="rounded border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-2.5 py-1 text-fine transition-colors hover:bg-muted disabled:opacity-40"
         >
           Move to drop
         </button>
@@ -344,7 +345,7 @@ export function DropBoard({
           type="button"
           onClick={() => assignDrop(null)}
           disabled={busy || !selected.size}
-          className="rounded border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
+          className="border px-2.5 py-1 text-fine text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40"
         >
           Unassign
         </button>
@@ -355,7 +356,7 @@ export function DropBoard({
             setBulkField(e.target.value as Field);
             setBulkValue("");
           }}
-          className="rounded border bg-background px-2 py-1 text-xs"
+          className="border bg-background px-2 py-1 text-fine"
         >
           {BULK_FIELDS.map((b) => (
             <option key={b.field} value={b.field}>
@@ -367,13 +368,13 @@ export function DropBoard({
           value={bulkValue}
           onChange={(e) => setBulkValue(e.target.value)}
           placeholder={BULK_FIELDS.find((b) => b.field === bulkField)?.hint ?? "value"}
-          className="min-w-56 flex-1 rounded border bg-background px-2 py-1 text-xs"
+          className="min-w-56 flex-1 border bg-background px-2 py-1 text-fine"
         />
         <button
           type="button"
           onClick={applyBulk}
           disabled={busy || !selected.size || !bulkValue.trim()}
-          className="rounded bg-foreground px-2.5 py-1 text-xs font-medium text-background disabled:opacity-40"
+          className="bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
         >
           Apply to selected
         </button>
@@ -385,30 +386,30 @@ export function DropBoard({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search style, colour, SKU, type, tag…"
-            className="w-72 rounded border bg-background px-2 py-1 pr-6 text-xs"
+            className="w-72 border bg-background px-2 py-1 pr-6 text-fine"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label="Clear search"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-fine text-muted-foreground hover:text-foreground"
             >
               ×
             </button>
           )}
         </div>
-        <span className="text-xs text-muted-foreground tabular-nums">
+        <span className="text-fine text-muted-foreground tabular-nums">
           {visible.length} of {rows.length} shown
         </span>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <label className="flex items-center gap-1.5 text-fine text-muted-foreground">
           <input type="checkbox" checked={onlyBlocked} onChange={(e) => setOnlyBlocked(e.target.checked)} />
           Only show products that are not ready
         </label>
         <button
           type="button"
           onClick={() => setPasteOpen((v) => !v)}
-          className="ml-auto rounded border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
+          className="ml-auto border px-2.5 py-1 text-fine transition-colors hover:bg-muted"
         >
           {pasteOpen ? "Hide paste list" : "Assign by handle…"}
         </button>
@@ -418,8 +419,8 @@ export function DropBoard({
           the whole catalogue, so it works from any tab and can name products
           this view is filtering out. */}
       {pasteOpen && (
-        <div className="mt-2 rounded-lg border bg-muted/20 p-3">
-          <p className="text-xs text-muted-foreground">
+        <div className="mt-2 border bg-muted/20 p-3">
+          <p className="text-fine text-muted-foreground">
             Paste Shopify handles, SKUs or product URLs — separated by commas,
             spaces or new lines. Case and punctuation do not matter.
           </p>
@@ -428,31 +429,31 @@ export function DropBoard({
             onChange={(e) => setPasteText(e.target.value)}
             rows={4}
             placeholder="liv-kr-jpn-blck, liv-kr-jpn-dwn, LIV-BX-BLCK-NPP"
-            className="mt-2 w-full rounded border bg-background px-2 py-1 font-mono text-xs"
+            className="mt-2 w-full border bg-background px-2 py-1 font-mono text-fine"
           />
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
               value={pasteDrop}
               onChange={(e) => setPasteDrop(e.target.value)}
               placeholder="Drop 1"
-              className="w-28 rounded border bg-background px-2 py-1 text-xs"
+              className="w-28 border bg-background px-2 py-1 text-fine"
             />
             <button
               type="button"
               onClick={assignByHandles}
               disabled={busy || !pasteText.trim()}
-              className="rounded bg-foreground px-2.5 py-1 text-xs font-medium text-background disabled:opacity-40"
+              className="bg-foreground px-2.5 py-1 text-fine text-background disabled:opacity-40"
             >
               {busy ? "Assigning…" : "Assign drop"}
             </button>
-            <span className="text-xs text-muted-foreground">
+            <span className="text-fine text-muted-foreground">
               Leave the drop blank to clear it on the pasted products.
             </span>
           </div>
 
           {pasteResult && (
-            <div className="mt-3 space-y-1.5 text-xs">
-              <p className="font-medium">
+            <div className="mt-3 space-y-1.5 text-fine">
+              <p>
                 {pasteResult.updated} assigned
                 {pasteResult.matched.length !== pasteResult.updated &&
                   ` (${pasteResult.matched.length} matched)`}
@@ -489,10 +490,10 @@ export function DropBoard({
       )}
 
       {/* Grid */}
-      <div className="mt-3 overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[1200px] text-sm">
+      <div className="mt-3 overflow-x-auto border">
+        <table className="w-full min-w-[1200px] text-body">
           <thead>
-            <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b bg-muted/40 text-left text-fine uppercase tracking-wide text-muted-foreground">
               <th className="w-8 p-2">
                 <input
                   ref={allCheckbox}
@@ -541,7 +542,7 @@ export function DropBoard({
         </table>
       </div>
       {visible.length === 0 && (
-        <p className="mt-8 text-center text-sm text-muted-foreground">Nothing here.</p>
+        <p className="mt-8 text-center text-body text-muted-foreground">Nothing here.</p>
       )}
     </div>
   );
@@ -564,16 +565,16 @@ function HandleBucket({
     <div>
       <span
         className={cn(
-          "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
+          "inline-flex h-6 items-center px-2 text-meta uppercase tabular-nums",
           tone === "bad"
-            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400"
-            : "bg-amber-500/10 text-amber-700 dark:text-amber-500"
+            ? "bg-ink text-offwhite"
+            : "border border-line text-ink"
         )}
       >
         {items.length} {label}
       </span>
       <span className="ml-1.5 text-muted-foreground">{hint}</span>
-      <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[11px] text-muted-foreground">
+      <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-fine text-muted-foreground">
         {items.map((t) => (
           <li key={t}>{t}</li>
         ))}
@@ -601,31 +602,29 @@ function Row({
         <input type="checkbox" checked={selected} onChange={onToggle} />
       </td>
       <td className="p-2">
-        <div className="font-medium">
+        <div>
           {row.isCore && <span title="Core line">★ </span>}
           {row.styleName} · {row.name}
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-fine text-muted-foreground">
           {row.colorwaySku} · {row.productType ?? "—"} · {row.variantCount} sizes ·{" "}
           {row.imageCount} image{row.imageCount === 1 ? "" : "s"}
         </div>
       </td>
-      <td className="p-2 text-xs text-muted-foreground">{row.drop ?? "—"}</td>
+      <td className="p-2 text-fine text-muted-foreground">{row.drop ?? "—"}</td>
       <Cell row={row} field="fullDescription" value={row.values.description} busy={busy} onSave={onSave} textarea />
       <Cell row={row} field="tags" value={row.values.tags.join(", ")} busy={busy} onSave={onSave} />
       <Cell row={row} field="swatchHex" value={row.values.swatchHex} busy={busy} onSave={onSave} />
       <td className="p-2">
         {row.missing.length === 0 ? (
-          <span className="rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-green-700 dark:text-green-500">
-            ready
-          </span>
+          <StatusBadge status="live" label="Ready" />
         ) : (
-          <div className="text-[11px] text-muted-foreground">
+          <div className="text-fine text-muted-foreground">
             needs {row.missing.map((m) => GAP_LABEL[m] ?? m).join(", ")}
           </div>
         )}
         {row.publishedToShopify && (
-          <div className="mt-1 text-[10px] uppercase text-muted-foreground">on shopify</div>
+          <div className="mt-1 text-fine uppercase text-muted-foreground">on shopify</div>
         )}
       </td>
     </tr>
@@ -661,8 +660,8 @@ function Cell({
     if (!(await onSave(field, next))) setDraft(persisted);
   };
   const cls = cn(
-    "w-full rounded border bg-background px-1.5 py-1 text-xs",
-    !persisted && "border-rose-500/50"
+    "w-full border border-line bg-paper px-2 py-1 text-meta normal-case tracking-normal",
+    !persisted && "border-ink"
   );
   return (
     <td className="p-2">

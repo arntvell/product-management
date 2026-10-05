@@ -102,37 +102,37 @@ export function CategoryManager({
       {unmapped.length ? (
         <section>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold">
+            <h2 className="text-body">
               Waiting to be mapped ({unmapped.length})
             </h2>
             <Button size="sm" variant="outline" disabled={busy} onClick={() => void linkExact()}>
               {busy ? "Mapping…" : "Map all exact matches"}
             </Button>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-fine text-muted-foreground">
             Values seen in a channel that do not yet resolve to a category. Most-used first
             — mapping the top of this list covers most of the catalogue.
           </p>
-          <div className="mt-3 overflow-hidden rounded-md border">
+          <div className="mt-3 overflow-hidden border">
             {unmapped.slice(0, 40).map((u) => (
               <div
                 key={u.id}
-                className="grid grid-cols-[5rem_1fr_4rem_minmax(12rem,1fr)] items-center gap-3 border-b px-3 py-2 text-sm last:border-0"
+                className="grid grid-cols-[5rem_1fr_4rem_minmax(12rem,1fr)] items-center gap-3 border-b px-3 py-2 text-body last:border-0"
               >
-                <span className="rounded-full border px-2 py-0.5 text-center text-[10px] text-muted-foreground">
+                <span className="rounded-full border px-2 py-0.5 text-center text-fine text-muted-foreground">
                   {u.system}
                 </span>
                 <div className="min-w-0">
                   <div className="truncate">{u.externalName}</div>
                   {u.externalPath ? (
-                    <div className="truncate text-xs text-muted-foreground">{u.externalPath}</div>
+                    <div className="truncate text-fine text-muted-foreground">{u.externalPath}</div>
                   ) : null}
                 </div>
-                <div className="text-right text-xs tabular-nums text-muted-foreground">
+                <div className="text-right text-fine tabular-nums text-muted-foreground">
                   {u.productCount || "—"}
                 </div>
                 <select
-                  className="h-8 rounded-md border bg-transparent px-2 text-xs"
+                  className="h-8 border bg-transparent px-2 text-fine"
                   defaultValue=""
                   onChange={(e) => {
                     const categoryId = e.target.value;
@@ -158,7 +158,7 @@ export function CategoryManager({
               </div>
             ))}
             {unmapped.length > 40 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
+              <div className="px-3 py-2 text-fine text-muted-foreground">
                 …and {unmapped.length - 40} more.
               </div>
             ) : null}
@@ -168,14 +168,14 @@ export function CategoryManager({
 
       <section>
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-semibold">The vocabulary</h2>
+          <h2 className="text-body">The vocabulary</h2>
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search"
             className="h-8 max-w-xs"
           />
-          <label className="flex items-center gap-2 text-xs">
+          <label className="flex items-center gap-2 text-fine">
             <input
               type="checkbox"
               checked={showArchived}
@@ -184,7 +184,7 @@ export function CategoryManager({
             show archived
           </label>
           {mergeFrom ? (
-            <span className="ml-auto text-xs">
+            <span className="ml-auto text-fine">
               Merging <b>{mergeFrom.name}</b> into… pick a row.{" "}
               <button
                 className="underline underline-offset-2"
@@ -196,9 +196,9 @@ export function CategoryManager({
           ) : null}
         </div>
 
-        <div className="mt-3 overflow-x-auto rounded-md border">
+        <div className="mt-3 overflow-x-auto border">
           <div className="min-w-[52rem]">
-            <div className="grid grid-cols-[minmax(10rem,2fr)_7rem_7rem_7rem_5rem_5rem_9rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+            <div className="grid grid-cols-[minmax(10rem,2fr)_7rem_7rem_7rem_5rem_5rem_9rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
               <div>Category</div>
               <div>Shopify type</div>
               <div>Loom</div>
@@ -211,20 +211,20 @@ export function CategoryManager({
               <div
                 key={c.id}
                 className={
-                  "grid grid-cols-[minmax(10rem,2fr)_7rem_7rem_7rem_5rem_5rem_9rem] items-center gap-3 border-b px-3 py-1.5 text-sm last:border-0 " +
+                  "grid grid-cols-[minmax(10rem,2fr)_7rem_7rem_7rem_5rem_5rem_9rem] items-center gap-3 border-b px-3 py-1.5 text-body last:border-0 " +
                   (c.archived ? "opacity-50" : "")
                 }
               >
                 <div className="min-w-0">
                   <div className="truncate">{c.name}</div>
-                  <div className="truncate text-[11px] text-muted-foreground">
+                  <div className="truncate text-fine text-muted-foreground">
                     {Object.entries(c.mapped)
                       .map(([s, n]) => `${s}×${n}`)
                       .join(" ") || "no channel values"}
                   </div>
                 </div>
                 <Input
-                  className="h-7 text-xs"
+                  className="h-7 text-fine"
                   defaultValue={c.shopifyProductType ?? ""}
                   onBlur={(e) => {
                     if (e.target.value === (c.shopifyProductType ?? "")) return;
@@ -241,7 +241,7 @@ export function CategoryManager({
                   }}
                 />
                 <select
-                  className="h-7 rounded-md border bg-transparent px-1.5 text-xs"
+                  className="h-7 border bg-transparent px-1.5 text-fine"
                   defaultValue={c.loomCategory ?? ""}
                   onChange={(e) =>
                     start(async () => {
@@ -263,7 +263,7 @@ export function CategoryManager({
                     </option>
                   ))}
                 </select>
-                <div className="font-mono text-xs text-muted-foreground">
+                <div className="font-mono text-fine text-muted-foreground">
                   {c.sitooCategoryId ?? "—"}
                 </div>
                 <div className="text-right tabular-nums text-muted-foreground">{c.styles}</div>
@@ -275,7 +275,7 @@ export function CategoryManager({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-2 text-xs"
+                      className="h-7 px-2 text-fine"
                       onClick={() =>
                         start(async () => {
                           try {
@@ -300,14 +300,14 @@ export function CategoryManager({
                     <>
                       <button
                         type="button"
-                        className="text-xs underline underline-offset-2"
+                        className="text-fine underline underline-offset-2"
                         onClick={() => setMergeFrom(c)}
                       >
                         merge
                       </button>
                       <button
                         type="button"
-                        className="text-xs underline underline-offset-2 text-muted-foreground"
+                        className="text-fine underline underline-offset-2 text-muted-foreground"
                         onClick={() =>
                           start(async () => {
                             try {
@@ -338,10 +338,10 @@ export function CategoryManager({
 
 function Stat({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
-    <div className="rounded-md border p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-xl font-semibold tabular-nums">{value}</div>
-      {hint ? <div className="text-[11px] text-muted-foreground">{hint}</div> : null}
+    <div className="border p-3">
+      <div className="text-fine text-muted-foreground">{label}</div>
+      <div className="text-section tabular-nums">{value}</div>
+      {hint ? <div className="text-fine text-muted-foreground">{hint}</div> : null}
     </div>
   );
 }

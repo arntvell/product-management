@@ -20,14 +20,14 @@ export default async function VariantEditorPage({
     <div className="mx-auto max-w-7xl px-6 py-10">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">Variant editor</h1>
-          <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          <h1 className="text-page">Variant editor</h1>
+          <span className="rounded-full border px-2.5 py-0.5 text-fine text-muted-foreground">
             barcodes
           </span>
         </div>
         <Link
           href="/catalog"
-          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-muted"
+          className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"
         >
           Catalog
         </Link>
@@ -39,12 +39,12 @@ export default async function VariantEditorPage({
           defaultValue={q}
           autoFocus
           placeholder="SKU, colourway, barcode or product name  —  e.g. EXT-PNT-BCK, 0884597246191"
-          className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+          className="w-full border bg-background px-3 py-2 text-body"
         />
         <select
           name="season"
           defaultValue={season}
-          className="rounded-md border bg-background px-3 py-2 text-sm"
+          className="border bg-background px-3 py-2 text-body"
         >
           <option value="">All seasons</option>
           {seasons.map((s) => (
@@ -53,12 +53,12 @@ export default async function VariantEditorPage({
             </option>
           ))}
         </select>
-        <button className="shrink-0 rounded-md border bg-foreground px-4 py-2 text-sm font-medium text-background">
+        <button className="shrink-0 border bg-foreground px-4 py-2 text-body text-background">
           Search
         </button>
       </form>
 
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-fine text-muted-foreground">
         Corrections are written to the master first, then to every Shopify
         variant and Sitoo product already linked to the garment, then re-sent to
         Loom with the colourway. A size that is not live in a channel yet has

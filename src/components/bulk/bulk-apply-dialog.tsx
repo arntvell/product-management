@@ -98,11 +98,11 @@ export function BulkApplyDialog({
 
         {confirmed ? (
           <div className="space-y-4 py-4">
-            <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 space-y-2">
-              <p className="text-sm font-medium">
+            <div className="space-y-2 border border-ink bg-paper p-4">
+              <p className="text-body">
                 Are you sure you want to update {selectedCount} products?
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-fine text-muted-foreground">
                 This will set <strong>{selectedFieldDef?.label}</strong> to{" "}
                 <strong>{displayValue}</strong> for all {selectedCount} selected
                 products.
@@ -129,7 +129,7 @@ export function BulkApplyDialog({
           </div>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               Apply a value to {selectedCount} selected product
               {selectedCount !== 1 ? "s" : ""}.
             </p>
@@ -222,21 +222,21 @@ function ReferenceList({
 }) {
   if (items.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground py-4 text-center">
+      <p className="text-body text-muted-foreground py-4 text-center">
         {emptyText}
       </p>
     );
   }
 
   return (
-    <div className="max-h-[200px] overflow-auto rounded-md border">
+    <div className="max-h-[200px] overflow-auto border">
       {items.map((item) => (
         <button
           key={item.id}
           type="button"
           className={cn(
-            "w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors border-b last:border-b-0",
-            selectedId === item.id && "bg-blue-50 font-medium"
+            "w-full text-left px-3 py-2 text-body hover:bg-muted/50 transition-colors border-b last:border-b-0",
+            selectedId === item.id && "bg-selected"
           )}
           onClick={() => onSelect(item.id)}
         >

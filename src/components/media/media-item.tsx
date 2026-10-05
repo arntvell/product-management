@@ -39,9 +39,9 @@ export function MediaItemCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "relative group border rounded-lg overflow-hidden bg-muted/30",
+        "relative group border overflow-hidden bg-muted/30",
         isDragging && "opacity-50 z-50",
-        isSelected && "ring-2 ring-blue-500"
+        isSelected && "outline outline-2 -outline-offset-2 outline-ink"
       )}
     >
       <div
@@ -56,7 +56,7 @@ export function MediaItemCard({
             className="w-full aspect-square object-cover"
           />
         ) : (
-          <div className="w-full aspect-square flex items-center justify-center text-muted-foreground text-xs">
+          <div className="w-full aspect-square flex items-center justify-center text-muted-foreground text-fine">
             No preview
           </div>
         )}
@@ -65,11 +65,11 @@ export function MediaItemCard({
         <Checkbox
           checked={isSelected}
           onCheckedChange={() => onToggleSelect(item.id)}
-          className="bg-white/80 backdrop-blur-sm"
+          className="bg-paper/80 backdrop-blur-sm"
         />
       </div>
       {item.image?.width && item.image?.height && (
-        <div className="absolute bottom-1 right-1 text-[10px] bg-black/60 text-white px-1 rounded">
+        <div className="absolute bottom-1 right-1 text-fine bg-ink/60 text-offwhite px-1">
           {item.image.width}x{item.image.height}
         </div>
       )}

@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { listColorwaysForPublishing, listSeasons } from "@/lib/master/queries";
 import { PublishingTable } from "@/components/catalog/publishing-table";
+import { PageHeader, Page } from "@/components/ui/page-header";
+import { Panel } from "@/components/ui/panel";
+import { tabItemClass, tabListClass } from "@/components/ui/tab-styles";
 
 export const dynamic = "force-dynamic";
 
@@ -21,30 +24,43 @@ export default async function PublishingPage({
   ];
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <Link href="/catalog" className="text-xs text-muted-foreground underline underline-offset-4">
-        ← Catalog
-      </Link>
-      <h1 className="mt-1 text-2xl font-semibold">Publishing</h1>
-
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        {filters.map((f) => {
-          const active = season === f.code || (!season && f.code === undefined);
-          return (
-            <Link
-              key={f.label}
-              href={f.code ? `/catalog/publishing?season=${f.code}` : "/catalog/publishing"}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                active ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {f.label}
-            </Link>
-          );
-        })}
-      </div>
-
-      <PublishingTable rows={rows} season={season} />
-    </div>
+    <>
+      <PageHeader
+        eyebrow="Catalogue"
+        title="Publishing"
+        meta={
+          <span className="text-meta uppercase tabular-nums text-muted-foreground">
+            {rows.length} products
+          </span>
+        }
+      >
+        {/* Seasons are tabs, not chips: they are one choice, not a stack of
+            filters. §6 */}
+        <nav className={tabListClass} aria-label="Season">
+          {filters.map((f) => {
+            const active = season === f.code || (!season && f.code === undefined);
+            return (
+              <Link
+                key={f.label}
+                href={
+                  f.code
+                    ? `/catalog/publishing?season=${f.code}`
+                    : "/catalog/publishing"
+                }
+                aria-current={active ? "page" : undefined}
+                className={tabItemClass(active)}
+              >
+                {f.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </PageHeader>
+      <Page>
+        <Panel flush>
+          <PublishingTable rows={rows} season={season} />
+        </Panel>
+      </Page>
+    </>
   );
 }
