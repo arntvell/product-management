@@ -528,6 +528,19 @@ export function VintageDropSheet({
     if (failed) toast.error(`Pushed ${json.ok}/${json.total} to Shopify — ${failed} failed.`);
     else if (warned.length) toast.warning(`Pushed to Shopify with ${warned.length} warning(s): ${warned.slice(0, 3).join(" · ")}`);
     else toast.success("Pushed to Shopify.");
+
+    // Stage them on the sales channels now, while the tags still hide them.
+    // productSet sets status but does not publish, so without this a garment
+    // is ACTIVE and carried by no channel — a state nothing else in the store
+    // produces. Doing it here rather than at reveal also means a failure shows
+    // up hours before the drop opens instead of while it is opening.
+    const ch = await call("Publish to channels", "/api/vintage/channels", {
+      colorwayIds: created,
+    });
+    if (ch)
+      toast.success(
+        `Staged ${ch.published}/${ch.requested} on the sales channels — still hidden by their tags.`
+      );
   }
 
   async function onMoveToTop() {
