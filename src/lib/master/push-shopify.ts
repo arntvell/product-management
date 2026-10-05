@@ -13,7 +13,12 @@ import {
 } from "@/lib/shopify/mutations";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { getColorwayForPublish, buildShopifyPreview } from "./publish";
-import { shopifyMissing, shopifyBlockingMissing, readinessProfileFor } from "./readiness";
+import {
+  shopifyMissing,
+  shopifyBlockingMissing,
+  shopifyRefusing,
+  readinessProfileFor,
+} from "./readiness";
 import { vintageInventory, vintageCost } from "./vintage";
 import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
 import {
@@ -216,7 +221,7 @@ export async function pushColorwayToShopify(
   // judged without them; everything else about the gate is unchanged.
   const profile = readinessProfileFor(cw.brand?.name);
   const isVintage = profile === "vintage";
-  const missing = shopifyMissing({
+  const readinessInput = {
     hasVariants,
     hasPrice,
     description: shopDesc,
@@ -226,19 +231,48 @@ export async function pushColorwayToShopify(
     carePageId: cw.carePageId,
     fitguidePageId: cw.fitguidePageId,
     profile,
-  });
+  };
+  const missing = shopifyMissing(readinessInput);
   // Variants and price are absolute; the merchandising fields can be waived
   // deliberately, but never by omission — publishing a product page with no
   // description or photograph should take a decision, not a default.
   const blocking = shopifyBlockingMissing({ hasVariants, hasPrice });
-  if (blocking.length || (missing.length && !allowIncomplete))
+
+  // WHICH fields are allowed to refuse this push depends on what it will write.
+  //
+  // The gate asks "is this safe to put in front of a customer for the first
+  // time?". That is the right question for a CREATE and the wrong one for an
+  // update: a product already live has whatever Shopify holds, and this push
+  // does not overwrite the fields the master is empty on —
+  // `descriptionHtml` is sent for vintage only (the comment at the payload says
+  // why: omitting it leaves a merchandiser's Shopify-side body alone), `files`
+  // is sent only when the master actually has media, and metafields blank here
+  // are left alone unless `clearEmptied` says otherwise.
+  //
+  // So on an update the merchandising fields describe what the MASTER lacks, not
+  // what the customer would see, and refusing on them blocks safe work: all five
+  // Tarvas products are live on Shopify and missing description, image, swatch,
+  // care page and fit guide in Origio, which made a price change impossible
+  // without `allowIncomplete` — a flag that also waives the image check.
+  //
+  // `clearEmptied` is the exception that proves it. With that flag a blank IS an
+  // instruction to erase, so the full gate applies again.
+  const gated = shopifyRefusing(readinessInput, { action, clearEmptied });
+  if (blocking.length || (gated.length && !allowIncomplete))
     throw new Error(
-      `Not ready for Shopify — missing: ${missing.join(", ")}${
+      `Not ready for Shopify — missing: ${gated.join(", ")}${
         seasonCode ? ` (season ${seasonCode})` : ""
       }.${blocking.length ? "" : " Pass allowIncomplete to publish anyway."}`
     );
 
   const warnings: string[] = [];
+  // Said, not enforced. The master is thinner than the shop here, which is worth
+  // knowing — it is just not a reason to refuse a price change.
+  const unwritten = missing.filter((m) => !gated.includes(m));
+  if (unwritten.length)
+    warnings.push(
+      `The master has no ${unwritten.join(", ")} for this product — Shopify keeps what it already holds.`
+    );
   if (adopted)
     warnings.push(
       `Shopify already held this product (found by ${adopted}) — updated it instead of creating a second one. ` +

@@ -150,6 +150,38 @@ export function shopifyBlockingMissing(i: ShopifyReadinessInput): string[] {
   return shopifyMissing(i).filter((m) => m === "variants" || m === "price");
 }
 
+/**
+ * What may REFUSE a push, which is not the same as what is missing.
+ *
+ * The gate asks "is this safe to put in front of a customer for the first
+ * time?". For a create that is exactly right. For an update it is the wrong
+ * question: the product is already live with whatever Shopify holds, and the
+ * push does not overwrite what the master is empty on — `descriptionHtml` goes
+ * out for vintage only, `files` only when the master actually has media, and a
+ * blank metafield is left alone unless `clearEmptied` asks for it to be erased.
+ *
+ * So on an update the merchandising fields say what the MASTER lacks, not what
+ * the customer would see. Refusing on them blocked safe work: all five Tarvas
+ * products are live on Shopify and hold none of their copy in Origio, which made
+ * a price change impossible without `allowIncomplete` — a flag that also waives
+ * the image check, so the one guard worth keeping was the price of the one that
+ * should not have applied.
+ *
+ * `clearEmptied` restores the full gate, because with it a blank IS an
+ * instruction to erase.
+ *
+ * Lives here, beside `shopifyMissing`, because the badge and the live push must
+ * answer this identically — that is the whole reason this module exists.
+ */
+export function shopifyRefusing(
+  i: ShopifyReadinessInput,
+  ctx: { action: "create" | "update"; clearEmptied?: boolean }
+): string[] {
+  return ctx.action === "create" || ctx.clearEmptied
+    ? shopifyMissing(i)
+    : shopifyBlockingMissing(i);
+}
+
 export interface LoomReadinessInput {
   hasVariants: boolean;
   hasPrice: boolean;

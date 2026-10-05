@@ -1,7 +1,12 @@
 // Read-model queries for the Catalog browse UI (Phase 1).
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
-import { shopifyMissing, loomMissing, readinessProfileFor } from "./readiness";
+import {
+  shopifyMissing,
+  shopifyRefusing,
+  loomMissing,
+  readinessProfileFor,
+} from "./readiness";
 
 export interface SeasonOption {
   id: string;
@@ -45,6 +50,12 @@ export interface PublishingRow {
   styleName: string;
   thumbnailRef: string | null;
   dropped: boolean;
+  /**
+   * Which Loom job this product belongs to. Livid's own production goes to the
+   * wholesale catalogue; everything else reaches Loom as a stock-registry row,
+   * and asking for the wrong one means the push is skipped rather than sent.
+   */
+  brandIsLivid: boolean;
   shopify: ChannelCellState;
   loom: ChannelCellState;
   /**
@@ -79,7 +90,7 @@ export async function listColorwaysForPublishing(
       publications: true,
       // Readiness is judged per profile, and the profile comes from the brand —
       // vintage is not missing a fit guide, it simply never has one.
-      brand: { select: { name: true } },
+      brand: { select: { name: true, isLivid: true } },
       // Season-scoped price so readiness matches the price the push will send
       // for THIS season (a product priced only in another season isn't ready).
       prices: {
@@ -113,7 +124,7 @@ export async function listColorwaysForPublishing(
       )?.value ??
       cw.fullDescription ??
       cw.shortDescription;
-    const shopifyMiss = shopifyMissing({
+    const shopifyReadinessInput = {
       hasVariants,
       hasPrice,
       description: shopDesc,
@@ -123,7 +134,8 @@ export async function listColorwaysForPublishing(
       carePageId: cw.carePageId,
       fitguidePageId: cw.fitguidePageId,
       profile: readinessProfileFor(cw.brand?.name),
-    });
+    };
+    const shopifyMiss = shopifyMissing(shopifyReadinessInput);
     const loomMiss = loomMissing({
       hasVariants,
       hasPrice,
@@ -136,8 +148,16 @@ export async function listColorwaysForPublishing(
     });
 
     const shopify = pub("SHOPIFY");
+    // Ready means "this push would go through", and what can refuse a push
+    // depends on whether it creates or updates — a live product is not blocked
+    // by copy the master never held. `missing` still lists everything, so the
+    // badge can show the gap without calling it a blocker.
+    const shopifyAction: "create" | "update" = shopify.published || shopify.targeted
+      ? "update"
+      : "create";
     shopify.missing = shopifyMiss;
-    shopify.ready = shopifyMiss.length === 0;
+    shopify.ready =
+      shopifyRefusing(shopifyReadinessInput, { action: shopifyAction }).length === 0;
     const loom = pub("LOOM");
     loom.missing = loomMiss;
     loom.ready = loomMiss.length === 0;
@@ -156,6 +176,7 @@ export async function listColorwaysForPublishing(
       styleName: cw.style.styleName,
       thumbnailRef: cw.seasonImages[0]?.url ?? null,
       dropped: isDropped(cw.entries, seasonCode),
+      brandIsLivid: cw.brand?.isLivid === true,
       shopify,
       loom,
       sitoo,
@@ -299,6 +320,40 @@ export interface GridRow {
   origin: string; // "NEW" | "CARRYOVER" | ""
   /** Already has a Shopify product, so a push updates rather than creates. */
   onShopify: boolean;
+  /**
+   * Every channel this product is targeted at, so the grid can be filtered to
+   * one system's population.
+   *
+   * Vendor is not enough to do that. Store vintage and online vintage are both
+   * `Vendor = Vintage` and share no product: 250 carry SITOO + LOOM and no
+   * Shopify row, 2,248 carry SHOPIFY + LOOM and no Sitoo row. Which channels
+   * hold a product is the only thing that separates them, and it is what
+   * decides where an edit has to be pushed.
+   */
+  channels: string[];
+  /**
+   * The subset of `channels` the product provably EXISTS on, as opposed to being
+   * aimed at: a Shopify product GID, a Sitoo variant link, a Loom publication
+   * marked published. The difference decides whether a push creates or updates,
+   * and it is why the old `· live` marker was wrong — it read "has a Shopify
+   * GID" and printed "live", on products Shopify held as DRAFT or ARCHIVED.
+   */
+  channelsLive: string[];
+  /**
+   * True when this colorway is the only one on its style, so the two names are
+   * one name and must move together. See `name` in `applyBulkChanges`.
+   */
+  ownsStyle: boolean;
+  /**
+   * The season the NOK price above belongs to, so a price edit can be written
+   * back without the page having pinned one.
+   *
+   * Set only where it is unambiguous. Every one of the 3,674 externals is in
+   * exactly one season and holds a NOK MSRP in at most that one, so the external
+   * page needs no season tabs and excludes nobody. Livid products are routinely
+   * in two or three, which is why the seasonal editor still asks.
+   */
+  priceSeasonId: string | null;
   // Reference metafields (single = Shopify GID; multi = master colorway ids)
   refs: {
     carePageId: string;
@@ -342,16 +397,44 @@ const GRID_TEXT_FIELDS = [
   "styleName",
 ] as const;
 
+/**
+ * Which half of the catalogue a grid is showing.
+ *
+ * "livid"    Livid's own production — seasonal, arrives through Threadflow,
+ *            moves in drops.
+ * "external" everything else: vintage and the resold brands. 3,674 of the 5,350
+ *            colorways, 3,648 of them on CONTINUITY, all of them on Loom for the
+ *            stock registry. Seasons, drops and carry-over mean nothing here —
+ *            an external lives until it sells out.
+ *
+ * Keyed off `Brand.isLivid`, like `isLoomEligible` and for the same reason: it
+ * is a fact about what the product IS, not an intent someone can tick wrong.
+ */
+export type BrandScope = "livid" | "external";
+
 export async function listColorwaysForEdit(
-  seasonCode?: string
+  seasonCode?: string,
+  scope?: BrandScope
 ): Promise<GridRow[]> {
   const rows = await prisma.colorway.findMany({
-    where: seasonCode
-      ? { entries: { some: { season: { code: seasonCode } } } }
-      : {},
+    where: {
+      ...(seasonCode ? { entries: { some: { season: { code: seasonCode } } } } : {}),
+      ...(scope === "livid"
+        ? { brand: { isLivid: true } }
+        : scope === "external"
+          ? { NOT: { brand: { isLivid: true } } }
+          : {}),
+    },
     orderBy: [{ style: { styleName: "asc" } }, { name: "asc" }],
     include: {
-      style: { select: { styleName: true, gender: true, unisex: true } },
+      style: {
+        select: {
+          styleName: true,
+          gender: true,
+          unisex: true,
+          _count: { select: { colorways: true } },
+        },
+      },
       channelContent: true,
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
       entries: {
@@ -359,10 +442,14 @@ export async function listColorwaysForEdit(
           cancelled: true,
           drop: true,
           origin: true,
-          season: { select: { code: true } },
+          season: { select: { id: true, code: true } },
         },
       },
-      publications: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
+      // Every channel, not just Shopify: the grid filters on the whole set.
+      publications: { select: { channel: true, externalId: true, published: true } },
+      variants: {
+        select: { channelRefs: { where: { channel: "SITOO" }, select: { id: true } } },
+      },
       prices: {
         where: {
           currency: "NOK",
@@ -409,7 +496,28 @@ export async function listColorwaysForEdit(
       // once a season is chosen.
       drop: entryFor(cw.entries, seasonCode)?.drop ?? "",
       origin: seasonCode ? entryFor(cw.entries, seasonCode)?.origin ?? "" : "",
-      onShopify: cw.publications.some((p) => !!p.externalId),
+      onShopify: cw.publications.some(
+        (p) => p.channel === "SHOPIFY" && !!p.externalId
+      ),
+      channels: cw.publications.map((p) => p.channel).sort(),
+      channelsLive: [
+        ...(cw.publications.some((p) => p.channel === "SHOPIFY" && p.externalId)
+          ? ["SHOPIFY"]
+          : []),
+        ...(cw.publications.some((p) => p.channel === "LOOM" && p.published)
+          ? ["LOOM"]
+          : []),
+        // Sitoo records identity per variant, not per colorway, so the variant
+        // link is the proof — a publication row alone is an intention.
+        ...(cw.variants.some((v) => v.channelRefs.length) ? ["SITOO"] : []),
+      ],
+      ownsStyle: cw.style._count.colorways === 1,
+      // Only when there is one answer. With several seasons the row cannot say
+      // which price is "the" price, and the page's season tab decides instead.
+      priceSeasonId:
+        new Set(cw.entries.map((e) => e.season.id)).size === 1
+          ? cw.entries[0].season.id
+          : null,
       refs: {
         carePageId: cw.carePageId ?? "",
         fitguidePageId: cw.fitguidePageId ?? "",
@@ -430,10 +538,31 @@ export async function getColorwayForEdit(id: string) {
   return prisma.colorway.findUnique({
     where: { id },
     include: {
-      style: { select: { id: true, styleName: true, styleSku: true } },
+      style: {
+        select: {
+          id: true,
+          styleName: true,
+          styleSku: true,
+          // How many colourways hang off this style. The edit page needs it to
+          // decide whether the style may be renamed from here: with siblings,
+          // a style rename is an edit to all of them.
+          _count: { select: { colorways: true } },
+        },
+      },
       channelContent: true,
       publications: true,
-      entries: { include: { season: { select: { code: true } } } },
+      // Which Loom job this product belongs to. The wholesale catalogue is
+      // Livid-only; everything else reaches Loom as a stock-registry row, and
+      // the push is skipped outright if it asks for the wrong one.
+      brand: { select: { isLivid: true } },
+      entries: { include: { season: { select: { id: true, code: true } } } },
+      // NOK MSRP per season — the price the Shopify and Sitoo pushes send. A
+      // product in two seasons has two, so the editor shows one field each
+      // rather than inventing a single "the price".
+      prices: {
+        where: { currency: "NOK", priceType: "MSRP" },
+        select: { amount: true, seasonId: true },
+      },
     },
   });
 }
