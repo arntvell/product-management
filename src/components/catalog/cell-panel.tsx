@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { hasMarkup, toPlainText } from "@/lib/master/rich-text";
 import { Label } from "@/components/ui/label";
 import type { EditLayer } from "@/lib/master/edit";
 
@@ -111,6 +112,18 @@ export function CellPanel({
                   : "No base value to fall back on."}
               </p>
             )}
+            {/* The RAW value, deliberately. The grid cell shows these as plain
+                text, but you cannot edit markup you cannot see, and this field
+                is pushed to Shopify verbatim — the <p> and <strong> are what the
+                storefront renders. Said once here rather than silently hiding
+                it. */}
+            {hasMarkup(value) && (
+              <p className="mb-1 mt-0.5 text-fine text-muted-foreground">
+                This description carries HTML, which came with the Cin7 import
+                and is what the shop renders. Keep the tags unless you mean to
+                change the formatting on the live page.
+              </p>
+            )}
             <Textarea
               id="cell-panel-value"
               autoFocus
@@ -119,6 +132,16 @@ export function CellPanel({
               placeholder={channel ? target.inherited || "" : "Write here…"}
               className="min-h-[240px] flex-1 text-body"
             />
+            {hasMarkup(value) && (
+              <div className="mt-2 border bg-muted/30 p-2">
+                <p className="text-fine uppercase text-muted-foreground">
+                  As it reads
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-fine">
+                  {toPlainText(value)}
+                </p>
+              </div>
+            )}
             {channel && target.inherited && (
               <div className="mt-2 border bg-muted/30 p-2">
                 <p className="text-fine uppercase text-muted-foreground">

@@ -45,6 +45,23 @@ export default async function ColorwayEditPage({
     }
   }
 
+  // One price field per season the product is in, carrying the season id the
+  // save writes back against. A season with no Price row shows an empty field
+  // rather than being hidden — "no price yet" is the thing to fix.
+  const priceBySeason = new Map(cw.prices.map((p) => [p.seasonId, p.amount.toString()]));
+  const seasonPrices = [
+    ...new Map(cw.entries.map((e) => [e.season.id, e.season.code])).entries(),
+  ].map(([seasonId, code]) => ({
+    seasonId,
+    code,
+    amount: priceBySeason.get(seasonId) ?? "",
+  }));
+
+  // Which systems hold this product. Store vintage carries SITOO and LOOM and
+  // no SHOPIFY row; online vintage the reverse — so this is also what keeps a
+  // store-only edit off the webshop.
+  const targetedChannels = cw.publications.map((p) => p.channel);
+
   const initialPublications = cw.publications.map((p) => ({
     channel: p.channel,
     published: p.published,
@@ -72,6 +89,9 @@ export default async function ColorwayEditPage({
         }}
         initialBase={initialBase}
         initialOverrides={initialOverrides}
+        styleColorwayCount={cw.style._count.colorways}
+        initialPrices={seasonPrices}
+        targetedChannels={targetedChannels}
       />
       <ReferencesPanel
         colorwayId={cw.id}
@@ -91,6 +111,7 @@ export default async function ColorwayEditPage({
         colorwayId={cw.id}
         initialPublications={initialPublications}
         seasonCodes={cw.entries.map((e) => e.season.code)}
+        brandIsLivid={cw.brand?.isLivid === true}
       />
     </>
   );

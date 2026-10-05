@@ -17,10 +17,18 @@ import {
   type ChannelKey,
   type ProductStatusValue,
 } from "@/lib/master/fields";
+import { channelProductTitle } from "@/lib/master/channel-title";
 
 type Values = Record<string, string>;
 type Overrides = Record<ChannelKey, Values>;
 type Layer = "BASE" | ChannelKey;
+
+export interface SeasonPrice {
+  seasonId: string;
+  code: string;
+  /** NOK MSRP as typed, or "" where this season has no price row. */
+  amount: string;
+}
 
 export interface ColorwayEditorProps {
   colorwayId: string;
@@ -34,6 +42,12 @@ export interface ColorwayEditorProps {
   };
   initialBase: Values; // the five text fields
   initialOverrides: Overrides; // per channel; keys may include "tags"
+  /** How many colourways share this style. 1 means the style is this product. */
+  styleColorwayCount: number;
+  /** One row per season the product is in; may be empty. */
+  initialPrices: SeasonPrice[];
+  /** Channels this product is actually on — which systems a save has to reach. */
+  targetedChannels: string[];
 }
 
 export function ColorwayEditor({
@@ -43,6 +57,9 @@ export function ColorwayEditor({
   initialProps,
   initialBase,
   initialOverrides,
+  styleColorwayCount,
+  initialPrices,
+  targetedChannels,
 }: ColorwayEditorProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -66,6 +83,22 @@ export function ColorwayEditor({
   const [status, setStatus] = useState(initialProps.status);
   const [vendor, setVendor] = useState(initialProps.vendor);
   const [productType, setProductType] = useState(initialProps.productType);
+  const [name, setName] = useState(header.name);
+  const [styleName, setStyleName] = useState(header.styleName);
+  const [prices, setPrices] = useState<SeasonPrice[]>(initialPrices);
+
+  // The style may be renamed from here only when it IS this product. With
+  // siblings, the same edit would rename them too.
+  const ownsStyle = styleColorwayCount === 1;
+
+  // What Shopify and the till will be called after a save. Shown rather than
+  // explained: the composition rule (name alone when it already starts with the
+  // style, "<style> <name>" otherwise) is where a half-rename goes wrong, and
+  // seeing "Sunglasses Ray-Ban Aviator" before saving is the whole guard.
+  const composedTitle = channelProductTitle({
+    name: name.trim(),
+    style: { styleName: (ownsStyle ? styleName : header.styleName).trim() },
+  });
   // Base values for all override fields (tags as a comma string).
   const [base, setBase] = useState<Values>({
     ...initialBase,
@@ -97,6 +130,13 @@ export function ColorwayEditor({
         },
         base: baseText,
         overrides,
+        identity: {
+          name,
+          // Omitted entirely when the style is shared, so a save from this page
+          // can never reach another colourway's name.
+          ...(ownsStyle ? { styleName } : {}),
+        },
+        prices: Object.fromEntries(prices.map((p) => [p.seasonId, p.amount])),
       };
       const res = await fetch(`/api/catalog/colorways/${colorwayId}`, {
         method: "PATCH",
@@ -107,7 +147,24 @@ export function ColorwayEditor({
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? `Save failed (${res.status})`);
       }
-      toast.success("Saved");
+      // Saving writes the master and nothing else. Which channels can be
+      // brought up to date from this page is NOT the same as which ones hold
+      // the product: Sitoo has no update path, so naming it beside a push
+      // button that does not exist would be the one misleading sentence on the
+      // screen.
+      const pushable = targetedChannels.filter((c) => c !== "SITOO");
+      const stuck = targetedChannels.filter((c) => c === "SITOO");
+      const label = (c: string) => CHANNEL_LABELS[c as ChannelKey] ?? c;
+      const parts = [
+        pushable.length
+          ? `${pushable.map(label).join(" and ")} still hold the old values — push below.`
+          : "",
+        stuck.length
+          ? `${stuck.map(label).join(" and ")} cannot be updated from Origio yet and still show the old name and price.`
+          : "",
+      ].filter(Boolean);
+      if (parts.length) toast.success(`Saved. ${parts.join(" ")}`);
+      else toast.success("Saved.");
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
@@ -140,8 +197,95 @@ export function ColorwayEditor({
         </a>
       </div>
 
-      {/* Product properties (always base) */}
+      {/* Name and price — what the customer reads and pays. First on the page
+          because it is the edit this screen is most often opened for, and
+          because the composed-title preview has to be seen before anything
+          below it is touched. */}
       <section className="mt-8 space-y-4 border p-5">
+        <h2 className="text-body">Name and price</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Product name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Style</Label>
+            <Input
+              value={ownsStyle ? styleName : header.styleName}
+              onChange={(e) => setStyleName(e.target.value)}
+              disabled={!ownsStyle}
+            />
+            {/* Not the "Style name" field under Content: that one writes the
+                Shopify `style_name` metafield and does not change the title. */}
+            {ownsStyle && (
+              <p className="text-fine text-muted-foreground">
+                The parent style. The <span>Style name</span> field under Content
+                is a Shopify metafield and does not change the title.
+              </p>
+            )}
+            {!ownsStyle && (
+              <p className="text-fine text-muted-foreground">
+                Shared with {styleColorwayCount - 1} other colourway
+                {styleColorwayCount - 1 === 1 ? "" : "s"} — rename it on{" "}
+                <a
+                  href={`/catalog/styles/${header.styleId}`}
+                  className="underline underline-offset-4"
+                >
+                  the style page
+                </a>
+                .
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Title on Shopify and the till</Label>
+          <p className="border bg-muted/40 px-3 py-2 font-mono text-body">
+            {composedTitle || "—"}
+          </p>
+          <p className="text-fine text-muted-foreground">
+            Composed from the style and the product name. Loom is sent the
+            product name on its own — it nests style → colour → size, so the
+            style is already one level up.
+          </p>
+        </div>
+
+        {prices.length > 0 ? (
+          <div className="space-y-1.5">
+            <Label>NOK price (MSRP, incl. VAT)</Label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {prices.map((p, i) => (
+                <div key={p.seasonId} className="space-y-1">
+                  <Input
+                    value={p.amount}
+                    inputMode="decimal"
+                    onChange={(e) =>
+                      setPrices((prev) =>
+                        prev.map((x, j) =>
+                          j === i ? { ...x, amount: e.target.value } : x
+                        )
+                      )
+                    }
+                  />
+                  <span className="text-fine text-muted-foreground">{p.code}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-fine text-muted-foreground">
+              Prices are per season. Clearing a field removes that season&rsquo;s
+              price, which blocks the push rather than selling at zero.
+            </p>
+          </div>
+        ) : (
+          <p className="text-fine text-muted-foreground">
+            This product is in no season, so it has nowhere to hold a price.
+          </p>
+        )}
+      </section>
+
+      {/* Product properties (always base) */}
+      <section className="mt-6 space-y-4 border p-5">
         <h2 className="text-body">Product properties</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">

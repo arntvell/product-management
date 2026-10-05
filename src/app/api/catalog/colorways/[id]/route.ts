@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { updateColorway, type UpdateColorwayInput } from "@/lib/master/edit";
+import {
+  EditValidationError,
+  updateColorway,
+  type UpdateColorwayInput,
+} from "@/lib/master/edit";
 import { purgeColorwayBlobs } from "@/lib/master/media";
 import { prisma } from "@/lib/db";
 
@@ -23,7 +27,12 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Update failed";
-    const status = message === "Colorway not found" ? 404 : 500;
+    const status =
+      message === "Colorway not found"
+        ? 404
+        : err instanceof EditValidationError
+          ? 400
+          : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

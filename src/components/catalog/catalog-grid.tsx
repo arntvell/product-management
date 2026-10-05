@@ -18,10 +18,13 @@ import {  gridHead,
   dirtyCell,
 } from "@/components/ui/grid";
 import {
-  CHANNELS,
-  CHANNEL_LABELS,
   PRODUCT_STATUSES,
+  PUBLISH_CHANNELS,
+  PUBLISH_CHANNEL_LABELS,
+  type PublishChannelKey,
 } from "@/lib/master/fields";
+import { channelProductTitle } from "@/lib/master/channel-title";
+import { toPlainText } from "@/lib/master/rich-text";
 import { catalogImageSrc } from "@/lib/catalog-image";
 import { usePages } from "@/hooks/use-pages";
 import { useCollections } from "@/hooks/use-collections";
@@ -33,6 +36,24 @@ import type { GridRow } from "@/lib/master/queries";
 import type { BulkChange, EditLayer } from "@/lib/master/edit";
 
 type View = EditLayer | "REFERENCES";
+
+/** A product the till sells in more sizes than the master holds. */
+interface UntouchedSizes {
+  colorwaySku: string;
+  inMaster: number;
+  inSitoo: number;
+}
+
+/** What one channel did, in a fan-out push. */
+interface ChannelPushReport {
+  channel: string;
+  /** Colorways, for every channel, so the three numbers compare. */
+  attempted: number;
+  ok: number;
+  issues: string[];
+  /** What the colorway count cannot say — Sitoo's per-size row tally. */
+  detail?: string;
+}
 
 // Reference columns (References view). Single = Shopify-GID select; multi =
 // master colorway id list (count + fill-down/clear; detailed edit in the editor).
@@ -58,7 +79,24 @@ interface ColDef {
 }
 
 const COLUMNS: ColDef[] = [
-  { key: "status", label: "Status", width: 104, kind: "status", split: false },
+  // "Shopify status", not "Status", because that is whose it is.
+  //
+  // Shopify owns this field in practice and the code already concedes it: the
+  // push refuses to overwrite a live ACTIVE and tells you to change it in
+  // Shopify directly, and Refresh reads it back. Calling it Status invited the
+  // reading that the master decides — which it does not, and which made 2,288
+  // products look like drafts while they were selling.
+  //
+  // It is not ONLY Shopify's: lookup.ts, add-size.ts and variant-barcodes.ts all
+  // read ARCHIVED as "this product is retired" regardless of channel. So the
+  // tooltip says what the label cannot.
+  {
+    key: "status",
+    label: "Shopify status",
+    width: 118,
+    kind: "status",
+    split: false,
+  },
   { key: "tags", label: "Tags", width: 160, kind: "tags", split: true },
   { key: "vendor", label: "Vendor", width: 118, kind: "text", split: false },
   { key: "productType", label: "Type", width: 104, kind: "text", split: false },
@@ -85,9 +123,33 @@ const LONG_TEXT_FIELDS = new Set([
 const FIELD_LABELS: Record<string, string> = {
   swatchHex: "Swatch",
   priceNok: "NOK price",
+  name: "Name",
+  status: "Shopify status",
   ...Object.fromEntries(COLUMNS.map((c) => [c.key, c.label])),
   ...Object.fromEntries(REF_SINGLE.map((c) => [c.key, c.label])),
   ...Object.fromEntries(REF_MULTI.map((c) => [c.key, c.label])),
+};
+
+/**
+ * One letter per channel for the Channels column.
+ *
+ * Written out rather than taken from the channel name: Shopify and Sitoo both
+ * start with S, so a first initial would have shown the same badge for the
+ * webshop and the till — on a column whose entire job is telling them apart.
+ * P is for the POS.
+ */
+const CHANNEL_INITIAL: Record<PublishChannelKey, string> = {
+  SHOPIFY: "S",
+  LOOM: "L",
+  SITOO: "P",
+};
+
+/** Column headers that need a sentence the label has no room for. */
+const COLUMN_HINTS: Record<string, string> = {
+  status:
+    "Shopify's product status. Shopify is the authority: a push never overwrites a live ACTIVE, and Refresh from Shopify reads it back. ARCHIVED also retires the product for Look-up and Add size.",
+  fullDescription:
+    "Shown as text. Most of these carry HTML from the Cin7 import — paragraphs, bold and links that the storefront renders — so the markup is kept and only hidden here.",
 };
 
 const SELECT_W = 36; // row-select checkbox column
@@ -103,11 +165,42 @@ function dkey(id: string, layer: EditLayer, field: string) {
 
 // Always-visible columns (every layer), left of the layer-specific columns.
 const FIXED_COLS: { key: string; label: string; width: number }[] = [
+  // Name is layer-independent — there is one name, not a Shopify one and a Loom
+  // one — so it sits with the other always-visible columns rather than in a
+  // view. Title beside it is derived and read-only: it is what Shopify and the
+  // till will show, and seeing it is what stops a half-rename going out.
+  { key: "name", label: "Name", width: 190 },
+  { key: "title", label: "Title", width: 190 },
+  // Where this product lives. The fact the channel toggle used to obscure: a
+  // product is not "a Shopify product" or "a Sitoo product" — four of the five
+  // Tarvas shoes are on all three at once, which is why this is a column saying
+  // what is true rather than a mode asking you to choose.
+  { key: "channels", label: "Channels", width: 92 },
   { key: "swatchHex", label: "Swatch", width: 76 },
   { key: "priceNok", label: "NOK", width: 84 },
   { key: "media", label: "Media", width: 78 },
 ];
 const FIXED_W = FIXED_COLS.reduce((s, c) => s + c.width, 0);
+/** Width by key, so adding a column cannot silently shift another one's cell. */
+const FIXED_WIDTH: Record<string, number> = Object.fromEntries(
+  FIXED_COLS.map((c) => [c.key, c.width])
+);
+
+/**
+ * Which workflow this grid is serving.
+ *
+ * "seasonal" the Livid editor at /catalog/edit, unchanged: season tabs, drops,
+ *            carry-over, and a price column that waits for a season.
+ * "external" vintage and the resold brands at /catalog/external. The season is
+ *            pinned to CONTINUITY because that is where 3,648 of the 3,674 live
+ *            and an external has no season in any meaningful sense, so the tabs,
+ *            the drop filter and the carry-over filter are all answers to
+ *            questions nobody asks here — and the price column is simply on.
+ *
+ * One grid rather than two: the editing, pasting, copy-down and autosave are the
+ * same work, and a fork would be two places to fix the next bug in.
+ */
+export type GridScope = "seasonal" | "external";
 
 export function CatalogGrid({
   initialRows,
@@ -115,13 +208,22 @@ export function CatalogGrid({
   season,
   seasonId,
   colorwayOptions,
+  scope = "seasonal",
+  title,
+  note,
 }: {
   initialRows: GridRow[];
   seasons: { code: string }[];
   season?: string;
   seasonId?: string;
   colorwayOptions: { id: string; label: string }[];
+  scope?: GridScope;
+  /** Page heading. Defaults to the seasonal editor's. */
+  title?: string;
+  /** One line under the toolbar, for anything the scope has to explain. */
+  note?: string;
 }) {
+  const seasonal = scope === "seasonal";
   const [rows, setRows] = useState<GridRow[]>(initialRows);
   const [view, setView] = useState<View>("BASE");
   const [dirty, setDirty] = useState<Map<string, string>>(new Map());
@@ -136,6 +238,7 @@ export function CatalogGrid({
     needs: "",
     drop: "",
     origin: "",
+    channel: "",
   });
   const [saving, setSaving] = useState(false);
   const [autosave, setAutosave] = useState(true);
@@ -145,6 +248,11 @@ export function CatalogGrid({
   // The debounced save reads the pending map through a ref so it does not need
   // to be rebuilt (and reschedule itself) on every keystroke.
   const dirtyRef = useRef(dirty);
+  // Read through a ref for the same reason the dirty map is: the debounced save
+  // must not be rebuilt every time a row changes.
+  const rowsRef = useRef<GridRow[]>(initialRows);
+  /** True when every row can say which season its price belongs to. */
+  const rowsHaveOwnSeason = initialRows.every((r) => r.priceSeasonId);
   const [panel, setPanel] = useState<CellPanelTarget | null>(null);
   const [copyOpen, setCopyOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -161,6 +269,7 @@ export function CatalogGrid({
   const layer: EditLayer = isRefs ? "BASE" : (view as EditLayer);
   const isBase = view === "BASE";
   dirtyRef.current = dirty;
+  rowsRef.current = rows;
 
   const { carePages, fitguidePages } = usePages();
   const { collections } = useCollections();
@@ -227,6 +336,14 @@ export function CatalogGrid({
       if (filters.drop === "__none" ? !!r.drop : filters.drop && r.drop !== filters.drop)
         return false;
       if (filters.origin && r.origin !== filters.origin) return false;
+      // "__none" is everything on no channel at all — targeted nowhere, so no
+      // edit here reaches a customer until someone chooses where it goes.
+      if (
+        filters.channel === "__none"
+          ? r.channels.length > 0
+          : filters.channel && !r.channels.includes(filters.channel)
+      )
+        return false;
       if (filters.needs && !needsMatch(r)) return false;
       if (!q) return true;
       return (
@@ -239,6 +356,15 @@ export function CatalogGrid({
   }, [rows, search, droppedFilter, filters]);
 
   const droppedCount = rows.filter((r) => r.dropped).length;
+
+  /** How many rows on screen the till holds — drives the Sitoo notice below. */
+  const sitooRowsVisible = visibleRows.filter((r) =>
+    r.channels.includes("SITOO")
+  ).length;
+  /** Selected rows on at least one channel — what a push would actually touch. */
+  const pushableSelected = visibleRows.filter(
+    (r) => selected.has(r.id) && r.channels.length > 0
+  ).length;
 
   // Bulk operations target the selection when one exists, else all filtered rows.
   const targetRows = useMemo(
@@ -304,6 +430,7 @@ export function CatalogGrid({
       if (field === "productType") return row.productType;
       if (field === "swatchHex") return row.swatchHex;
       if (field === "priceNok") return row.priceNok;
+      if (field === "name") return row.name;
       // single references
       if (field in row.refs && !Array.isArray(row.refs[field as keyof GridRow["refs"]]))
         return (row.refs[field as keyof GridRow["refs"]] as string) ?? "";
@@ -335,6 +462,7 @@ export function CatalogGrid({
   // Enter/Shift+Enter movement and multi-cell paste.
   const editableCols = useMemo(() => {
     const fixed = [
+      { key: "name", kind: "text" as const, atLayer: "BASE" as EditLayer },
       { key: "swatchHex", kind: "text" as const, atLayer: "BASE" as EditLayer },
       { key: "priceNok", kind: "text" as const, atLayer: "BASE" as EditLayer },
     ];
@@ -363,7 +491,9 @@ export function CatalogGrid({
    */
   const copyDownFields = useMemo(() => {
     const base = editableCols
-      .filter((c) => !(c.key === "priceNok" && !seasonId))
+      // Price is offered whenever SOMETHING can say which season it belongs to:
+      // the page's tab, or every row's own single season.
+      .filter((c) => !(c.key === "priceNok" && !seasonId && !rowsHaveOwnSeason))
       .map((c) => ({
         key: c.key,
         label: FIELD_LABELS[c.key] ?? c.key,
@@ -378,7 +508,7 @@ export function CatalogGrid({
         atLayer: "BASE" as EditLayer,
       })),
     ];
-  }, [editableCols, isRefs, seasonId]);
+  }, [editableCols, isRefs, seasonId, rowsHaveOwnSeason]);
 
   const colIndexByField = useMemo(
     () => new Map(editableCols.map((c, i) => [c.key, i])),
@@ -439,7 +569,7 @@ export function CatalogGrid({
         line.split("\t").forEach((val, c) => {
           const col = editableCols[startCol + c];
           if (!col || col.kind === "select") return;
-          if (col.key === "priceNok" && !seasonId) return;
+          if (col.key === "priceNok" && !seasonId && !rowsHaveOwnSeason) return;
           const key = dkey(targetRow.id, col.atLayer, col.key);
           if (val === originalValue(targetRow, col.atLayer, col.key)) next.delete(key);
           else next.set(key, val);
@@ -729,12 +859,19 @@ export function CatalogGrid({
       const changes: BulkChange[] = [];
       for (const [key, value] of batch) {
         const [id, l, field] = key.split("|") as [string, EditLayer, string];
+        // The row's own season wins over the page's. An external is in exactly
+        // one season and the external page pins none, so without this a price
+        // typed there would have nowhere to be written; a Livid product in three
+        // seasons has no "own" season and falls back to the tab, which is the
+        // question those tabs exist to answer.
+        const priceSeason =
+          rowsRef.current.find((r) => r.id === id)?.priceSeasonId ?? seasonId;
         changes.push({
           colorwayId: id,
           field,
           layer: l,
           value,
-          ...(field === "priceNok" && seasonId ? { seasonId } : {}),
+          ...(field === "priceNok" && priceSeason ? { seasonId: priceSeason } : {}),
         });
       }
       try {
@@ -793,11 +930,262 @@ export function CatalogGrid({
     return () => clearTimeout(t);
   }, [dirty, autosave, save]);
 
+  // ---- Refresh from Shopify ----
+  //
+  // The master is thinner than the shop for everything that predates it: 2,288
+  // products are ACTIVE in Shopify and DRAFT here because the column was never
+  // populated, and 825 hold descriptions, care pages and fit guides in Shopify
+  // that Origio has never seen.
+  //
+  // Reads, never corrects: a field is filled only where the master is empty, and
+  // a MANUAL-owned field is left alone even then. Shopify is the fallback for
+  // what nobody has typed here, not an authority over what somebody has.
+  const [refreshBusy, setRefreshBusy] = useState(false);
+  /**
+   * A new Shopify link changes the Channels column, which is derived
+   * server-side. The field merge below cannot produce it, and silently showing
+   * the old badges is the staleness this whole handler exists to remove — so say
+   * so instead of pretending.
+   */
+  const [needsReload, setNeedsReload] = useState(false);
+
+  async function refreshFromShopify() {
+    // The selection if there is one, else what the filters have narrowed to —
+    // the same rule the bulk bar uses, so "these rows" means one thing.
+    const target =
+      selected.size > 0 ? visibleRows.filter((r) => selected.has(r.id)) : visibleRows;
+    const ids = target.map((r) => r.id);
+    if (!ids.length) return;
+
+    // Rows with no Shopify link are the reason a refresh can silently do
+    // nothing: the sync matches on the product GID the master recorded, and
+    // 2,695 colorways have never had one. EXT-NRD-2CINM sat as DRAFT here while
+    // Shopify held it ARCHIVED, and every refresh passed over it in silence.
+    //
+    // Finding them means sweeping the whole Shopify catalogue to match on
+    // variant SKU, which is far heavier than reading back the ones already
+    // linked — so it is asked for rather than assumed, and only when some of
+    // these rows actually need it.
+    const unlinked = target.filter((r) => !r.channelsLive.includes("SHOPIFY")).length;
+    let withLink = false;
+    if (unlinked > 0) {
+      withLink = confirm(
+        `${unlinked} of these ${unlinked === 1 ? "is" : "are"} not linked to a Shopify product, ` +
+          `so a refresh cannot see ${unlinked === 1 ? "it" : "them"}.\n\n` +
+          `Search Shopify for ${unlinked === 1 ? "it" : "them"} by SKU first? ` +
+          `This reads the whole Shopify catalogue and takes a moment.\n\n` +
+          `Cancel to refresh only the ${target.length - unlinked} already linked.`
+      );
+    }
+    const parts = withLink ? ["link", "status", "fields"] : ["status", "fields"];
+    setRefreshBusy(true);
+    try {
+      const dry = await fetch("/api/catalog/sync/shopify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colorwayIds: ids, parts }),
+      });
+      const plan = await dry.json();
+      if (!dry.ok) throw new Error(plan.error ?? "Could not read Shopify");
+
+      const statusLines = Object.entries(plan.status?.byTransition ?? {}).map(
+        ([k, v]) => `  ${v} × ${k}`
+      );
+      const fieldLines = Object.entries(plan.fields?.byField ?? {})
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+        .slice(0, 8)
+        .map(([k, v]) => `  ${v} × ${k}`);
+
+      if (!plan.status?.wouldChange && !plan.fields?.wouldFill && !plan.link?.wouldLink) {
+        toast.success(`Already up to date — ${ids.length} checked.`);
+        return;
+      }
+      if (
+        !confirm(
+          `Read ${ids.length} product(s) back from Shopify?\n\n` +
+            (plan.link?.wouldLink
+              ? `Link ${plan.link.wouldLink} to a Shopify product found by SKU` +
+                (plan.link.ambiguous
+                  ? ` (${plan.link.ambiguous} ambiguous SKUs left alone)`
+                  : "") +
+                `.\n\n`
+              : "") +
+            (plan.status?.wouldChange
+              ? `Status (${plan.status.wouldChange}):\n${statusLines.join("\n")}\n\n`
+              : "") +
+            (plan.fields?.wouldFill
+              ? `Fill blanks on ${plan.fields.wouldFill} product(s):\n${fieldLines.join("\n")}\n\n`
+              : "") +
+            `Only empty fields are filled. Nothing you have typed is overwritten.`
+        )
+      )
+        return;
+
+      const res = await fetch("/api/catalog/sync/shopify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colorwayIds: ids, parts, apply: true }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Refresh failed");
+
+      // Merge what landed into the rows on screen.
+      //
+      // `router.refresh()` cannot do this: the server re-renders and hands down
+      // fresh `initialRows`, but those seed a `useState` that by design ignores
+      // every later prop — so the page looked unchanged until a full reload.
+      // The writes come back from the route instead and go through
+      // `applyChanges`, the same merge a save uses, so there is one place that
+      // knows how a field value becomes a cell.
+      const merged: BulkChange[] = [];
+      for (const a of (d.status?.applied ?? []) as { colorwayId: string; status: string }[])
+        merged.push({
+          colorwayId: a.colorwayId,
+          field: "status",
+          layer: "BASE",
+          value: a.status,
+        });
+      for (const a of (d.fields?.applied ?? []) as {
+        colorwayId: string;
+        data: Record<string, unknown>;
+      }[])
+        for (const [field, value] of Object.entries(a.data))
+          merged.push({
+            colorwayId: a.colorwayId,
+            field,
+            layer: "BASE",
+            // The reference lists are arrays here and JSON strings in the grid's
+            // change format, which is what applyChanges parses back.
+            value: Array.isArray(value) ? JSON.stringify(value) : String(value ?? ""),
+          });
+      if (merged.length) setRows((prev) => applyChanges(prev, merged));
+
+      const statusN = d.status?.applied?.length ?? 0;
+      const fieldsN = d.fields?.applied?.length ?? 0;
+      const linkedN = d.link?.linked ?? 0;
+      toast.success(
+        [
+          linkedN ? `${linkedN} linked` : "",
+          statusN ? `${statusN} status` : "",
+          fieldsN ? `${fieldsN} filled` : "",
+        ]
+          .filter(Boolean)
+          .join(", ") || "Already up to date."
+      );
+      // A new link changes the Channels column, which is built server-side —
+      // the merge above covers field values, not channel membership.
+      if (linkedN) setNeedsReload(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Refresh failed");
+    } finally {
+      setRefreshBusy(false);
+    }
+  }
+
+  // ---- Push to wherever the product already lives ----
+  //
+  // No channel to choose. A product on Shopify, Sitoo and Loom — four of the five
+  // Tarvas shoes are — has ONE price, and asking which channel to send it to is
+  // asking someone to do the fan-out by hand and remember the third.
+  //
+  // It never creates: the targets are what each product is already on, so putting
+  // something on Shopify for the first time stays a deliberate act in Publishing,
+  // where the readiness gate and the payload preview are.
+  const [pushBusy, setPushBusy] = useState(false);
+
+  async function pushSelected() {
+    const ids = [...selected].filter(
+      (id) => rowsRef.current.find((r) => r.id === id)?.channels.length
+    );
+    if (!ids.length) {
+      toast.error("None of the selected products are on a channel yet.");
+      return;
+    }
+    if (dirty.size > 0) {
+      toast.error("Save first — the channels would get the values before your edits.");
+      return;
+    }
+    setPushBusy(true);
+    try {
+      const dry = await fetch("/api/catalog/push/fanout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colorwayIds: ids, dryRun: true }),
+      });
+      const plan = await dry.json();
+      if (!dry.ok) throw new Error(plan.error ?? "Dry run failed");
+
+      const lines = [
+        plan.shopify ? `Shopify: ${plan.shopify}` : null,
+        plan.sitoo ? `Sitoo: ${plan.sitoo} (${plan.sitooChanges} differ)` : null,
+        plan.loom ? `Loom: ${plan.loom}` : null,
+      ].filter(Boolean);
+      if (!lines.length) {
+        toast.error("None of these are on a channel yet.");
+        return;
+      }
+      if (
+        !confirm(
+          `Push ${plan.products} product(s) to the channels they are on?\n\n` +
+            lines.join("\n") +
+            (plan.noChannel?.length
+              ? `\n\n${plan.noChannel.length} on no channel — skipped.`
+              : "") +
+            (plan.noSeason?.length
+              ? `\n${plan.noSeason.length} in no season, so no price would be sent.`
+              : "") +
+            // The one way this push can report success and leave a product
+            // wrong: Sitoo sells sizes the master has never held, and a family
+            // write has to pass those rows back untouched.
+            (plan.untouchedSizes?.length
+              ? `\n\n⚠ ${plan.untouchedSizes.length} product(s) have sizes in Sitoo that Origio does not hold. ` +
+                `Those sizes keep their current price:\n` +
+                (plan.untouchedSizes as UntouchedSizes[])
+                  .slice(0, 6)
+                  .map((u) => `  ${u.colorwaySku}: ${u.inMaster} of ${u.inSitoo} sizes`)
+                  .join("\n") +
+                (plan.untouchedSizes.length > 6
+                  ? `\n  …and ${plan.untouchedSizes.length - 6} more`
+                  : "")
+              : "")
+        )
+      )
+        return;
+
+      const res = await fetch("/api/catalog/push/fanout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colorwayIds: ids }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Push failed");
+
+      const reports = (d.reports ?? []) as ChannelPushReport[];
+      const summary = reports
+        .map((r) => `${r.channel} ${r.ok}/${r.attempted}${r.detail ? ` (${r.detail})` : ""}`)
+        .join(" · ");
+      const issues = reports.flatMap((r) => r.issues);
+      if (issues.length)
+        toast.warning(`${summary} — ${issues.length} issue(s): ${issues[0]}`, {
+          duration: 12000,
+        });
+      else toast.success(`Pushed — ${summary}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Push failed");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+
   return (
     <div className="flex h-full flex-col px-8 py-6">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="font-display text-page uppercase">Bulk editor</h1>
+        <h1 className="font-display text-page uppercase">
+          {title ?? "Products"}
+        </h1>
+        {seasonal && (
         <div className="flex gap-1.5">
           <a
             href="/catalog/edit"
@@ -825,8 +1213,21 @@ export function CatalogGrid({
             </a>
           ))}
         </div>
+        )}
+        {/* Two column sets, not four.
+            This row used to read BASE · Shopify (B2C) · Loom (B2B) · References,
+            where the middle two switched every column to that channel's
+            ChannelContent override. The whole database holds ONE such override —
+            a Loom short-description on a single Livid shirt — so three quarters
+            of the most prominent control on the screen served one row, while the
+            question that actually organises the work, which system holds this
+            product, had no place at all.
+            It has one now: the Channel filter narrows the rows, and the Channels
+            column says where each one lives. Overrides are still editable per
+            product, on the colorway page, which is the right scale for a feature
+            used once. */}
         <div className="flex gap-1.5">
-          {(["BASE", ...CHANNELS, "REFERENCES"] as View[]).map((v) => (
+          {(["BASE", "REFERENCES"] as View[]).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
@@ -837,11 +1238,7 @@ export function CatalogGrid({
                   : "text-muted-foreground hover:bg-muted"
               )}
             >
-              {v === "BASE"
-                ? "Base"
-                : v === "REFERENCES"
-                  ? "References"
-                  : CHANNEL_LABELS[v as "SHOPIFY" | "LOOM"]}
+              {v === "BASE" ? "Fields" : "References"}
             </button>
           ))}
         </div>
@@ -900,6 +1297,15 @@ export function CatalogGrid({
           />
           <Button
             size="sm"
+            variant="outline"
+            onClick={() => void refreshFromShopify()}
+            disabled={refreshBusy}
+            title="Read status and merchandising fields back from Shopify for these rows. Fills blanks only."
+          >
+            {refreshBusy ? "Reading…" : "Refresh from Shopify"}
+          </Button>
+          <Button
+            size="sm"
             onClick={() => void save()}
             disabled={saving || dirty.size === 0}
           >
@@ -920,7 +1326,22 @@ export function CatalogGrid({
           onChange={(v) => setFilters((f) => ({ ...f, status: v }))} />
         <FilterSelect label="Source" value={filters.source} options={filterOptions.source}
           onChange={(v) => setFilters((f) => ({ ...f, source: v }))} />
-        {season && (
+        {/* Which system holds the product. The one filter that separates store
+            vintage from online vintage: both are Vendor = Vintage, and only the
+            channel tells them apart. */}
+        <FilterSelect
+          label="Channel"
+          value={filters.channel}
+          options={[
+            ...PUBLISH_CHANNELS.map((c) => ({
+              value: c,
+              label: `On ${PUBLISH_CHANNEL_LABELS[c]}`,
+            })),
+            { value: "__none", label: "On no channel" },
+          ]}
+          onChange={(v) => setFilters((f) => ({ ...f, channel: v }))}
+        />
+        {seasonal && season && (
           <>
             <FilterSelect
               label="Drop"
@@ -956,7 +1377,7 @@ export function CatalogGrid({
         {Object.values(filters).some(Boolean) && (
           <button
             onClick={() =>
-              setFilters({ vendor: "", productType: "", gender: "", status: "", source: "", needs: "", drop: "", origin: "" })
+              setFilters({ vendor: "", productType: "", gender: "", status: "", source: "", needs: "", drop: "", origin: "", channel: "" })
             }
             className="text-fine text-muted-foreground underline underline-offset-4"
           >
@@ -965,9 +1386,38 @@ export function CatalogGrid({
         )}
       </div>
 
-      {!seasonId && (
+      {!seasonId && seasonal && (
         <p className="mt-2 border border-line bg-paper px-3 py-2 text-meta normal-case tracking-normal text-muted-foreground">
           Prices are per-season — select a season above to edit NOK prices.
+        </p>
+      )}
+      {note && (
+        <p className="mt-2 border border-line bg-paper px-3 py-2 text-meta normal-case tracking-normal text-muted-foreground">
+          {note}
+        </p>
+      )}
+      {needsReload && (
+        <p className="mt-2 border border-ink bg-paper px-3 py-2 text-meta normal-case tracking-normal">
+          Products were linked to Shopify. Reload to see their Channels column
+          and refresh them for status and content.{" "}
+          <button
+            onClick={() => window.location.reload()}
+            className="underline underline-offset-4"
+          >
+            Reload now
+          </button>
+        </p>
+      )}
+      {/* The one thing a green row does not say: a save reaches the master and
+          nothing else. On the external page there is now a button for it, so the
+          line points at the button; on the seasonal editor there is none, and it
+          has to say so rather than let the till drift silently. */}
+      {sitooRowsVisible > 0 && (
+        <p className="mt-2 border border-line bg-paper px-3 py-2 text-meta normal-case tracking-normal text-muted-foreground">
+          {sitooRowsVisible} of these are in Sitoo (POS).{" "}
+          {seasonal
+            ? "A name or price changed here does not reach the till — update them on the External products page."
+            : "Saving writes the master only; select rows and push to send changes to every channel they are on."}
         </p>
       )}
       <p className="mt-2 text-fine text-muted-foreground">
@@ -984,6 +1434,11 @@ export function CatalogGrid({
             these rows. Shift-click a checkbox to select a range.
           </p>
           <AddTagToSelected count={selected.size} onAdd={addTagToSelected} />
+          {!seasonal && pushableSelected > 0 && (
+            <Button size="sm" onClick={() => void pushSelected()} disabled={pushBusy}>
+              {pushBusy ? "Pushing…" : `Push ${pushableSelected} to their channels`}
+            </Button>
+          )}
           <FieldBulkPicker
             fields={copyDownFields}
             source={copySource}
@@ -1006,12 +1461,6 @@ export function CatalogGrid({
             Clear selection
           </button>
         </div>
-      )}
-      {!isBase && !isRefs && (
-        <p className="mt-2 text-fine text-muted-foreground">
-          Editing <b>{CHANNEL_LABELS[layer as "SHOPIFY" | "LOOM"]}</b> overrides.
-          Empty cells inherit the base value (shown as placeholder).
-        </p>
       )}
       {isRefs && (
         <div className="mt-2 space-y-2">
@@ -1069,6 +1518,7 @@ export function CatalogGrid({
                 key={c.key}
                 style={{ width: c.width }}
                 className="flex shrink-0 items-center justify-between gap-1 border-l px-2 py-2"
+                title={COLUMN_HINTS[c.key as string]}
               >
                 <span className="truncate">{c.label}</span>
                 <button
@@ -1154,21 +1604,106 @@ export function CatalogGrid({
                             carry-over
                           </span>
                         )}
-                        {row.onShopify && (
-                          <span
-                            title="Already has a Shopify product — a push updates it"
-                            className="ml-1 uppercase"
-                          >
-                            · live
-                          </span>
-                        )}
+
                       </span>
                     </div>
                   </div>
 
-                  {/* Always-visible: swatch, price, media */}
+                  {/* Always-visible: name, title, swatch, price, media */}
                   <div
-                    style={{ width: FIXED_COLS[0].width }}
+                    style={{ width: FIXED_WIDTH["name"] }}
+                    className={cn(
+                      "shrink-0 border-l",
+                      dirty.has(dkey(row.id, "BASE", "name")) && dirtyCell
+                    )}
+                  >
+                    <input
+                      {...cellHandlers(vi.index, row, "name", "text")}
+                      value={cellValue(row, "BASE", "name")}
+                      onChange={(e) => setCell(row, "name", e.target.value, "BASE")}
+                      title={
+                        row.ownsStyle
+                          ? "The product name. This product is its own style, so the style name moves with it."
+                          : `One colour of "${row.styleName}" — the style keeps its name, and the title becomes "${row.styleName} <name>".`
+                      }
+                      className="h-full w-full bg-transparent px-2 text-fine outline-none focus:bg-background"
+                    />
+                  </div>
+                  {/* Derived, never editable: what channelProductTitle will send. */}
+                  <div
+                    style={{ width: FIXED_WIDTH["title"] }}
+                    className="flex shrink-0 items-center border-l px-2 text-fine text-muted-foreground"
+                    title="What Shopify and the till will show. Loom is sent the name on its own."
+                  >
+                    <span className="truncate">
+                      {channelProductTitle({
+                        name: cellValue(row, "BASE", "name"),
+                        style: {
+                          styleName: row.ownsStyle
+                            ? cellValue(row, "BASE", "name")
+                            : row.styleName,
+                        },
+                      })}
+                    </span>
+                  </div>
+                  <div
+                    style={{ width: FIXED_WIDTH["channels"] }}
+                    className="flex shrink-0 items-center gap-1 border-l px-2 text-fine"
+                    title={
+                      row.channels.length
+                        ? [
+                            row.channelsLive.length
+                              ? `On ${row.channelsLive
+                                  .map((c) => PUBLISH_CHANNEL_LABELS[c as PublishChannelKey] ?? c)
+                                  .join(", ")}`
+                              : null,
+                            row.channels.some((c) => !row.channelsLive.includes(c))
+                              ? `Targeted but not yet pushed: ${row.channels
+                                  .filter((c) => !row.channelsLive.includes(c))
+                                  .map((c) => PUBLISH_CHANNEL_LABELS[c as PublishChannelKey] ?? c)
+                                  .join(", ")}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : "On no channel — nothing here reaches a customer"
+                    }
+                  >
+                    {row.channels.length ? (
+                      PUBLISH_CHANNELS.map((c) => {
+                        // Three states, because "aimed at" and "actually there"
+                        // are different facts and the push behaves differently
+                        // for each: filled = the channel holds it (a push
+                        // updates), outline = targeted but never pushed (a push
+                        // creates), faint = not targeted at all.
+                        const live = row.channelsLive.includes(c);
+                        const targeted = row.channels.includes(c);
+                        return (
+                          <span
+                            key={c}
+                            aria-hidden
+                            className={cn(
+                              "inline-flex h-4 w-4 items-center justify-center border text-[10px] leading-none",
+                              live
+                                ? "border-ink bg-ink text-offwhite"
+                                : targeted
+                                  ? "border-ink text-ink"
+                                  : "border-line text-subtle"
+                            )}
+                          >
+                            {CHANNEL_INITIAL[c]}
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <span className="text-subtle">—</span>
+                    )}
+                    <span className="sr-only">
+                      {row.channels.length ? row.channels.join(", ") : "no channel"}
+                    </span>
+                  </div>
+                  <div
+                    style={{ width: FIXED_WIDTH["swatchHex"] }}
                     className={cn(
                       "flex shrink-0 items-center gap-1 border-l px-1",
                       dirty.has(dkey(row.id, "BASE", "swatchHex")) && dirtyCell
@@ -1187,7 +1722,7 @@ export function CatalogGrid({
                     />
                   </div>
                   <div
-                    style={{ width: FIXED_COLS[1].width }}
+                    style={{ width: FIXED_WIDTH["priceNok"] }}
                     className={cn(
                       "shrink-0 border-l",
                       dirty.has(dkey(row.id, "BASE", "priceNok")) && dirtyCell
@@ -1196,16 +1731,20 @@ export function CatalogGrid({
                     <input
                       {...cellHandlers(vi.index, row, "priceNok", "text")}
                       value={cellValue(row, "BASE", "priceNok")}
-                      disabled={!seasonId}
-                      placeholder={seasonId ? "NOK" : "season"}
+                      disabled={!(row.priceSeasonId ?? seasonId)}
+                      placeholder={row.priceSeasonId ?? seasonId ? "NOK" : "season"}
                       onChange={(e) => setCell(row, "priceNok", e.target.value, "BASE")}
-                      title={seasonId ? "NOK MSRP for this season" : "Select a season to edit price"}
+                      title={
+                        row.priceSeasonId ?? seasonId
+                          ? "NOK MSRP"
+                          : "In several seasons — pick one above to edit the price"
+                      }
                       className="h-full w-full bg-transparent px-2 text-fine tabular-nums outline-none focus:bg-background disabled:opacity-40"
                     />
                   </div>
                   <a
                     href={`/catalog/colorways/${row.id}/media`}
-                    style={{ width: FIXED_COLS[2].width }}
+                    style={{ width: FIXED_WIDTH["media"] }}
                     className="flex shrink-0 items-center justify-center gap-1 border-l text-fine text-muted-foreground hover:bg-muted hover:underline"
                     title="Manage media"
                   >
@@ -1328,7 +1867,7 @@ export function CatalogGrid({
                               }}
                               title={
                                 value
-                                  ? `${value}\n\nClick to edit · Delete to clear`
+                                  ? `${toPlainText(value)}\n\nClick to edit · Delete to clear`
                                   : placeholder || "Click to write"
                               }
                               className={cn(
@@ -1336,7 +1875,13 @@ export function CatalogGrid({
                                 !value && "text-muted-foreground/50"
                               )}
                             >
-                              {value || placeholder || "—"}
+                              {/* The stored value may be HTML — 2,643 of these
+                                  carry markup from the Cin7 import. Shown as
+                                  text so a cell reads as a description instead
+                                  of a tag soup; the value itself is untouched,
+                                  because publish.ts pushes it back to Shopify
+                                  and the markup is what the storefront renders. */}
+                              {toPlainText(value) || placeholder || "—"}
                             </button>
                           ) : (
                             <input
@@ -1801,7 +2346,21 @@ function applyChanges(rows: GridRow[], changes: BulkChange[]): GridRow[] {
       }
       (row.refs as Record<string, unknown>)[ch.field] = ids;
     } else if (ch.layer === "BASE") {
-      if (ch.field === "status") row.status = v;
+      // Name is a column on Colorway, not one of the enrichment text fields, so
+      // it needs its own case — without it the value landed in `row.base.name`,
+      // the dirty key was retired, and the Name and Title cells snapped back to
+      // the old value while the database held the new one. A grid that shows
+      // the wrong name after a successful save is worse than one that fails.
+      if (ch.field === "name") {
+        // A blank cell is skipped server-side (autosave fires mid-typing), so
+        // skip it here too or the two drift apart.
+        if (v.trim()) {
+          row.name = v.trim();
+          // The style moved with it server-side when this product is the whole
+          // style; mirror that so the label and the composed title agree.
+          if (row.ownsStyle) row.styleName = v.trim();
+        }
+      } else if (ch.field === "status") row.status = v;
       else if (ch.field === "tags")
         row.tags = v.split(",").map((t) => t.trim()).filter(Boolean);
       else if (ch.field === "vendor") row.vendor = v;

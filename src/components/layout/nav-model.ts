@@ -12,7 +12,6 @@ import {
   Layers,
   LayoutGrid,
   Package,
-  PencilLine,
   Rows3,
   Ruler,
   ScanSearch,
@@ -59,8 +58,18 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/catalog", label: "Overview", icon: LayoutGrid },
       { href: "/catalog/collections", label: "Collections", icon: Layers },
       { href: "/catalog/drops", label: "Drops", icon: CalendarRange },
-      { href: "/catalog/vintage", label: "Vintage", icon: Shirt },
-      { href: "/catalog/edit", label: "Bulk editor", icon: PencilLine },
+      { href: "/catalog/vintage", label: "Vintage drops", icon: CalendarRange },
+      // The catalogue is two jobs, so it is two destinations.
+      //
+      // Livid's own production is seasonal: it arrives through Threadflow, moves
+      // in drops, and a colourway is routinely in two or three seasons at once.
+      // Vintage and the resold brands are none of that — bought in, one season
+      // each (CONTINUITY for 3,648 of 3,674), selling until they run out.
+      //
+      // One screen showing both meant everyone read past machinery that did not
+      // apply to their half.
+      { href: "/catalog/edit", label: "Livid products", icon: Shirt },
+      { href: "/catalog/external", label: "External products", icon: Boxes },
       { href: "/catalog/variants", label: "Variant editor", icon: Rows3 },
       { href: "/catalog/products/drafts", label: "Drafts", icon: FilePen },
       { href: "/catalog/publishing", label: "Publishing", icon: Share2 },

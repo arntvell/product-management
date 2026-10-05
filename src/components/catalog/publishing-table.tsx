@@ -30,6 +30,25 @@ const CHANNEL_KEY = {
 
 const CHANNEL_NAME = { SHOPIFY: "Shopify", LOOM: "Loom", SITOO: "Sitoo" } as const;
 
+/**
+ * Split a selection into the two Loom deliveries it actually is.
+ *
+ * Loom does two jobs with opposite eligibility: the wholesale catalogue carries
+ * Livid's own production, and the stock registry carries everything that moves —
+ * externals included, because stock that never reaches the registry never
+ * reconciles. `buildLoomPayloadFromColorways` builds one shape or the other for
+ * the whole delivery, so a mixed selection has to go as two.
+ */
+function groupByLoomMode(
+  rows: PublishingRow[],
+  ids: string[]
+): { full: string[]; data: string[] } {
+  const livid = new Map(rows.map((r) => [r.id, r.brandIsLivid]));
+  const out = { full: [] as string[], data: [] as string[] };
+  for (const id of ids) out[livid.get(id) ? "full" : "data"].push(id);
+  return out;
+}
+
 /** Result of a Loom dry run — what a push would do, before it does it. */
 interface LoomPreview {
   season: string;
@@ -89,25 +108,43 @@ export function PublishingTable({
     setPreviewing(true);
     setReport(null);
     try {
-      const res = await fetch("/api/catalog/push/loom", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ colorwayIds: [...selected], seasonCode: season, dryRun: true }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "Preview failed");
+      // Dry-run the same two deliveries the push will send, or the preview
+      // reports every external as skipped and then the push sends them.
+      const byMode = groupByLoomMode(items, [...selected]);
+      const modes = (["full", "data"] as const).filter((m) => byMode[m].length);
+      const sum = { wouldSend: 0, styles: 0, willPublish: 0, dataOnly: 0, newToLoom: 0, core: 0, missingImage: 0 };
+      const currencies = new Set<string>();
+      const skipped: string[] = [];
+
+      for (const mode of modes) {
+        const res = await fetch("/api/catalog/push/loom", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            colorwayIds: byMode[mode],
+            seasonCode: season,
+            mode,
+            dryRun: true,
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error ?? "Preview failed");
+        sum.wouldSend += d.preview?.wouldSend ?? 0;
+        sum.styles += d.preview?.styles ?? 0;
+        sum.willPublish += d.preview?.channelsLoomTrue ?? 0;
+        sum.dataOnly += d.preview?.channelsLoomFalse ?? 0;
+        sum.newToLoom += d.preview?.newToLoom ?? 0;
+        sum.core += d.preview?.core ?? 0;
+        sum.missingImage += d.preview?.missingImage ?? 0;
+        for (const c of (d.preview?.currencies ?? []) as string[]) currencies.add(c);
+        for (const x of (d.skipped ?? []) as { colorwayId: string; reason: string }[])
+          skipped.push(`${nameOf(x.colorwayId)} — ${x.reason}`);
+      }
+
       setPreview({
-        wouldSend: d.preview?.wouldSend ?? 0,
-        styles: d.preview?.styles ?? 0,
-        willPublish: d.preview?.channelsLoomTrue ?? 0,
-        dataOnly: d.preview?.channelsLoomFalse ?? 0,
-        newToLoom: d.preview?.newToLoom ?? 0,
-        core: d.preview?.core ?? 0,
-        missingImage: d.preview?.missingImage ?? 0,
-        currencies: d.preview?.currencies ?? [],
-        skipped: (d.skipped ?? []).map(
-          (x: { colorwayId: string; reason: string }) => `${nameOf(x.colorwayId)} — ${x.reason}`
-        ),
+        ...sum,
+        currencies: [...currencies].sort(),
+        skipped,
         season,
       });
     } catch (e) {
@@ -128,22 +165,73 @@ export function PublishingTable({
     setReport(null);
     const ids = [...selected];
     try {
-      const res = await fetch("/api/catalog/push/loom", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          colorwayIds: ids,
-          seasonCode: season,
-          ...(preview?.failedEventId
-            ? { eventId: `${preview.failedEventId}-retry-${Date.now().toString(36)}` }
-            : {}),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok && data.sent === undefined)
-        throw new Error(data.error ?? data.raw ?? "Loom push failed");
+      // SPLIT BY BRAND, because Loom is doing two different jobs and a delivery
+      // carries one shape or the other, never a mix.
+      //
+      // "full" is the wholesale catalogue, which is Livid's own production only;
+      // "data" is the stock registry, which has to see everything that moves.
+      // This table sent no mode at all, so every delivery asked for "full" — and
+      // `isLoomEligible(_, "catalogue")` answered "not a Livid-brand product" for
+      // all 3,674 externals, Chimi and Hestra and Paraboot as much as vintage.
+      // The push reported success having sent nothing; their existing Loom rows
+      // all came from routes that pass "data" explicitly.
+      const byMode = groupByLoomMode(items, ids);
+      const batches = (["full", "data"] as const).filter((m) => byMode[m].length);
+      // No batch means no selection. Falling through would report a failure
+      // nothing attempted — the single-request version could not reach this.
+      if (!batches.length) {
+        toast.error("Nothing to push.");
+        return;
+      }
 
-      const skipped: { colorwayId: string; reason: string }[] = data.skipped ?? [];
+      let sent = 0;
+      let ok = true;
+      const skipped: { colorwayId: string; reason: string }[] = [];
+      // A failure is reported from the batch that failed, so the message names
+      // the delivery that actually went wrong rather than the last one tried.
+      let failed: {
+        raw?: string;
+        job?: { status?: string; fatalError?: unknown };
+        eventId?: string;
+      } | null = null;
+
+      for (const mode of batches) {
+        const res = await fetch("/api/catalog/push/loom", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            colorwayIds: byMode[mode],
+            seasonCode: season,
+            mode,
+            // The retry id must differ per delivery, or the second batch is
+            // deduped against the first by Loom.
+            ...(preview?.failedEventId
+              ? {
+                  eventId: `${preview.failedEventId}-${mode}-retry-${Date.now().toString(36)}`,
+                }
+              : {}),
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok && d.sent === undefined)
+          throw new Error(d.error ?? d.raw ?? "Loom push failed");
+        sent += d.sent ?? 0;
+        if (!d.ok) {
+          ok = false;
+          failed ??= { raw: d.raw, job: d.job, eventId: d.eventId };
+        }
+        for (const sk of (d.skipped ?? []) as typeof skipped) skipped.push(sk);
+      }
+      const data = {
+        ok,
+        sent,
+        skipped,
+        requested: ids.length,
+        raw: failed?.raw,
+        job: failed?.job,
+        eventId: failed?.eventId,
+      };
+
       const skippedIds = new Set(skipped.map((s) => s.colorwayId));
       // Mark published ONLY for the products actually sent (not skipped).
       if (data.ok) {

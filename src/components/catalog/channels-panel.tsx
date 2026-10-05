@@ -40,10 +40,13 @@ export function ChannelsPanel({
   colorwayId,
   initialPublications,
   seasonCodes = [],
+  brandIsLivid,
 }: {
   colorwayId: string;
   initialPublications: Publication[];
   seasonCodes?: string[];
+  /** Decides which Loom job this product goes to. See `loomMode` below. */
+  brandIsLivid: boolean;
 }) {
   const [pubs, setPubs] = useState<Publication[]>(initialPublications);
   const [saving, setSaving] = useState(false);
@@ -125,12 +128,39 @@ export function ChannelsPanel({
   }
 
   const [pushingLoom, setPushingLoom] = useState(false);
+
+  /**
+   * NAMED, never inherited — the same reasoning as the Sitoo target in
+   * push-orchestrator.
+   *
+   * The route defaults `mode` to "full", the wholesale catalogue, and
+   * `isLoomEligible(_, "catalogue")` is Livid-only. This panel sent no mode, so
+   * pressing Push to Loom on an external or vintage product reached Loom's
+   * eligibility check and came back `skipped: not a Livid-brand product` — the
+   * button was present and did nothing, on the 2,498 vintage colorways where it
+   * is the only button there is. Their Loom rows came from the drop sheet, which
+   * passes "data" explicitly.
+   *
+   * "data" is the stock registry: it carries everything that moves, and it
+   * bypasses the catalogue readiness gate because a registry row is identity and
+   * stock, not a sellable listing.
+   */
+  const loomMode = brandIsLivid ? "full" : "data";
+
   async function pushToLoom() {
     if (seasonCodes.length === 0) {
       toast.error("This product isn't in any season — can't push to Loom.");
       return;
     }
-    if (!confirm(`Push to Loom for season(s): ${seasonCodes.join(", ")}?`)) return;
+    if (
+      !confirm(
+        `Push to Loom for season(s): ${seasonCodes.join(", ")}?` +
+          (loomMode === "data"
+            ? "\n\nThis product is not Livid's own, so it goes to the stock registry rather than the wholesale catalogue."
+            : "")
+      )
+    )
+      return;
     setPushingLoom(true);
     try {
       let sentAny = false;
@@ -139,7 +169,7 @@ export function ChannelsPanel({
         const res = await fetch(`/api/catalog/push/loom`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ colorwayIds: [colorwayId], seasonCode }),
+          body: JSON.stringify({ colorwayIds: [colorwayId], seasonCode, mode: loomMode }),
         });
         const data = await res.json();
         if (!res.ok && data.sent === undefined)
