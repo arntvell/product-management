@@ -55,6 +55,10 @@ export interface SitooProduct {
   active?: boolean;
   activepos?: boolean;
   variantparentid?: number | null;
+  /** Retail price incl. VAT, as Sitoo's string: `[-+]?[0-9]+\.[0-9][0-9]`. */
+  moneyprice?: string | null;
+  /** The struck-through "original". Left alone by every write here. */
+  moneypriceorg?: string | null;
 }
 
 async function call<T>(
@@ -160,6 +164,43 @@ export async function updateSku(
     { method: "PUT", body: JSON.stringify({ sku }) },
     target
   );
+}
+
+/**
+ * Write a title and/or a retail price on a product that already exists.
+ *
+ * The counterpart to updateBarcode and updateSku, and safe for the same
+ * sandbox-verified reason: `PUT /products/{id}` PATCHES, so sending only the
+ * keys that changed leaves the other ~25 populated fields intact.
+ *
+ * What is deliberately NOT sent:
+ *
+ *   `moneypriceorg`. It is the struck-through "original" price and reads "0.00"
+ *   on all the store-vintage products. api-creator's family PUT defaults it to
+ *   the retail price because that endpoint demands all three; this one does not
+ *   have to, and writing it would show every repriced garment as a discount.
+ *
+ *   A size suffix on the title. The title is whatever the master holds, verbatim.
+ *   `createOne` appends the size label, which is where the 16 live titles ending
+ *   ", OS" and " OS" came from — but the size is already carried in the family's
+ *   `attributes`, and the online-vintage drop flow is the only place a size
+ *   belongs in a title (there it is typed into the name, for Shopify).
+ */
+export async function updateTitleAndPrice(
+  productId: number,
+  patch: { title?: string; moneyprice?: string },
+  target?: SitooTarget
+): Promise<void> {
+  const body: Record<string, string> = {};
+  if (patch.title !== undefined) {
+    if (!patch.title.trim())
+      throw new Error("refusing to blank a Sitoo title");
+    body.title = patch.title;
+  }
+  if (patch.moneyprice !== undefined) body.moneyprice = patch.moneyprice;
+  // Nothing to say is not a request to make.
+  if (!Object.keys(body).length) return;
+  await call(`/products/${productId}`, { method: "PUT", body: JSON.stringify(body) }, target);
 }
 
 /**
@@ -383,6 +424,42 @@ export interface SitooVariants {
   variants: SitooVariantRow[];
 }
 
+/**
+ * Narrow a row as READ to a row that may be WRITTEN.
+ *
+ * GET /productvariants returns more than PUT accepts, and the PUT does not
+ * ignore the extras — it rejects the whole request:
+ *
+ *   400 Invalid field 'pricelisthasvolume' provided in request body
+ *
+ * which is how a Sitoo update failed on a four-size family after Shopify and
+ * Loom had already succeeded. Anything spreading a row from the GET back into
+ * the PUT carries that field along, so the rows a family push leaves untouched
+ * have to be rebuilt from this allowlist exactly like the ones it changes.
+ *
+ * Optional keys are carried only when present: sending `moneypricein: undefined`
+ * is not the same as omitting it, and an absent barcode alias list must not
+ * become an empty one.
+ */
+export function toWritableVariantRow(v: SitooVariantRow): SitooVariantRow {
+  return {
+    productid: v.productid,
+    sku: v.sku,
+    active: v.active,
+    activepos: v.activepos,
+    deliverystatus: v.deliverystatus,
+    title: v.title,
+    attributes: v.attributes,
+    moneyprice: v.moneyprice,
+    moneypriceorg: v.moneypriceorg,
+    moneyofferprice: v.moneyofferprice,
+    ...(v.moneypricein !== undefined ? { moneypricein: v.moneypricein } : {}),
+    barcode: v.barcode,
+    ...(v.barcodealiases !== undefined ? { barcodealiases: v.barcodealiases } : {}),
+    friendly: v.friendly,
+  };
+}
+
 export async function getProductVariants(
   productId: number,
   target?: SitooTarget
@@ -435,7 +512,7 @@ export async function findProductsBySku(
     const chunk = skus.slice(i, i + 50);
     const q = `sku=${encodeURIComponent(chunk.join(","))}`;
     const res = await call<{ items: SitooProduct[] }>(
-      `/products?${q}&fields=productid,sku,barcode,title,variantparentid&start=0&num=1000`,
+      `/products?${q}&fields=productid,sku,barcode,title,variantparentid,moneyprice,moneypriceorg&start=0&num=1000`,
       undefined,
       target
     );

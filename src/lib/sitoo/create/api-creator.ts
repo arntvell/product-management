@@ -20,6 +20,7 @@ import {
   findProductsBySku,
   getProductVariants,
   setProductVariants,
+  toWritableVariantRow,
   productCount,
   resolveTarget,
   type SitooTarget,
@@ -260,9 +261,13 @@ async function createOne(
   });
 
   // Anything already in the family that is not ours stays — omitting it would
-  // delete it.
+  // delete it. Rebuilt rather than passed back as read: GET returns fields the
+  // PUT rejects outright (`Invalid field 'pricelisthasvolume'`), which took down
+  // a whole family push in sitoo/update.ts. Latent here because it only fires
+  // when a family contains a row this run did not build.
   for (const [key, v] of currentBySku)
-    if (!resolved.some((r) => normalizeSku(r.sku) === key)) rows.push(v);
+    if (!resolved.some((r) => normalizeSku(r.sku) === key))
+      rows.push(toWritableVariantRow(v));
 
   const sizes = [...new Set(rows.map((r) => r.attributes[0]).filter(Boolean))];
   await setProductVariants(
