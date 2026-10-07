@@ -21,6 +21,7 @@ import {
 } from "./readiness";
 import { vintageInventory, vintageCost } from "./vintage";
 import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
+import { planShopifyUpdate, applyShopifyUpdate, setShopifyBaseline, labelFor } from "./shopify-update";
 import {
   adoptExistingShopifyProduct,
   recordShopifyVariantRefs,
@@ -37,6 +38,8 @@ const PRODUCT_MERGE_QUERY = `
       status
       tags
       metafields(first: 100) { nodes { namespace key type value } }
+      variants(first: 250) { nodes { sku selectedOptions { name value } } }
+      mediaCount { count }
     }
   }
 `;
@@ -163,6 +166,8 @@ export interface PushResult {
   adopted?: AdoptionRoute;
   /** Per-variant identity recorded from the response. */
   variantRefs?: VariantRefResult;
+  /** Selective update: the baseline keys that were sent. */
+  written?: string[];
 }
 
 export async function pushColorwayToShopify(
@@ -209,6 +214,41 @@ export async function pushColorwayToShopify(
   }
   const existing = externalId ? { externalId } : null;
   const action: "create" | "update" = externalId ? "update" : "create";
+
+  // A product Shopify already sells gets only what changed since master and
+  // shop last agreed — see shopify-update.ts. Vintage keeps the full push: its
+  // body, stock and status are the master's to generate. `clearEmptied` has no
+  // meaning here; a field emptied since the baseline IS a clear.
+  if (action === "update" && readinessProfileFor(cw.brand?.name) !== "vintage") {
+    const plan = await planShopifyUpdate(id, seasonCode);
+    const r = await applyShopifyUpdate(plan, { resolveModelText, resolveProductGids });
+    if (adopted)
+      r.warnings.unshift(
+        `Shopify already held this product (found by ${adopted}); the publication record was repaired.`
+      );
+    if (r.failed.length)
+      throw new Error(
+        r.failed.map((f) => `${f.keys.join(", ")}: ${f.error}`).join("; ") +
+          (r.written.length ? ` (written: ${r.written.join(", ")})` : "")
+      );
+    const store = (process.env.SHOPIFY_STORE_URL ?? "").replace(/^https?:\/\//, "");
+    return {
+      action,
+      productGid: plan.productGid,
+      handle: null,
+      variants: 0,
+      metafields: r.written.filter((k) => k.startsWith("mf.")).length,
+      warnings: [
+        r.written.length
+          ? `Sent: ${r.written.map((k) => labelFor(k)).join(", ")}.`
+          : "Nothing changed since the last push — nothing sent.",
+        ...r.warnings,
+      ],
+      adminUrl: `https://${store}/admin/products/${plan.productGid.split("/").pop()}`,
+      ...(adopted ? { adopted } : {}),
+      written: r.written,
+    };
+  }
 
   // --- Readiness gate: never push a product that can't publish correctly. ---
   const hasVariants = preview.variants.length > 0;
@@ -481,8 +521,34 @@ export async function pushColorwayToShopify(
         status: string;
         tags: string[];
         metafields: { nodes: Metafield[] };
+        variants: { nodes: { sku: string | null; selectedOptions: { name: string; value: string }[] }[] };
+        mediaCount: { count: number } | null;
       } | null;
     }>(PRODUCT_MERGE_QUERY, { id: existing.externalId });
+
+    // productSet deletes every variant and every product image it is not given.
+    // On a live product that is the shop's stock and its photography, so an
+    // update that would shrink either is refused rather than sent: 92 live Livid
+    // products hold sizes the master does not, and 34 hold more images. Carrying
+    // them through a declarative write is the hazard, not the fix — the fix is a
+    // push that only writes what changed.
+    if (hasVariants) {
+      const sent = new Set(variants.map((v) => v.optionValues.map((o) => o.name).join("/")));
+      const lost = (live.product?.variants.nodes ?? [])
+        .map((v) => v.selectedOptions.map((o) => o.value).join("/"))
+        .filter((k) => !sent.has(k));
+      if (lost.length)
+        throw new Error(
+          `Shopify sells ${lost.length} size(s) the master does not hold (${lost.slice(0, 8).join(", ")}); ` +
+            `a push would delete them. Refused — add the sizes in Origo first.`
+        );
+    }
+    const liveMedia = live.product?.mediaCount?.count ?? 0;
+    if (productMediaGids.length && liveMedia > productMediaGids.length)
+      throw new Error(
+        `Shopify shows ${liveMedia} images and the master has ${productMediaGids.length}; ` +
+          `a push would remove ${liveMedia - productMediaGids.length}. Refused — add them to the master first.`
+      );
 
     // productSet is declarative for metafields exactly as it is for variants and
     // files: any key NOT in the input is deleted. The master is the authority
@@ -551,7 +617,9 @@ export async function pushColorwayToShopify(
   const input: Record<string, unknown> = {
     ...(existing?.externalId ? { id: existing.externalId } : {}),
     title: preview.product.title,
-    handle: preview.product.handle,
+    // A handle is the product's URL. Set once, on create: changing it on a live
+    // product moved 72 Livid pages to their SKU (kevin-grey -> liv-kvn-gry).
+    ...(action === "create" ? { handle: preview.product.handle } : {}),
     vendor: preview.product.vendor ?? undefined,
     productType: preview.product.productType ?? undefined,
     tags,
@@ -642,6 +710,15 @@ export async function pushColorwayToShopify(
       lastPushStatus: "ok",
     },
   });
+
+  // What Shopify now holds is what the master just sent: the baseline the next
+  // update is measured against. Best-effort — a missing baseline is recovered
+  // at the next update by recording one and sending nothing.
+  try {
+    await setShopifyBaseline(id, seasonCode);
+  } catch {
+    warnings.push("Could not record the push baseline; the next update will record it and send nothing.");
+  }
 
   const numericId = product.id.split("/").pop();
   const store = (process.env.SHOPIFY_STORE_URL ?? "").replace(/^https?:\/\//, "");

@@ -5,6 +5,7 @@
 // (e.g. Threadflow-synced) are skipped, so this never duplicates or clobbers.
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
+import { setShopifyBaseline } from "./shopify-update";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { purgeColorwayBlobs } from "./media";
@@ -362,6 +363,10 @@ export async function runShopifyImport(
   if (mediaCreates.length)
     await prisma.mediaAsset.createMany({ data: mediaCreates as never });
   await prisma.channelPublication.createMany({ data: pubCreates as never });
+  // Imported FROM Shopify, so master and shop agree right now: that is the
+  // baseline a later update is measured against.
+  for (const pc of pubCreates as Array<{ colorwayId: string; channel: string; externalId?: string | null }>)
+    if (pc.channel === "SHOPIFY" && pc.externalId) await setShopifyBaseline(pc.colorwayId);
 
   return {
     imported: toImport.length,

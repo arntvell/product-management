@@ -1203,8 +1203,25 @@ export function CatalogGrid({
       const plan = await dry.json();
       if (!dry.ok) throw new Error(plan.error ?? "Dry run failed");
 
+      // Per product, what Shopify would actually receive: an update sends only
+      // what changed in Origo since the last push.
+      const shopifyChanges = (plan.shopifyChanges ?? []) as Array<{
+        colorwaySku: string;
+        send: string[];
+        notSent: string[];
+        note?: string;
+      }>;
+      const shopifyLines = shopifyChanges.slice(0, 8).map(
+        (c) =>
+          `  ${c.colorwaySku}: ` +
+          (c.note ? c.note : c.send.length ? c.send.join(", ") : "nothing changed") +
+          (c.notSent.length ? ` — not sent: ${c.notSent.join("; ")}` : "")
+      );
+      if (shopifyChanges.length > 8) shopifyLines.push(`  …and ${shopifyChanges.length - 8} more`);
       const lines = [
-        plan.shopify ? `Shopify: ${plan.shopify}` : null,
+        plan.shopify
+          ? `Shopify: ${plan.shopify}` + (shopifyLines.length ? `\n${shopifyLines.join("\n")}` : "")
+          : null,
         plan.sitoo ? `Sitoo: ${plan.sitoo} (${plan.sitooChanges} differ)` : null,
         plan.loom ? `Loom: ${plan.loom}` : null,
       ].filter(Boolean);

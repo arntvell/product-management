@@ -25,6 +25,7 @@
 // It records a link; it never creates a product, in either system.
 
 import { prisma } from "@/lib/db";
+import { setShopifyBaseline } from "./shopify-update";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { normalizeSku } from "@/lib/master/sku";
 
@@ -138,6 +139,9 @@ export async function linkShopifyProducts(
         create: { colorwayId: m.colorwayId, channel: "SHOPIFY", externalId: m.productGid },
         update: { externalId: m.productGid },
       });
+      // From here a push is an update, which sends only what moves off the
+      // baseline. Recorded now so differences that predate the link stay put.
+      await setShopifyBaseline(m.colorwayId);
       linked++;
     }
   }

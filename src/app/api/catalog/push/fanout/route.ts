@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { pushColorwayToShopify } from "@/lib/master/push-shopify";
+import { planShopifyUpdate } from "@/lib/master/shopify-update";
+import { readinessProfileFor } from "@/lib/master/readiness";
 import { pushColorwaysToLoom } from "@/lib/loom/push";
 import { applySitooUpdate, planSitooUpdate, SitooUpdateError } from "@/lib/sitoo/update";
 
@@ -57,7 +59,7 @@ export async function POST(req: Request) {
       id: true,
       colorwaySku: true,
       name: true,
-      brand: { select: { isLivid: true } },
+      brand: { select: { isLivid: true, name: true } },
       publications: { select: { channel: true, externalId: true } },
       entries: { select: { season: { select: { code: true } } } },
       variants: {
@@ -94,9 +96,33 @@ export async function POST(req: Request) {
       sitooChanges = plan.rows.filter((r) => r.changes).length;
       untouchedSizes = plan.untouchedSizes;
     }
+    // What each Shopify product would actually receive. An update sends only
+    // fields changed in Origo since the last push (shopify-update.ts), so this
+    // is the list the confirm shows. Vintage still pushes whole.
+    const shopifyChanges: Array<{ colorwaySku: string; send: string[]; notSent: string[]; note?: string }> = [];
+    for (const c of toShopify) {
+      if (readinessProfileFor(c.brand?.name) === "vintage") continue;
+      try {
+        const plan = await planShopifyUpdate(c.id, seasonOf(c));
+        shopifyChanges.push({
+          colorwaySku: c.colorwaySku,
+          send: plan.changes.filter((x) => x.action === "write").map((x) => x.label),
+          notSent: plan.changes.filter((x) => x.action === "not-sent").map((x) => `${x.label} (${x.note})`),
+          ...(plan.baselineCreated ? { note: "no baseline yet — recorded now, nothing will be sent" } : {}),
+        });
+      } catch (err) {
+        shopifyChanges.push({
+          colorwaySku: c.colorwaySku,
+          send: [],
+          notSent: [],
+          note: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
     return NextResponse.json({
       ok: true,
       dryRun: true,
+      shopifyChanges,
       products: cws.length,
       shopify: toShopify.length,
       sitoo: toSitoo.length,

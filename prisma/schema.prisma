@@ -698,6 +698,14 @@ model ChannelPublication {
   /// none. It records SENT, never STORED: Loom answered `updated: 0` to all 355
   /// identity rows sent so far (WORK-DECK A2), so storage is unproven.
   loomIdentityPushedAt DateTime?
+  /// What the channel holds, as far as the master knows: every value the push
+  /// writes, flattened to key -> value, recorded when the master and the channel
+  /// last agreed (a push, a link, or the 2026-10-07 backfill). An update sends
+  /// only keys whose master value has moved off this, so a field nobody edited
+  /// is never rewritten — 373 of 437 live Livid products differ from Shopify on
+  /// fields nobody touched. Shopify only, for now.
+  baseline             Json?
+  baselineAt           DateTime?
 
   @@unique([colorwayId, channel])
 }
