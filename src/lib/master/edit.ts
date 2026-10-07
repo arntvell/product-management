@@ -89,11 +89,26 @@ export interface BulkChange {
 }
 
 // Base-layer fields that become MANUAL-owned once edited (§5.3).
+//
+// Status, swatch and the references are here so Refresh from Shopify leaves an
+// edit alone: Refresh fills only unlocked fields, so a status changed in the
+// grid was reverted to Shopify's before it was ever pushed, and a cleared care
+// page or swatch was filled straight back in.
 const OWNED_BASE_FIELDS = new Set<string>([
   ...SPLIT_FIELD_KEYS,
   "vendor",
   "productType",
   "name",
+  "status",
+  "swatchHex",
+  "carePageId",
+  "fitguidePageId",
+  "recommendedCollectionId",
+  "modelInfoId",
+  "sameProduct",
+  "styleWith",
+  "styleWithUnisexHerre",
+  "styleWithUnisexDame",
 ]);
 
 // Single-value reference fields (Shopify GIDs); multi-value reference fields

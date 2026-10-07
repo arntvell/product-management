@@ -54,7 +54,9 @@ const TEXT_MAP: Record<string, keyof Prisma.ColorwayUpdateInput> = {
   care_page: "carePageId",
   fitguide: "fitguidePageId",
   recommended_product_from_collection: "recommendedCollectionId",
-  model_info: "modelInfoId",
+  // model_info is NOT read back. The push writes it as a sentence ("Model is
+  // 185 tall and wearing a size M"), and modelInfoId holds a metaobject gid —
+  // reading the sentence into it left a value no picker could show.
 };
 
 /**
