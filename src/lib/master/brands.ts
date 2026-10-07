@@ -57,7 +57,7 @@ export function normalizeBrandName(raw: string): string {
 }
 
 /** Singular/plural or one-character apart. A warning, never a block. */
-function nearlySame(a: string, b: string): boolean {
+export function nearlySame(a: string, b: string): boolean {
   if (a === b) return true;
   const [short, long] = a.length <= b.length ? [a, b] : [b, a];
   if (long.length - short.length > 1) return false;
@@ -269,10 +269,7 @@ export async function saveBrandSettings(
   if (!brand) throw new BrandError("Brand not found.");
 
   if (input.skuToken !== undefined) {
-    const raw = input.skuToken?.trim().toUpperCase() || null;
-    if (raw && !/^[A-Z0-9]{1,8}$/.test(raw))
-      throw new BrandError("A SKU token is 1–8 letters or digits, no spaces or hyphens.");
-    await prisma.brand.update({ where: { id }, data: { skuToken: raw } });
+    await prisma.brand.update({ where: { id }, data: { skuToken: cleanSkuToken(input.skuToken) } });
   }
 
   if (!input.template) return;
@@ -306,6 +303,13 @@ export async function saveBrandSettings(
     create: { brandId: id, ...data },
     update: data,
   });
+}
+
+export function cleanSkuToken(v: string | null | undefined): string | null {
+  const raw = v?.trim().toUpperCase() || null;
+  if (raw && !/^[A-Z0-9]{1,8}$/.test(raw))
+    throw new BrandError("A SKU token is 1–8 letters or digits, no spaces or hyphens.");
+  return raw;
 }
 
 function blank(v: string | null | undefined): string | null {

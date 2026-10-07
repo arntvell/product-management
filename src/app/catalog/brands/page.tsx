@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listBrandsWithSettings } from "@/lib/master/brands";
 import { BrandsTable } from "@/components/catalog/brands-table";
+import { NewBrandDialog } from "@/components/catalog/new-brand-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export default async function BrandsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <NewBrandDialog />
           <Link
             href="/catalog/brands/identity"
             className="border px-3 py-1.5 text-body transition-colors hover:bg-muted"

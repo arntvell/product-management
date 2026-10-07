@@ -371,6 +371,36 @@ export async function createProducts(
   );
 }
 
+/**
+ * Create manufacturers — Sitoo's brand record, read back as `externalcompanyid`.
+ *
+ * Per developer.sitoo.com/api-reference/manufacturers: POST takes an ARRAY (there
+ * is no single-add endpoint), `name` is the only required field, and each item
+ * answers `{ statuscode, return }` with the new id in `return`. Same batch
+ * convention as createProducts, so the caller reads each item's statuscode.
+ */
+export async function createManufacturers(
+  manufacturers: Array<{ name: string }>,
+  target: SitooTarget
+): Promise<Array<{ statuscode: number; return?: number; errortext?: string }>> {
+  if (!manufacturers.length) return [];
+  return call<Array<{ statuscode: number; return?: number; errortext?: string }>>(
+    "/manufacturers",
+    { method: "POST", body: JSON.stringify(manufacturers) },
+    target
+  );
+}
+
+/** Whether credentials for this target are present, without throwing. */
+export function sitooConfigured(target: SitooTarget): boolean {
+  try {
+    env(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export interface SitooVariantGroup {
   name: string;
   options: string[];

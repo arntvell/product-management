@@ -4,6 +4,8 @@ import { getBrandSettings } from "@/lib/master/brands";
 import { listManufacturers } from "@/lib/master/queries";
 import { listSizeSystems } from "@/lib/master/size-systems";
 import { BrandSettingsForm } from "@/components/catalog/brand-settings-form";
+import { BrandSitooLink } from "@/components/catalog/brand-sitoo-link";
+import { getBrandSitooState } from "@/lib/master/brand-create";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +15,11 @@ export default async function BrandSettingsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [settings, manufacturers, sizeSystems] = await Promise.all([
+  const [settings, manufacturers, sizeSystems, sitoo] = await Promise.all([
     getBrandSettings(id),
     listManufacturers(),
     listSizeSystems(),
+    getBrandSitooState(id),
   ]);
   if (!settings) notFound();
 
@@ -37,11 +40,16 @@ export default async function BrandSettingsPage({
           All brands
         </Link>
       </div>
-      <BrandSettingsForm
-        initial={settings}
-        manufacturers={manufacturers}
-        sizeSystems={sizeSystems.map((s) => ({ id: s.id, name: s.name }))}
-      />
+      <div className="space-y-8">
+        <BrandSettingsForm
+          initial={settings}
+          manufacturers={manufacturers}
+          sizeSystems={sizeSystems.map((s) => ({ id: s.id, name: s.name }))}
+        />
+        {!settings.isLivid ? (
+          <BrandSitooLink brandId={settings.id} brandName={settings.name} initial={sitoo} />
+        ) : null}
+      </div>
     </main>
   );
 }
