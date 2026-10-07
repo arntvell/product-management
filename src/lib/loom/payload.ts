@@ -241,6 +241,13 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
     // all of them. It is wider than "the STORAGE-* rows", which is what someone
     // reading only the paragraph above would assume.
     //
+    // MATERIAL takes the same exemption (2026-10-07). Production inputs —
+    // buttons, fabric, wrapping (NON_MERCH_CATEGORIES) — sit on a shelf in the
+    // warehouse and are picked for production, never scanned at a till, and
+    // Cin7 never gave them barcodes. The M.O.P buttons (2526-1208-*) are Livid's
+    // own brand, so neither exemption above or below reached them and every size
+    // was dropped.
+    //
     // External brands are the second exemption (Kristoffer, 2026-09-23). Bought-in
     // stock sometimes arrives before its barcode does, and it is created in every
     // system at once so it can be sold; leaving it out of Loom until someone
@@ -254,6 +261,7 @@ function buildRegistryColorway(cw: LoomColorway, archive?: Set<string>) {
         (v) =>
           (v.barcode && v.barcode.trim()) ||
           cw.kind === "CONSUMABLE" ||
+          cw.kind === "MATERIAL" ||
           cw.brand?.isLivid !== true
       )
       .map((v) => {
