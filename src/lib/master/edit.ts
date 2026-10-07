@@ -215,10 +215,14 @@ export async function applyBulkChanges(
           baseData.name = next;
           ownerFields.push("name");
           const st = styleOf.get(colorwayId);
-          // Carried to the style only when this product IS the style. With
-          // siblings the style is left alone and the title simply becomes
-          // "<style> <new name>", which is what a colour rename should do.
-          if (st?.sole && st.styleName !== next)
+          // Carried to the style only when this product IS the style: alone in
+          // it AND named as it is, the vintage 1:1 case. Being alone is not
+          // enough — Rima is one colourway, named "Rima Black", and renaming it
+          // "Black" carried "Black" onto the style, which would have retitled
+          // the Shopify product "Black". Otherwise the style is left alone and
+          // the title becomes "<style> <new name>", which is what a colour
+          // rename should do.
+          if (st?.sole && st.name === st.styleName && st.styleName !== next)
             ops.push(
               prisma.style.update({
                 where: { id: st.styleId },
