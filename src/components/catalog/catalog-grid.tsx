@@ -10,6 +10,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {  gridHead,
   gridRow,
@@ -152,6 +161,11 @@ const COLUMN_HINTS: Record<string, string> = {
     "Shown as text. Most of these carry HTML from the Cin7 import — paragraphs, bold and links that the storefront renders — so the markup is kept and only hidden here.",
 };
 
+/** Fixed columns with a sort control. Title is derived, channels and swatch are not worth ordering. */
+const SORTABLE_FIXED = new Set(["name", "priceNok", "media"]);
+/** "10" after "9", and case-insensitive, so a sort reads the way a person expects. */
+const SORT_COLLATOR = new Intl.Collator("nb", { numeric: true, sensitivity: "base" });
+
 const SELECT_W = 36; // row-select checkbox column
 const LABEL_W = 320; // frozen-ish left block (img + style + colorway)
 const ROW_H = GRID_ROW_HEIGHT_COMPACT;
@@ -228,6 +242,7 @@ export function CatalogGrid({
   const [view, setView] = useState<View>("BASE");
   const [dirty, setDirty] = useState<Map<string, string>>(new Map());
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
   const [filters, setFilters] = useState({
     vendor: "",
@@ -285,14 +300,38 @@ export function CatalogGrid({
   );
 
   const columns = isBase ? COLUMNS : COLUMNS.filter((c) => c.split);
+  // Columns the viewer chose to hide. Per browser, per page — a convenience,
+  // not shared state. Hidden columns are also out of keyboard order and the
+  // copy-down picker, so "the columns I work with" means one thing.
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set());
+  const hiddenKey = `origo:catalog-grid:${scope}:hidden-columns`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(hiddenKey);
+      if (raw) setHiddenCols(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      // Storage unavailable: every column shows.
+    }
+  }, [hiddenKey]);
+  const updateHiddenCols = (next: Set<string>) => {
+    setHiddenCols(next);
+    try {
+      localStorage.setItem(hiddenKey, JSON.stringify([...next]));
+    } catch {
+      // Not remembered, but still applied for this visit.
+    }
+  };
+  const shownColumns = columns.filter((c) => !hiddenCols.has(c.key));
+  const shownRefSingle = REF_SINGLE.filter((c) => !hiddenCols.has(c.key));
+  const shownRefMulti = REF_MULTI.filter((c) => !hiddenCols.has(c.key as string));
   const refWidth = isRefs
-    ? [...REF_SINGLE, ...REF_MULTI].reduce((s, c) => s + c.width, 0)
+    ? [...shownRefSingle, ...shownRefMulti].reduce((s, c) => s + c.width, 0)
     : 0;
   const totalWidth =
     SELECT_W +
     LABEL_W +
     FIXED_W +
-    (isRefs ? refWidth : columns.reduce((sum, c) => sum + c.width, 0));
+    (isRefs ? refWidth : shownColumns.reduce((sum, c) => sum + c.width, 0));
 
   // Distinct attribute values for the filter dropdowns.
   const filterOptions = useMemo(() => {
@@ -322,9 +361,57 @@ export function CatalogGrid({
     }
   }
 
+  /** What a column sorts on: the text a person reads in that cell. */
+  function sortValue(r: GridRow, key: string): string {
+    if (key === "__label") return `${r.styleName} ${r.name}`;
+    if (key === "media") return String(r.mediaCount).padStart(6, "0");
+    if (MULTI_REF_KEYS.has(key)) {
+      try {
+        const n = (JSON.parse(originalValue(r, "BASE", key) || "[]") as string[]).length;
+        return n ? String(n).padStart(6, "0") : "";
+      } catch {
+        return "";
+      }
+    }
+    if (SINGLE_REF_KEYS.has(key)) {
+      const id = originalValue(r, "BASE", key);
+      const src = REF_SINGLE.find((c) => c.key === key)!.src;
+      return refOptions[src].find((o) => o.id === id)?.label ?? id;
+    }
+    const v = originalValue(r, layer, key) || (layer === "BASE" ? "" : originalValue(r, "BASE", key));
+    return toPlainText(v).trim();
+  }
+
+  /** Header sort control: ↓ ascending, ↑ descending, then back to unsorted. */
+  function sortButton(key: string) {
+    const active = sort?.key === key ? sort.dir : null;
+    return (
+      <button
+        title={
+          active === "asc"
+            ? "Sorted A→Z. Click for Z→A"
+            : active === "desc"
+              ? "Sorted Z→A. Click to clear the sort"
+              : "Sort by this column"
+        }
+        onClick={() =>
+          setSort(
+            active === null ? { key, dir: "asc" } : active === "asc" ? { key, dir: "desc" } : null
+          )
+        }
+        className={cn(
+          "px-1 hover:bg-background hover:text-foreground",
+          active ? "text-foreground" : "text-muted-foreground"
+        )}
+      >
+        {active === "desc" ? "↑" : "↓"}
+      </button>
+    );
+  }
+
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
+    const filtered = rows.filter((r) => {
       if (droppedFilter === "active" && r.dropped) return false;
       if (droppedFilter === "dropped" && !r.dropped) return false;
       if (filters.vendor && r.vendor !== filters.vendor) return false;
@@ -352,8 +439,21 @@ export function CatalogGrid({
         r.colorwaySku.toLowerCase().includes(q)
       );
     });
+    if (!sort) return filtered;
+    // Sorted on SAVED values, never pending edits, so a row does not jump away
+    // from under the cursor while it is being typed into. Blanks sort last in
+    // both directions — an empty cell is not "smaller" than a filled one.
+    const keyed = filtered.map((r) => ({ r, v: sortValue(r, sort.key) }));
+    keyed.sort((a, b) => {
+      if (!a.v && !b.v) return 0;
+      if (!a.v) return 1;
+      if (!b.v) return -1;
+      const c = SORT_COLLATOR.compare(a.v, b.v);
+      return sort.dir === "asc" ? c : -c;
+    });
+    return keyed.map((k) => k.r);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, search, droppedFilter, filters]);
+  }, [rows, search, droppedFilter, filters, sort, layer, refOptions]);
 
   const droppedCount = rows.filter((r) => r.dropped).length;
 
@@ -469,9 +569,15 @@ export function CatalogGrid({
     if (isRefs)
       return [
         ...fixed,
-        ...REF_SINGLE.map((c) => ({ key: c.key, kind: "select" as const, atLayer: "BASE" as EditLayer })),
+        ...REF_SINGLE.filter((c) => !hiddenCols.has(c.key)).map((c) => ({
+          key: c.key,
+          kind: "select" as const,
+          atLayer: "BASE" as EditLayer,
+        })),
       ];
-    const cols = isBase ? COLUMNS : COLUMNS.filter((c) => c.split);
+    const cols = (isBase ? COLUMNS : COLUMNS.filter((c) => c.split)).filter(
+      (c) => !hiddenCols.has(c.key)
+    );
     return [
       ...fixed,
       ...cols.map((c) => ({
@@ -480,7 +586,7 @@ export function CatalogGrid({
         atLayer: layer,
       })),
     ];
-  }, [isRefs, isBase, layer]);
+  }, [isRefs, isBase, layer, hiddenCols]);
 
   /**
    * What copy-down can offer in this view, each with the layer it writes to.
@@ -502,13 +608,13 @@ export function CatalogGrid({
     if (!isRefs) return base;
     return [
       ...base,
-      ...REF_MULTI.map((c) => ({
+      ...REF_MULTI.filter((c) => !hiddenCols.has(c.key as string)).map((c) => ({
         key: c.key as string,
         label: c.label,
         atLayer: "BASE" as EditLayer,
       })),
     ];
-  }, [editableCols, isRefs, seasonId, rowsHaveOwnSeason]);
+  }, [editableCols, isRefs, seasonId, rowsHaveOwnSeason, hiddenCols]);
 
   const colIndexByField = useMemo(
     () => new Map(editableCols.map((c, i) => [c.key, i])),
@@ -589,34 +695,6 @@ export function CatalogGrid({
     onKeyDown: (e: React.KeyboardEvent) => onCellKeyDown(e, rowIndex, field),
     ...(kind === "text" ? { onPaste: (e: React.ClipboardEvent) => onCellPaste(e, rowIndex, field) } : {}),
   });
-
-  // ---- fill down: copy the focused (or top) row's value to target rows ----
-  function fillDown(field: string) {
-    if (targetRows.length === 0) return;
-    // Only ever fill from the row the user actually put the cursor in. It used
-    // to fall back to the first target row, so if the focused row had scrolled
-    // out of view or was not in the selection it silently copied a value
-    // nobody chose — across every selected product.
-    const source = targetRows.find((r) => r.id === activeRowIdRef.current);
-    if (!source) {
-      toast.error("Click the cell you want to copy from first");
-      return;
-    }
-    const value = cellValue(source, layer, field);
-    setDirty((prev) => {
-      const next = new Map(prev);
-      for (const row of targetRows) {
-        const key = dkey(row.id, layer, field);
-        if (value === originalValue(row, layer, field)) next.delete(key);
-        else next.set(key, value);
-      }
-      return next;
-    });
-    toast.success(
-      `Filled "${field}" to ${targetRows.length} rows` +
-        (layer === "BASE" ? "" : ` as ${layer} overrides`)
-    );
-  }
 
   /** Write one field on one row into the pending-changes map. */
 
@@ -747,6 +825,16 @@ export function CatalogGrid({
     if (!others.length) return;
 
     const chosen = copyDownFields.filter((f) => fieldKeys.includes(f.key));
+    // Always asked: the grid autosaves, so there is no Save step left to catch
+    // a copy across the wrong rows.
+    if (
+      !confirm(
+        `Overwrite ${chosen.map((f) => f.label).join(", ")} on ${others.length} ` +
+          `product${others.length === 1 ? "" : "s"} with the value${chosen.length === 1 ? "" : "s"} ` +
+          `from ${source.styleName} · ${source.name}?`
+      )
+    )
+      return;
     setDirty((prev) => {
       const next = new Map(prev);
       for (const f of chosen) {
@@ -1248,6 +1336,17 @@ export function CatalogGrid({
           placeholder="Filter by style, colorway, SKU…"
           className="h-8 w-64"
         />
+        <ColumnPicker
+          groups={
+            isRefs
+              ? [
+                  { title: "References", columns: [...REF_SINGLE, ...REF_MULTI].map((c) => ({ key: c.key as string, label: c.label })) },
+                ]
+              : [{ title: isBase ? "Fields" : `Fields with a ${layer} override`, columns: columns.map((c) => ({ key: c.key, label: c.label })) }]
+          }
+          hidden={hiddenCols}
+          onChange={updateHiddenCols}
+        />
         <div className="flex gap-1" title="Filter by Threadflow dropped status">
           {(["all", "active", "dropped"] as const).map((f) => (
             <button
@@ -1424,13 +1523,13 @@ export function CatalogGrid({
         Tip: click a description, details or tagline cell to write it in a full
         panel — and apply it to a whole selection from there · <b>Enter</b> /{" "}
         <b>Shift+Enter</b> move down/up a column · paste a tab-separated block
-        from a spreadsheet into any cell · <b>↓</b> copies the cell you are in
-        down the selection.
+        from a spreadsheet into any cell · select rows to copy fields between
+        them.
       </p>
       {selected.size > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <p className="text-meta normal-case tracking-normal text-muted-foreground">
-            {selected.size} selected — fill-down (↓) and bulk actions apply to
+            {selected.size} selected — copy down and bulk actions apply to
             these rows. Shift-click a checkbox to select a range.
           </p>
           <AddTagToSelected count={selected.size} onAdd={addTagToSelected} />
@@ -1465,7 +1564,7 @@ export function CatalogGrid({
       {isRefs && (
         <div className="mt-2 space-y-2">
           <p className="text-fine text-muted-foreground">
-            References. Edit inline, fill-down (↓), or use the bulk bar. Bulk
+            References. Edit inline, or use the bulk bar. Bulk
             actions apply to {selected.size > 0 ? `the ${selected.size} selected` : `all ${visibleRows.length} filtered`} rows.
           </p>
           <BulkRefApply
@@ -1501,19 +1600,28 @@ export function CatalogGrid({
                 title="Select all filtered rows"
               />
             </div>
-            <div style={{ width: LABEL_W }} className="shrink-0 border-l px-3 py-2">
-              Style · Colorway
+            <div
+              style={{ width: LABEL_W }}
+              className="flex shrink-0 items-center justify-between gap-1 border-l px-3 py-2"
+            >
+              <span>Style · Colorway</span>
+              {sortButton("__label")}
             </div>
             {FIXED_COLS.map((c) => (
               <div
                 key={c.key}
                 style={{ width: c.width }}
-                className="shrink-0 border-l px-2 py-2"
+                className="flex shrink-0 items-center justify-between gap-1 border-l px-2 py-2"
               >
-                {c.label}
+                <span className="truncate">{c.label}</span>
+                {SORTABLE_FIXED.has(c.key) ? sortButton(c.key) : null}
               </div>
             ))}
-            {(isRefs ? [...REF_SINGLE, ...REF_MULTI] : columns).map((c) => (
+            {/* The "↓" here SORTS. It used to fill the column down every visible
+                row — it read as a sort, and one click autosaved one product's
+                details onto 17 others. Copying across rows lives in the
+                selection bar, where it names its source and asks first. */}
+            {(isRefs ? [...shownRefSingle, ...shownRefMulti] : shownColumns).map((c) => (
               <div
                 key={c.key}
                 style={{ width: c.width }}
@@ -1521,13 +1629,7 @@ export function CatalogGrid({
                 title={COLUMN_HINTS[c.key as string]}
               >
                 <span className="truncate">{c.label}</span>
-                <button
-                  title="Fill down to all visible rows"
-                  onClick={() => fillDown(c.key as string)}
-                  className="px-1 text-muted-foreground hover:bg-background hover:text-foreground"
-                >
-                  ↓
-                </button>
+                {sortButton(c.key as string)}
               </div>
             ))}
           </div>
@@ -1754,7 +1856,7 @@ export function CatalogGrid({
                   {/* Editable cells */}
                   {isRefs ? (
                     <>
-                      {REF_SINGLE.map((c) => {
+                      {shownRefSingle.map((c) => {
                         const value = cellValue(row, "BASE", c.key);
                         const isDirty = dirty.has(dkey(row.id, "BASE", c.key));
                         return (
@@ -1779,7 +1881,7 @@ export function CatalogGrid({
                           </div>
                         );
                       })}
-                      {REF_MULTI.map((c) => {
+                      {shownRefMulti.map((c) => {
                         const value = cellValue(row, "BASE", c.key as string);
                         const isDirty = dirty.has(dkey(row.id, "BASE", c.key as string));
                         let count = 0;
@@ -1814,7 +1916,7 @@ export function CatalogGrid({
                       })}
                     </>
                   ) : (
-                    columns.map((c) => {
+                    shownColumns.map((c) => {
                       const disabled = !isBase && !c.split;
                       const value = cellValue(row, layer, c.key);
                       const isDirty = dirty.has(dkey(row.id, layer, c.key));
@@ -2373,4 +2475,91 @@ function applyChanges(rows: GridRow[], changes: BulkChange[]): GridRow[] {
     }
   }
   return [...byId.values()];
+}
+
+/**
+ * Choose which of the view's columns to work with. The left block (product,
+ * name, title, channels, swatch, price, media) always shows — it is how a row is
+ * recognised, so hiding it would leave cells nobody can place.
+ */
+function ColumnPicker({
+  groups,
+  hidden,
+  onChange,
+}: {
+  groups: { title: string; columns: { key: string; label: string }[] }[];
+  hidden: Set<string>;
+  onChange: (next: Set<string>) => void;
+}) {
+  const all = groups.flatMap((g) => g.columns);
+  const hiddenHere = all.filter((c) => hidden.has(c.key)).length;
+
+  const toggle = (key: string) => {
+    const next = new Set(hidden);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    onChange(next);
+  };
+  const setAll = (hide: boolean) => {
+    const next = new Set(hidden);
+    for (const c of all) {
+      if (hide) next.add(c.key);
+      else next.delete(c.key);
+    }
+    onChange(next);
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button className="h-8 border px-3 text-fine hover:bg-muted">
+          Columns{hiddenHere ? ` (${all.length - hiddenHere} of ${all.length})` : ""}
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Columns</DialogTitle>
+          <DialogDescription>
+            Choose the columns to work with. Hidden columns keep their values and are
+            left out of keyboard movement and copy down. Remembered in this browser.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[60vh] space-y-4 overflow-auto">
+          {groups.map((g) => (
+            <div key={g.title}>
+              <p className="mb-2 text-fine text-muted-foreground">{g.title}</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                {g.columns.map((c) => (
+                  <label key={c.key} className="flex items-center gap-2 text-body">
+                    <input
+                      type="checkbox"
+                      checked={!hidden.has(c.key)}
+                      onChange={() => toggle(c.key)}
+                    />
+                    <span className="truncate">{c.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <DialogFooter className="sm:justify-between">
+          <div className="flex gap-3">
+            <button
+              onClick={() => setAll(false)}
+              className="text-fine underline underline-offset-4"
+            >
+              Show all
+            </button>
+            <button
+              onClick={() => setAll(true)}
+              className="text-fine text-muted-foreground underline underline-offset-4"
+            >
+              Hide all
+            </button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
