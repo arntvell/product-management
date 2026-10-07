@@ -20,8 +20,13 @@ import {
 } from "@/hooks/use-product-media";
 import { useFileUpload } from "@/hooks/use-file-upload";
 import { useFileNodes } from "@/hooks/use-file-nodes";
-import { parseGidList, serializeGidList } from "@/lib/utils";
-import type { MediaColumnKey } from "@/lib/media-columns";
+import {
+  FILE_REF_LABELS,
+  readFileRefGids,
+  writeFileRefGids,
+  type FileRefKey,
+  type MediaColumnKey,
+} from "@/lib/media-columns";
 import type { Product, MediaItem } from "@/types";
 
 interface MediaDetailPanelProps {
@@ -31,7 +36,7 @@ interface MediaDetailPanelProps {
   onClose: () => void;
   onMetafieldSave: (
     productId: string,
-    field: "men_images" | "women_images",
+    field: FileRefKey,
     value: string
   ) => void;
 }
@@ -229,7 +234,7 @@ function ProductMediaPanel({
   );
 }
 
-// --- File Reference panel (Men/Women Images) ---
+// --- File Reference panel (Men/Women Images, Flat) ---
 
 function FileRefPanel({
   product,
@@ -239,18 +244,19 @@ function FileRefPanel({
   onMetafieldSave,
 }: {
   product: Product;
-  columnKey: "men_images" | "women_images";
+  columnKey: FileRefKey;
   isOpen: boolean;
   onClose: () => void;
   onMetafieldSave: (
     productId: string,
-    field: "men_images" | "women_images",
+    field: FileRefKey,
     value: string
   ) => void;
 }) {
+  const rawValue = product.metafields[columnKey];
   const gids = useMemo(
-    () => parseGidList(product.metafields[columnKey]),
-    [product.metafields[columnKey]]
+    () => readFileRefGids(columnKey, rawValue),
+    [columnKey, rawValue]
   );
   const { data: fileNodes } = useFileNodes(isOpen ? gids : []);
   const fileUpload = useFileUpload();
@@ -280,10 +286,13 @@ function FileRefPanel({
       .filter(Boolean) as MediaItem[];
   }, [gids, fileNodes]);
 
-  const label = columnKey === "men_images" ? "Men Images" : "Women Images";
+  const label = FILE_REF_LABELS[columnKey];
+  const isSingle = columnKey === "flat";
 
   const handleFilesAccepted = useCallback(
-    async (files: File[]) => {
+    async (dropped: File[]) => {
+      // Flat holds one file: upload the first and let it replace the current one
+      const files = isSingle ? dropped.slice(0, 1) : dropped;
       setUploadProgress({ completed: 0, total: files.length });
       try {
         const newGids = await fileUpload.mutateAsync({
@@ -293,7 +302,7 @@ function FileRefPanel({
           },
         });
         const updatedGids = [...gids, ...newGids];
-        onMetafieldSave(product.id, columnKey, serializeGidList(updatedGids));
+        onMetafieldSave(product.id, columnKey, writeFileRefGids(columnKey, updatedGids));
         toast.success(
           `Uploaded ${files.length} file${files.length !== 1 ? "s" : ""}`
         );
@@ -305,13 +314,13 @@ function FileRefPanel({
         setUploadProgress(null);
       }
     },
-    [product.id, columnKey, gids, fileUpload, onMetafieldSave]
+    [product.id, columnKey, isSingle, gids, fileUpload, onMetafieldSave]
   );
 
   const handleDelete = useCallback(
     (mediaIds: string[]) => {
       const updated = gids.filter((g) => !mediaIds.includes(g));
-      onMetafieldSave(product.id, columnKey, serializeGidList(updated));
+      onMetafieldSave(product.id, columnKey, writeFileRefGids(columnKey, updated));
       toast.success(
         `Deleted ${mediaIds.length} item${mediaIds.length !== 1 ? "s" : ""}`
       );
@@ -329,13 +338,13 @@ function FileRefPanel({
       if (oldIdx === -1) return;
       reordered.splice(oldIdx, 1);
       reordered.splice(newPos, 0, move.id);
-      onMetafieldSave(product.id, columnKey, serializeGidList(reordered));
+      onMetafieldSave(product.id, columnKey, writeFileRefGids(columnKey, reordered));
     },
     [product.id, columnKey, gids, onMetafieldSave]
   );
 
   const handleRemoveAll = useCallback(() => {
-    onMetafieldSave(product.id, columnKey, serializeGidList([]));
+    onMetafieldSave(product.id, columnKey, writeFileRefGids(columnKey, []));
     toast.success("Removed all images");
   }, [product.id, columnKey, onMetafieldSave]);
 

@@ -8,7 +8,7 @@ import { MediaCell } from "./media-cell";
 import { useFileNodes } from "@/hooks/use-file-nodes";
 import { useUploadMedia } from "@/hooks/use-product-media";
 import { useFileUpload } from "@/hooks/use-file-upload";
-import { parseGidList, serializeGidList, cn } from "@/lib/utils";
+import { parseGidList, cn } from "@/lib/utils";
 import {
   gridHead,
   gridRow,
@@ -16,7 +16,13 @@ import {
   GRID_ROW_HEIGHT,
 } from "@/components/ui/grid";
 import { UNISEX_VENDOR } from "@/lib/constants";
-import type { MediaColumnDef, MediaColumnKey } from "@/lib/media-columns";
+import {
+  readFileRefGids,
+  writeFileRefGids,
+  type FileRefKey,
+  type MediaColumnDef,
+  type MediaColumnKey,
+} from "@/lib/media-columns";
 import type { Product } from "@/types";
 
 const ROW_HEIGHT = GRID_ROW_HEIGHT;
@@ -27,7 +33,7 @@ interface MediaTableProps {
   onOpenDetail: (product: Product, columnKey: MediaColumnKey) => void;
   onMetafieldSave: (
     productId: string,
-    field: "men_images" | "women_images",
+    field: FileRefKey,
     value: string
   ) => void;
 }
@@ -116,9 +122,7 @@ const MediaRow = React.memo(function MediaRow({
             thumbnailUrl = product.featuredImage;
             count = product.mediaCount;
           } else {
-            const gids = parseGidList(
-              product.metafields[col.key as "men_images" | "women_images"]
-            );
+            const gids = readFileRefGids(col.key, product.metafields[col.key]);
             count = gids.length;
             if (gids.length > 0) {
               thumbnailUrl = thumbnailMap.get(gids[0]) || null;
@@ -175,10 +179,11 @@ export function MediaTable({
     overscan: 20,
   });
 
-  // Collect all first-GIDs from unisex products' men/women metafields for batch resolution
+  // Collect the first GID of each file-ref cell (unisex men/women, everyone's flat) for batch resolution
   const allFirstGids = useMemo(() => {
     const gidSet = new Set<string>();
     for (const p of products) {
+      if (p.metafields.flat) gidSet.add(p.metafields.flat);
       if (p.vendor !== UNISEX_VENDOR) continue;
       for (const key of ["men_images", "women_images"] as const) {
         const gids = parseGidList(p.metafields[key]);
@@ -241,13 +246,14 @@ export function MediaTable({
             `Uploaded ${files.length} file${files.length !== 1 ? "s" : ""} to ${product.title}`
           );
         } else {
-          const newGids = await fileUploadMutation.mutateAsync({ files });
-          const field = columnKey as "men_images" | "women_images";
-          const currentGids = parseGidList(product.metafields[field]);
+          // Flat holds one file, so only the first dropped file is uploaded
+          const toUpload = columnKey === "flat" ? files.slice(0, 1) : files;
+          const newGids = await fileUploadMutation.mutateAsync({ files: toUpload });
+          const currentGids = readFileRefGids(columnKey, product.metafields[columnKey]);
           const updatedGids = [...currentGids, ...newGids];
-          onMetafieldSave(product.id, field, serializeGidList(updatedGids));
+          onMetafieldSave(product.id, columnKey, writeFileRefGids(columnKey, updatedGids));
           toast.success(
-            `Uploaded ${files.length} file${files.length !== 1 ? "s" : ""} to ${product.title}`
+            `Uploaded ${toUpload.length} file${toUpload.length !== 1 ? "s" : ""} to ${product.title}`
           );
         }
       } catch (err) {

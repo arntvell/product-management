@@ -12,7 +12,7 @@ import { MediaTable } from "@/components/media/media-table";
 import { MediaDetailPanel } from "@/components/media/media-detail-panel";
 import { Button } from "@/components/ui/button";
 import { METAFIELD_DEFINITIONS } from "@/lib/constants";
-import type { MediaColumnKey } from "@/lib/media-columns";
+import type { FileRefKey, MediaColumnKey } from "@/lib/media-columns";
 import type { Product } from "@/types";
 
 interface DetailTarget {
@@ -57,7 +57,7 @@ export default function MediaPage() {
   const handleMetafieldSave = useCallback(
     async (
       productId: string,
-      field: "men_images" | "women_images",
+      field: FileRefKey,
       value: string
     ) => {
       const def = METAFIELD_DEFINITIONS.find((d) => d.key === field);

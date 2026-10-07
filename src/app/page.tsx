@@ -23,6 +23,7 @@ import { CarePicker } from "@/components/pickers/care-picker";
 import { FitguidePicker } from "@/components/pickers/fitguide-picker";
 import { CollectionPicker } from "@/components/pickers/collection-picker";
 import { ModelPicker } from "@/components/pickers/model-picker";
+import { MediaDetailPanel } from "@/components/media/media-detail-panel";
 import { PricesTable } from "@/components/prices/prices-table";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -590,6 +591,27 @@ export default function ProductsPage() {
         }
         onSelect={handlePickerSelect}
         onClear={handlePickerClear}
+      />
+
+      {/* File picker (Flat): upload to Shopify files; the cell turns dirty until saved */}
+      <MediaDetailPanel
+        product={
+          activePicker?.pickerType === "file"
+            ? {
+                ...activePicker.product,
+                metafields: {
+                  ...activePicker.product.metafields,
+                  flat: getCellValue(activePicker.product, "flat"),
+                },
+              }
+            : null
+        }
+        columnKey={activePicker?.pickerType === "file" ? "flat" : null}
+        isOpen={activePicker?.pickerType === "file"}
+        onClose={() => setActivePicker(null)}
+        onMetafieldSave={(productId, field, value) =>
+          handleCellChange(productId, field, value)
+        }
       />
 
       {/* Find & Replace */}
