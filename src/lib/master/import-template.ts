@@ -35,7 +35,9 @@ import type { SizeSystemView } from "./size-systems";
 // 2 — the Category column became a dropdown and the header row moved down one,
 // so a v1 file read with these offsets would report a header mismatch rather
 // than the real problem. readContext refuses anything but the current version.
-export const TEMPLATE_VERSION = 2;
+// v3: a "Size system" column, and more than one system per file (rings and
+// chains from one jeweller). Older files are refused with a clear message.
+export const TEMPLATE_VERSION = 3;
 
 /** The seven columns a person fills in. Order is part of the contract — the
  *  parser matches on header text, but a reordered file still reads correctly
@@ -48,12 +50,14 @@ export const IMPORT_COLUMNS = [
   "Price out",
   "Barcode",
   "Category",
+  "Size system",
 ] as const;
 export type ImportColumn = (typeof IMPORT_COLUMNS)[number];
 
 export const SHEET_PRODUCTS = "Products";
 export const SHEET_SIZES = "Sizes";
 export const SHEET_CATEGORIES = "Categories";
+export const SHEET_SIZE_SYSTEMS = "SizeSystems";
 export const SHEET_META = "Meta";
 
 export interface TemplateContext {
@@ -63,7 +67,14 @@ export interface TemplateContext {
   seasonCode: string;
   /** ProductKind — "MERCHANDISE" for ordinary goods. */
   kind: string;
-  sizeSystem: SizeSystemView;
+  /**
+   * The size systems this batch may use — one for most brands, several when a
+   * brand sells things sized differently (a jeweller's rings and chains). Each
+   * row names its system in the "Size system" column, prefilled when there is
+   * only one; the Size dropdown offers every chosen system's sizes, and the
+   * upload checks each size against its own row's system.
+   */
+  sizeSystems: SizeSystemView[];
   /**
    * The categories this batch may use, chosen before the file is generated.
    *
@@ -90,12 +101,26 @@ export async function buildImportTemplate(
     throw new Error(
       "Choose at least one category — the file's Category column is a dropdown built from them."
     );
-  const sizes = ctx.sizeSystem.entries.filter((e) => !e.archived);
-  if (!sizes.length)
+  if (!ctx.sizeSystems.length) throw new Error("Choose at least one size system.");
+  const activeBySystem = ctx.sizeSystems.map((sys) => ({
+    sys,
+    sizes: sys.entries.filter((e) => !e.archived),
+  }));
+  const empty = activeBySystem.find((x) => !x.sizes.length);
+  if (empty)
     throw new Error(
-      `Size system "${ctx.sizeSystem.name}" has no active sizes, so a file generated ` +
+      `Size system "${empty.sys.name}" has no active sizes, so a file generated ` +
         `from it could not validate anything.`
     );
+  // The Size dropdown is every chosen system's sizes, once each. Excel cannot
+  // make one column's list depend on another's, so the per-row check is the
+  // upload's: a size must exist in the row's own system.
+  const sizes = [
+    ...new Map(
+      activeBySystem.flatMap((x) => x.sizes).map((e) => [e.sizeLabel, e] as const)
+    ).values(),
+  ];
+  const systemNames = ctx.sizeSystems.map((s) => s.name);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Origio";
@@ -119,6 +144,15 @@ export async function buildImportTemplate(
   });
   const categoryRange = `${SHEET_CATEGORIES}!$A$1:$A$${categories.length}`;
 
+  // --- Size systems (hidden) — the Size system column's source range --------
+  const sysSheet = wb.addWorksheet(SHEET_SIZE_SYSTEMS);
+  sysSheet.state = "veryHidden";
+  sysSheet.getColumn(1).width = 30;
+  systemNames.forEach((n, i) => {
+    sysSheet.getCell(i + 1, 1).value = n;
+  });
+  const systemRange = `${SHEET_SIZE_SYSTEMS}!$A$1:$A$${systemNames.length}`;
+
   // --- Meta (hidden) — the batch's identity, read back on upload ------------
   const meta = wb.addWorksheet(SHEET_META);
   meta.state = "veryHidden";
@@ -129,9 +163,8 @@ export async function buildImportTemplate(
     ["seasonId", ctx.seasonId],
     ["seasonCode", ctx.seasonCode],
     ["kind", ctx.kind],
-    ["sizeSystemId", ctx.sizeSystem.id],
-    ["sizeSystemName", ctx.sizeSystem.name],
-    ["sizeSystemKind", ctx.sizeSystem.kind],
+    ["sizeSystemIds", ctx.sizeSystems.map((s) => s.id).join(",")],
+    ["sizeSystemNames", systemNames.join(" | ")],
     ["categoryIds", categories.map((c) => c.id).join(",")],
     ["generatedAt", new Date().toISOString()],
   ];
@@ -151,14 +184,21 @@ export async function buildImportTemplate(
   banner(ws, 1, "Brand", ctx.brandName);
   banner(ws, 2, "Season", ctx.seasonCode);
   banner(ws, 3, "Type", ctx.kind);
-  banner(ws, 4, "Sizes", `${ctx.sizeSystem.name} — ${sizes.map((s) => s.sizeLabel).join(", ")}`);
+  banner(
+    ws,
+    4,
+    "Sizes",
+    activeBySystem
+      .map((x) => `${x.sys.name}: ${x.sizes.map((e) => e.sizeLabel).join(", ")}`)
+      .join("   ·   ")
+  );
   banner(ws, 5, "Categories", categories.map((c) => c.name).join(", "));
   ws.getCell("A6").value =
     "One row per size. Repeat the style and colourway on every row of that colourway; " +
     "prices and category are per colourway, so they must agree across its rows. " +
     "Customs, weight and country come from the brand's settings, not from this file.";
   ws.getCell("A6").font = { italic: true, size: 9, color: { argb: "FF6B6B6B" } };
-  ws.mergeCells("A6:G6");
+  ws.mergeCells("A6:H6");
 
   const header = ws.getRow(HEADER_ROW);
   IMPORT_COLUMNS.forEach((name, i) => {
@@ -170,7 +210,7 @@ export async function buildImportTemplate(
   });
   header.commit();
 
-  const widths = [26, 22, 12, 11, 11, 16, 22];
+  const widths = [26, 22, 12, 11, 11, 16, 22, 22];
   widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
 
   const firstRow = HEADER_ROW + 1;
@@ -192,11 +232,23 @@ export async function buildImportTemplate(
       formulae: [sizeRange],
       showErrorMessage: true,
       errorStyle: "stop",
-      errorTitle: "Not a size in this system",
+      errorTitle: "Not a size in this batch",
       error:
-        `This file was generated for "${ctx.sizeSystem.name}". Pick a size from the list — ` +
+        `This file was generated for ${systemNames.join(", ")}. Pick a size from the list — ` +
         `a size typed by hand would not match a size the importer can mint a SKU from.`,
     };
+
+    ws.getCell(r, COL.sizeSystem).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      formulae: [systemRange],
+      showErrorMessage: true,
+      errorStyle: "stop",
+      errorTitle: "Not a size system in this batch",
+      error: `Pick one of: ${systemNames.join(", ")}. The row's size must be one of that system's.`,
+    };
+    // One system means the column never has to be touched.
+    if (systemNames.length === 1) ws.getCell(r, COL.sizeSystem).value = systemNames[0];
 
     for (const col of [COL.priceIn, COL.priceOut]) {
       ws.getCell(r, col).dataValidation = {
@@ -243,6 +295,7 @@ export const COL = {
   priceOut: 5,
   barcode: 6,
   category: 7,
+  sizeSystem: 8,
 } as const;
 
 function banner(ws: ExcelJS.Worksheet, row: number, label: string, value: string): void {
@@ -252,7 +305,7 @@ function banner(ws: ExcelJS.Worksheet, row: number, label: string, value: string
   const v = ws.getCell(row, 2);
   v.value = value;
   v.font = { size: 10 };
-  ws.mergeCells(row, 2, row, 7);
+  ws.mergeCells(row, 2, row, 8);
 }
 
 function filenameFor(ctx: TemplateContext): string {

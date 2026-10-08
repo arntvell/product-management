@@ -92,7 +92,9 @@ export function ImportProducts({
   const [brandId, setBrandId] = useState("");
   const [seasonId, setSeasonId] = useState("");
   const [kind, setKind] = useState("MERCHANDISE");
-  const [sizeSystemId, setSizeSystemId] = useState("");
+  // One or more: most brands size everything one way, but a jeweller sells
+  // rings and chains. Each row of the file then names its own system.
+  const [sizeSystemIds, setSizeSystemIds] = useState<string[]>([]);
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   // Categories created on this screen join the list without a reload.
   const [categories, setCategories] = useState<CategoryOption[]>(initialCategories);
@@ -115,18 +117,20 @@ export function ImportProducts({
   const [result, setResult] = useState<CommitResult | null>(null);
 
   const brand = brands.find((b) => b.id === brandId) ?? null;
-  const system = sizeSystems.find((s) => s.id === sizeSystemId) ?? null;
+  const chosenSystems = sizeSystemIds
+    .map((id) => sizeSystems.find((s) => s.id === id))
+    .filter((s): s is SizeSystemView => !!s);
 
   // The brand's customs block is a precondition for the FILE, not just for the
   // import. Handing someone a template to fill in over an afternoon, and only
   // then telling them the brand was incomplete, wastes the afternoon.
   const brandIncomplete = brand ? brand.missingDefaults : [];
   const canGenerate =
-    !!brandId && !!seasonId && !!sizeSystemId && categoryIds.length > 0 && !brandIncomplete.length;
+    !!brandId && !!seasonId && sizeSystemIds.length > 0 && categoryIds.length > 0 && !brandIncomplete.length;
 
   const templateHref = canGenerate
     ? `/api/catalog/import/template?brandId=${brandId}&seasonId=${seasonId}` +
-      `&sizeSystemId=${sizeSystemId}&kind=${kind}` +
+      `&sizeSystemIds=${sizeSystemIds.join(",")}&kind=${kind}` +
       `&categoryIds=${categoryIds.join(",")}`
     : "";
 
@@ -145,7 +149,7 @@ export function ImportProducts({
   function chooseBrand(id: string) {
     setBrandId(id);
     const b = brands.find((x) => x.id === id);
-    if (b?.defaultSizeSystemId && !sizeSystemId) setSizeSystemId(b.defaultSizeSystemId);
+    if (b?.defaultSizeSystemId && !sizeSystemIds.length) setSizeSystemIds([b.defaultSizeSystemId]);
   }
 
   async function post(dryRun: boolean) {
@@ -285,20 +289,33 @@ export function ImportProducts({
               ))}
             </select>
           </Field>
-          <Field label="Size system">
+          <Field label="Size systems">
             {sizeSystems.length ? (
-              <select
-                className="h-9 w-full border bg-transparent px-3 text-body"
-                value={sizeSystemId}
-                onChange={(e) => setSizeSystemId(e.target.value)}
-              >
-                <option value="">— choose —</option>
-                {sizeSystems.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.entries.filter((e) => !e.archived).length} sizes)
-                  </option>
-                ))}
-              </select>
+              <div className="max-h-40 overflow-y-auto border p-1">
+                {sizeSystems.map((s) => {
+                  const on = sizeSystemIds.includes(s.id);
+                  return (
+                    <label
+                      key={s.id}
+                      className="flex cursor-pointer items-center gap-2 px-2 py-1 text-body hover:bg-muted"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() =>
+                          setSizeSystemIds((prev) =>
+                            on ? prev.filter((id) => id !== s.id) : [...prev, s.id]
+                          )
+                        }
+                      />
+                      <span className="truncate">{s.name}</span>
+                      <span className="ml-auto text-fine text-muted-foreground">
+                        {s.entries.filter((e) => !e.archived).length} sizes
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             ) : (
               <p className="text-fine text-muted-foreground">
                 None yet —{" "}
@@ -329,16 +346,26 @@ export function ImportProducts({
           </p>
         </Field>
 
-        {system ? (
-          <p className="mt-3 text-fine text-muted-foreground">
-            The Size column will only accept:{" "}
-            <span className="font-mono">
-              {system.entries
-                .filter((e) => !e.archived)
-                .map((e) => e.sizeLabel)
-                .join(", ")}
-            </span>
-          </p>
+        {chosenSystems.length ? (
+          <div className="mt-3 space-y-1 text-fine text-muted-foreground">
+            {chosenSystems.length > 1 ? (
+              <p>
+                The file gets a Size system column: pick {chosenSystems.map((s) => s.name).join(" or ")}{" "}
+                on each row, and its size must be one of that system&apos;s.
+              </p>
+            ) : null}
+            {chosenSystems.map((sys) => (
+              <p key={sys.id}>
+                {chosenSystems.length > 1 ? `${sys.name}: ` : "The Size column will only accept: "}
+                <span className="font-mono">
+                  {sys.entries
+                    .filter((e) => !e.archived)
+                    .map((e) => e.sizeLabel)
+                    .join(", ")}
+                </span>
+              </p>
+            ))}
+          </div>
         ) : null}
 
         <div className="mt-4">
@@ -671,7 +698,11 @@ function ReportView({
                     <span>{c.name}</span>
                     <code className="font-mono text-muted-foreground">{c.colorwaySku}</code>
                     <span className="text-muted-foreground">
-                      {c.variants.length} size{c.variants.length === 1 ? "" : "s"} ·{" "}
+                      {c.variants.length} size{c.variants.length === 1 ? "" : "s"}
+                      {report.context.sizeSystems.length > 1 && c.sizeSystemName
+                        ? ` (${c.sizeSystemName})`
+                        : ""}{" "}
+                      ·{" "}
                       {c.variants.filter((v) => v.barcode).length} barcoded ·{" "}
                       {c.priceOut ? `out ${c.priceOut}` : "no price out"}
                       {c.priceIn ? ` · in ${c.priceIn}` : ""}

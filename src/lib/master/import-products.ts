@@ -103,7 +103,12 @@ export interface ImportContext {
   seasonId: string;
   seasonCode: string;
   kind: ProductKind;
+  /** Every size system the file was generated for. One is the common case; a
+   *  jeweller's rings and chains are two. Each colourway uses exactly one. */
+  sizeSystems: { id: string; name: string }[];
+  /** The first system's id — the drafts' default, and what older code reads. */
   sizeSystemId: string;
+  /** The systems' names, joined, for display. */
   sizeSystemName: string;
   defaults: ImportDefaults;
   /** Labels of the required brand fields left blank. Non-empty blocks the import. */
@@ -128,6 +133,9 @@ export interface ImportColorway {
   categoryValue: string | null;
   priceIn: string | null;
   priceOut: string | null;
+  /** The size system this colourway's sizes come from. */
+  sizeSystemId: string;
+  sizeSystemName: string;
   variants: ImportVariantRow[];
 }
 
@@ -200,13 +208,22 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
 
   // Size system, live from the database rather than the file: an archived size
   // must stop being offered to new product even if the file predates archiving.
-  const system = await prisma.sizeSystem.findUnique({
-    where: { id: context.sizeSystemId },
-    select: { entries: { orderBy: { position: "asc" } } },
+  const systems = await prisma.sizeSystem.findMany({
+    where: { id: { in: context.sizeSystems.map((s) => s.id) } },
+    select: { id: true, name: true, entries: { orderBy: { position: "asc" } } },
   });
-  if (!system) throw new ImportError("The size system this file was generated for no longer exists.");
-  const byLabel = new Map<string, (typeof system.entries)[number]>();
-  for (const e of system.entries) if (!e.archived) byLabel.set(e.sizeLabel.trim().toLowerCase(), e);
+  if (systems.length !== context.sizeSystems.length)
+    throw new ImportError("A size system this file was generated for no longer exists.");
+  type Entry = (typeof systems)[number]["entries"][number];
+  // Sizes are looked up within the row's OWN system: a ring 50 and a 50 cm
+  // chain are different sizes that happen to share a label.
+  const labelsBySystem = new Map<string, Map<string, Entry>>();
+  for (const sys of systems) {
+    const m = new Map<string, Entry>();
+    for (const e of sys.entries) if (!e.archived) m.set(e.sizeLabel.trim().toLowerCase(), e);
+    labelsBySystem.set(sys.id, m);
+  }
+  const systemByName = new Map(systems.map((s) => [s.name.trim().toLowerCase(), s]));
 
   // --- read the rows -------------------------------------------------------
   interface RawRow {
@@ -218,6 +235,7 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
     priceOut: string;
     barcode: string;
     category: string;
+    sizeSystem: string;
   }
   const raw: RawRow[] = [];
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -231,6 +249,7 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
       priceOut: text(row.getCell(COL.priceOut)),
       barcode: text(row.getCell(COL.barcode)),
       category: text(row.getCell(COL.category)),
+      sizeSystem: text(row.getCell(COL.sizeSystem)),
     };
     if (!r.style && !r.colorway && !r.size && !r.barcode && !r.priceIn && !r.priceOut) return;
     raw.push(r);
@@ -337,10 +356,37 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
         });
       }
 
+      // size system — one per colourway; blank means the only one, if there is one
+      const sysText = agree(c.rows, (r) => r.sizeSystem, (v) => v.trim());
+      let system: (typeof systems)[number] | undefined;
+      if (sysText === DISAGREE)
+        errors.push(
+          `"${g.styleName} / ${c.name}" names more than one size system across its rows ` +
+            `(${[...new Set(c.rows.map((r) => r.sizeSystem).filter(Boolean))].join(", ")}). ` +
+            `A colourway's sizes come from one system.`
+        );
+      else if (!sysText) {
+        if (systems.length === 1) system = systems[0];
+        else
+          errors.push(
+            `"${g.styleName} / ${c.name}" has no size system. This file covers ` +
+              `${systems.map((s) => s.name).join(" and ")} — pick one in the Size system column.`
+          );
+      } else {
+        system = systemByName.get(sysText.toLowerCase());
+        if (!system)
+          errors.push(
+            `"${g.styleName} / ${c.name}": "${sysText}" is not one of this file's size systems ` +
+              `(${systems.map((s) => s.name).join(", ")}).`
+          );
+      }
+      const byLabel = system ? labelsBySystem.get(system.id)! : new Map<string, Entry>();
+
       // variants
       const variants: ImportVariantRow[] = [];
       const seenSize = new Map<string, number>();
       for (const r of c.rows) {
+        if (!system) break;
         if (!r.size) {
           errors.push(`Row ${r.row}: no size.`);
           continue;
@@ -348,7 +394,7 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
         const entry = byLabel.get(r.size.trim().toLowerCase());
         if (!entry) {
           errors.push(
-            `Row ${r.row}: "${r.size}" is not an active size in ${context.sizeSystemName}. ` +
+            `Row ${r.row}: "${r.size}" is not an active size in ${system.name}. ` +
               `Pick from the dropdown — a size typed by hand has no SKU token to mint from.`
           );
           continue;
@@ -401,6 +447,8 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
         categoryValue,
         priceIn: priceIn === DISAGREE ? null : priceIn,
         priceOut: priceOut === DISAGREE ? null : priceOut,
+        sizeSystemId: system?.id ?? "",
+        sizeSystemName: system?.name ?? "",
         variants,
       });
     }
@@ -615,7 +663,11 @@ export async function commitImport(
         fiberComposition: t.fiberComposition,
         countryOfOrigin: t.countryOfOrigin,
         manufacturerId: t.manufacturerId,
-        defaultSizeSystemId: report.context.sizeSystemId,
+        // The style's own system when its colourways agree, else the batch's first.
+        defaultSizeSystemId:
+          new Set(s.colorways.map((c) => c.sizeSystemId)).size === 1
+            ? s.colorways[0].sizeSystemId
+            : report.context.sizeSystemId,
       },
       style:
         s.mode === "existing"
@@ -633,7 +685,7 @@ export async function commitImport(
           colorwaySku: normalizeSku(c.colorwaySku),
           manualSku: false,
           kind: null,
-          sizeSystemId: report.context.sizeSystemId,
+          sizeSystemId: c.sizeSystemId || report.context.sizeSystemId,
           // Null when it equals the style's — the draft inherits, and only a
           // genuine per-colourway difference is stored as an override.
           categoryId: catId && catId !== styleCategoryId ? catId : null,
@@ -702,12 +754,12 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
 
   const brandId = m.get("brandId") ?? "";
   const seasonId = m.get("seasonId") ?? "";
-  const sizeSystemId = m.get("sizeSystemId") ?? "";
+  const sizeSystemIds = (m.get("sizeSystemIds") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
   const kind = (m.get("kind") ?? "MERCHANDISE") as ProductKind;
 
   // Every id is re-read from the database. The Meta sheet is hidden, not
   // protected, and a renamed brand should import under its current name.
-  const [brand, season, system] = await Promise.all([
+  const [brand, season, foundSystems] = await Promise.all([
     prisma.brand.findUnique({
       where: { id: brandId },
       select: {
@@ -720,8 +772,8 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
       },
     }),
     prisma.season.findUnique({ where: { id: seasonId }, select: { id: true, code: true } }),
-    prisma.sizeSystem.findUnique({
-      where: { id: sizeSystemId },
+    prisma.sizeSystem.findMany({
+      where: { id: { in: sizeSystemIds } },
       select: { id: true, name: true, archived: true },
     }),
   ]);
@@ -733,7 +785,12 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
     );
   if (brand.archived) throw new ImportError(`"${brand.name}" is archived.`);
   if (!season) throw new ImportError("The season this file was generated for no longer exists.");
-  if (!system) throw new ImportError("The size system this file was generated for no longer exists.");
+  // In the order the file lists them, so the first is the batch default.
+  const sizeSystems = sizeSystemIds
+    .map((id) => foundSystems.find((x) => x.id === id))
+    .filter((x): x is (typeof foundSystems)[number] => !!x);
+  if (!sizeSystems.length || sizeSystems.length !== sizeSystemIds.length)
+    throw new ImportError("A size system this file was generated for no longer exists.");
 
   const t = brand.template;
   const defaults: ImportDefaults = {
@@ -754,8 +811,9 @@ async function readContext(wb: ExcelJS.Workbook): Promise<ImportContext> {
     seasonId: season.id,
     seasonCode: season.code,
     kind,
-    sizeSystemId: system.id,
-    sizeSystemName: system.name,
+    sizeSystems: sizeSystems.map((x) => ({ id: x.id, name: x.name })),
+    sizeSystemId: sizeSystems[0].id,
+    sizeSystemName: sizeSystems.map((x) => x.name).join(" + "),
     defaults,
     missingDefaults: missingBrandDefaults({ ...defaults }),
   };

@@ -5,7 +5,8 @@ import { listSizeSystems } from "@/lib/master/size-systems";
 
 export const dynamic = "force-dynamic";
 
-// GET /api/catalog/import/template?brandId=&seasonId=&kind=&sizeSystemId=&categoryIds=a,b,c
+// GET /api/catalog/import/template?brandId=&seasonId=&kind=&sizeSystemIds=a,b&categoryIds=a,b,c
+// (`sizeSystemId=` for a single system is still accepted.)
 //
 // The generated workbook, with the batch's choices already made. Every id is
 // resolved here rather than trusted from the query string — the file's Meta
@@ -15,7 +16,10 @@ export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
   const brandId = q.get("brandId") ?? "";
   const seasonId = q.get("seasonId") ?? "";
-  const sizeSystemId = q.get("sizeSystemId") ?? "";
+  const sizeSystemIds = (q.get("sizeSystemIds") ?? q.get("sizeSystemId") ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
   const kind = q.get("kind") ?? "MERCHANDISE";
   const categoryIds = (q.get("categoryIds") ?? "")
     .split(",")
@@ -25,7 +29,7 @@ export async function GET(req: Request) {
   const missing = [
     !brandId && "brand",
     !seasonId && "season",
-    !sizeSystemId && "size system",
+    !sizeSystemIds.length && "size system",
     !categoryIds.length && "category",
   ].filter(Boolean);
   if (missing.length)
@@ -58,9 +62,11 @@ export async function GET(req: Request) {
         { status: 422 }
       );
     if (!season) return NextResponse.json({ error: "Season not found." }, { status: 404 });
-    const sizeSystem = systems.find((s) => s.id === sizeSystemId);
-    if (!sizeSystem)
-      return NextResponse.json({ error: "Size system not found." }, { status: 404 });
+    const sizeSystems = sizeSystemIds
+      .map((id) => systems.find((s) => s.id === id))
+      .filter((s): s is (typeof systems)[number] => !!s);
+    if (sizeSystems.length !== sizeSystemIds.length)
+      return NextResponse.json({ error: "A chosen size system no longer exists." }, { status: 404 });
     if (categories.length !== categoryIds.length)
       return NextResponse.json(
         { error: "One of the chosen categories no longer exists — pick them again." },
@@ -79,7 +85,7 @@ export async function GET(req: Request) {
       seasonId: season.id,
       seasonCode: season.code,
       kind,
-      sizeSystem,
+      sizeSystems,
       categories: ordered,
     });
 

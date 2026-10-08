@@ -44,7 +44,7 @@ const check = (label: string, ok: boolean, detail = "") => {
   console.log(`${ok ? "  ok  " : "FAIL  "}${label}${detail ? "  — " + detail : ""}`);
 };
 
-type Row = [string, string, string, string, string, string, string];
+type Row = [string, string, string, string, string, string, string, string?];
 
 /** Fill a generated template the way a person would, and hand back the bytes. */
 async function fill(body: Buffer, rows: Row[]): Promise<Buffer> {
@@ -66,6 +66,9 @@ async function fill(body: Buffer, rows: Row[]): Promise<Buffer> {
     // column, so "no category" has to mean a CLEARED cell rather than an
     // untouched one.
     ws.getCell(n, COL.category).value = r[6] || null;
+    // The Size system column: written only when the row names one, so a
+    // single-system template keeps its pre-filled value.
+    if (r[7] !== undefined) ws.getCell(n, COL.sizeSystem).value = r[7] || null;
   });
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
@@ -173,7 +176,7 @@ async function main() {
       seasonId: season.id,
       seasonCode: season.code,
       kind: "MERCHANDISE",
-      sizeSystem: templateSystem,
+      sizeSystems: [templateSystem],
       categories: category ? [{ id: category.id, name: category.name }] : [{ id: "x", name: "Fixture" }],
     });
     check("template built", body.length > 4000, `${filename}, ${body.length} bytes`);
@@ -304,7 +307,7 @@ async function main() {
         seasonId: season.id,
         seasonCode: season.code,
         kind: "MERCHANDISE",
-        sizeSystem: templateSystem,
+        sizeSystems: [templateSystem],
         categories: [{ id: category?.id ?? "x", name: catName }],
       });
       const r0 = await parseImportWorkbook(
@@ -326,6 +329,58 @@ async function main() {
       r7.ok && r7.categories.some((c) => !c.matchedId),
       r7.errors.join(" | ")
     );
+
+    // --- two size systems in one file (a jeweller's rings and chains) -------
+    const other = (await listSizeSystems()).find(
+      (x) => x.id !== system!.id && !x.archived && x.entries.some((e) => !e.archived)
+    );
+    if (other) {
+      const o0 = other.entries.find((e) => !e.archived)!.sizeLabel;
+      const two = await buildImportTemplate({
+        brandId: brand.id,
+        brandName: brand.name,
+        seasonId: season.id,
+        seasonCode: season.code,
+        kind: "MERCHANDISE",
+        sizeSystems: [system, other],
+        categories: [{ id: category?.id ?? "x", name: catName }],
+      });
+      const both = await parseImportWorkbook(
+        await fill(two.body, [
+          ["Test Ring", "Silver", s0, "", "1999", "", catName, system.name],
+          ["Test Chain", "Silver", o0, "", "999", "", catName, other.name],
+        ])
+      );
+      check("two size systems in one file parse", both.ok, both.errors.join(" | "));
+      const ring = both.styles.find((x) => x.styleName === "Test Ring")?.colorways[0];
+      const chain = both.styles.find((x) => x.styleName === "Test Chain")?.colorways[0];
+      check(
+        "each colourway keeps its own size system",
+        ring?.sizeSystemId === system.id && chain?.sizeSystemId === other.id,
+        `${ring?.sizeSystemName} / ${chain?.sizeSystemName}`
+      );
+      const blank = await parseImportWorkbook(
+        await fill(two.body, [["Test Ring", "Silver", s0, "", "1999", "", catName, ""]])
+      );
+      check(
+        "with two systems, a blank Size system is refused",
+        !blank.ok && blank.errors.some((e) => /no size system/.test(e)),
+        blank.errors.join(" | ")
+      );
+      const otherOnly = other.entries.find(
+        (e) => !e.archived && !sizes.some((x) => x.sizeLabel.toLowerCase() === e.sizeLabel.toLowerCase())
+      );
+      if (otherOnly) {
+        const wrong = await parseImportWorkbook(
+          await fill(two.body, [["Test Ring", "Silver", otherOnly.sizeLabel, "", "1999", "", catName, system.name]])
+        );
+        check(
+          "a size from the OTHER system is refused for this row",
+          !wrong.ok && wrong.errors.some((e) => /not an active size in/.test(e)),
+          wrong.errors.join(" | ")
+        );
+      }
+    }
 
     // --- commit -------------------------------------------------------------
     if (COMMIT) {
