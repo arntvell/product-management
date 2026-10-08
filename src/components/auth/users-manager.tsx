@@ -65,9 +65,9 @@ export function UsersManager({ initial }: { initial: Row[] }) {
       >
         <div className="min-w-[16rem] flex-1">
           <label className="text-fine text-muted-foreground" htmlFor="u-email">
-            Email (@livid.no)
+            Email
           </label>
-          <Input id="u-email" className="mt-1" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@livid.no" />
+          <Input id="u-email" className="mt-1" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@livid.no or any address" />
         </div>
         <div>
           <label className="text-fine text-muted-foreground" htmlFor="u-role">
@@ -89,7 +89,12 @@ export function UsersManager({ initial }: { initial: Row[] }) {
         <Button type="submit" disabled={busy || !email.trim()}>
           Add user
         </Button>
-        <p className="w-full text-fine text-muted-foreground">{ROLE_HINTS[role]}.</p>
+        <p className="w-full text-fine text-muted-foreground">
+          {ROLE_HINTS[role]}.
+          {email.trim() && !email.trim().toLowerCase().endsWith("@livid.no")
+            ? " Outside livid.no: they sign in with a code sent to this address — add the address to the allowlist in Clerk too."
+            : ""}
+        </p>
       </form>
 
       <div className="border">

@@ -17,8 +17,9 @@ export async function listUsers() {
 export async function addUser(input: { email: string; role: string; name?: string | null }) {
   const email = input.email?.trim().toLowerCase() ?? "";
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new UserError("That is not an email address.");
-  if (!email.endsWith("@livid.no"))
-    throw new UserError("Origo signs in with Google on @livid.no — use the person's livid.no address.");
+  // Any address. Staff sign in with Google on @livid.no; someone outside it (a
+  // freelancer, the vintage buyer) signs in with an emailed code — Clerk's
+  // allowlist must name their address. Either way this table is the gate.
   if (!ROLES.includes(input.role as UserRole)) throw new UserError("Choose a role.");
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new UserError(`${email} is already on the list${existing.active ? "" : " (deactivated — reactivate it instead)"}.`);
