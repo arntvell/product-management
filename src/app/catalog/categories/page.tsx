@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { listCategoryTree, listUnmapped } from "@/lib/master/categories";
+import { listCategoryTree, listUnmapped, newCategoryChoices } from "@/lib/master/categories";
 import { CategoryManager } from "@/components/catalog/category-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function CategoriesPage() {
-  const [categories, unmapped] = await Promise.all([
+  const [categories, unmapped, choices] = await Promise.all([
     listCategoryTree({ includeArchived: true }),
     listUnmapped(),
+    newCategoryChoices(),
   ]);
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -26,7 +27,11 @@ export default async function CategoriesPage() {
           Back to catalog
         </Link>
       </div>
-      <CategoryManager categories={categories} unmapped={unmapped} />
+      <CategoryManager
+        categories={categories}
+        unmapped={unmapped}
+        sitooCategories={choices.sitooCategories}
+      />
     </main>
   );
 }

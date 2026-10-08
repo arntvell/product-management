@@ -376,9 +376,29 @@ export function ImportProducts({
               </a>
             </Button>
           ) : (
-            <Button size="sm" disabled>
-              Download the template
-            </Button>
+            <>
+              <Button size="sm" disabled>
+                Download the template
+              </Button>
+              {/* Said next to the button: the brand gap used to be reported only
+                  in step 2, below it, and read as "the download is broken". */}
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-fine text-ink">
+                {!brandId ? <li>Choose a brand.</li> : null}
+                {!seasonId ? <li>Choose a season.</li> : null}
+                {!sizeSystemIds.length ? <li>Tick at least one size system.</li> : null}
+                {!categoryIds.length ? <li>Tick at least one category.</li> : null}
+                {brand && brandIncomplete.length ? (
+                  <li>
+                    {brand.name} has no {brandIncomplete.join(", ")}. Every imported product
+                    inherits these, so set them in{" "}
+                    <Link href={`/catalog/brands/${brand.id}`} className="underline underline-offset-2">
+                      {brand.name}&apos;s brand settings
+                    </Link>{" "}
+                    and reload this page.
+                  </li>
+                ) : null}
+              </ul>
+            </>
           )}
           <p className="mt-2 text-fine text-muted-foreground">
             One row per size. Repeat the style and colourway on every row of that colourway;

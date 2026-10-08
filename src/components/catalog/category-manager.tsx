@@ -11,9 +11,12 @@ import type { CategoryNode, UnmappedValue } from "@/lib/master/categories";
 export function CategoryManager({
   categories,
   unmapped,
+  sitooCategories,
 }: {
   categories: CategoryNode[];
   unmapped: UnmappedValue[];
+  /** Sitoo's navigation as pulled, so a category's Sitoo id can be chosen here. */
+  sitooCategories: { id: string; label: string }[];
 }) {
   const router = useRouter();
   const [, start] = useTransition();
@@ -263,9 +266,36 @@ export function CategoryManager({
                     </option>
                   ))}
                 </select>
-                <div className="font-mono text-fine text-muted-foreground">
-                  {c.sitooCategoryId ?? "—"}
-                </div>
+                {/* Editable: a category created without one (in the import or the
+                    wizard) otherwise had no way to get a Sitoo id, and the
+                    Sitoo push refuses every product filed under it. */}
+                <select
+                  className="h-7 border bg-transparent px-1.5 text-fine"
+                  defaultValue={c.sitooCategoryId ?? ""}
+                  title={sitooCategories.find((s) => s.id === c.sitooCategoryId)?.label ?? "No Sitoo navigation"}
+                  onChange={(e) =>
+                    start(async () => {
+                      try {
+                        await put(`/api/catalog/categories/${c.id}`, {
+                          sitooCategoryId: e.target.value,
+                        });
+                        router.refresh();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Failed");
+                      }
+                    })
+                  }
+                >
+                  <option value="">—</option>
+                  {c.sitooCategoryId && !sitooCategories.some((s) => s.id === c.sitooCategoryId) ? (
+                    <option value={c.sitooCategoryId}>{c.sitooCategoryId}</option>
+                  ) : null}
+                  {sitooCategories.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
                 <div className="text-right tabular-nums text-muted-foreground">{c.styles}</div>
                 <div className="text-right tabular-nums text-muted-foreground">
                   {c.colorways}
