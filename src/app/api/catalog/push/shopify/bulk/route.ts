@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { bulkPushToShopify } from "@/lib/master/push-shopify";
 import { sendChannelIdsToLoom } from "@/lib/master/loom-follow-up";
+import { vintageOnlyRefusal } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -29,6 +30,10 @@ export async function POST(req: Request) {
   if (!Array.isArray(body.colorwayIds) || body.colorwayIds.length === 0) {
     return NextResponse.json({ error: "colorwayIds required" }, { status: 400 });
   }
+
+  // The vintage drop sheet publishes through here; a Vintage user, only vintage.
+  const refused = await vintageOnlyRefusal(body.colorwayIds);
+  if (refused) return NextResponse.json({ error: refused }, { status: 403 });
 
   const results = await bulkPushToShopify(body.colorwayIds, body.seasonCode, {
     allowIncomplete: body.allowIncomplete,

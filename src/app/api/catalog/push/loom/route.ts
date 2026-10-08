@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { vintageOnlyRefusal } from "@/lib/auth/session";
 import { pushColorwaysToLoom } from "@/lib/loom/push";
 import type { LoomMode } from "@/lib/loom/payload";
 
@@ -46,6 +47,9 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  // The vintage drop sheet publishes through here; a Vintage user, only vintage.
+  const refused = await vintageOnlyRefusal([...body.colorwayIds, ...(body.archiveColorwayIds ?? [])]);
+  if (refused) return NextResponse.json({ error: refused }, { status: 403 });
   try {
     const result = await pushColorwaysToLoom(body.colorwayIds, body.seasonCode, {
       dryRun: body.dryRun,

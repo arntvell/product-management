@@ -727,6 +727,8 @@ model PushBatch {
   allowIncomplete Boolean         @default(false)
   note            String?
   draftId         String?
+  /// The User who started this push. Null before 2026-10 and for scripts.
+  createdByUserId String?
   items           PushBatchItem[]
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -794,6 +796,9 @@ model FieldOwner {
   authority String?
   evidence  String?
   decidedAt DateTime?
+  /// The User who last set this field by hand. Null before 2026-10 and for
+  /// writes made by a sync or a script.
+  editedByUserId String?
 
   @@unique([entityType, entityId, field])
   @@index([entityType, entityId])
@@ -987,4 +992,32 @@ enum StyleNameRuleKind {
   PARENT_OVERRIDE
   /// Reviewed and deliberately left alone.
   KEEP_SEPARATE
+}
+
+// ---------------------------------------------------------------------------
+// Users and roles
+// ---------------------------------------------------------------------------
+
+/// Who may use Origo, and as what. Sign-in is Clerk (Google, @livid.no); THIS
+/// table is the gate — a signed-in person with no active row here gets no
+/// access. Added by an admin on /catalog/users.
+model User {
+  id          String    @id @default(cuid())
+  /// Lowercased. What an admin invites by, and what a first sign-in matches on.
+  email       String    @unique
+  /// Filled on first sign-in, so later requests resolve without asking Clerk.
+  clerkUserId String?   @unique
+  name        String?
+  role        UserRole  @default(VIEWER)
+  active      Boolean   @default(true)
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+enum UserRole {
+  ADMIN
+  PRODUCT_MANAGER
+  VINTAGE
+  VIEWER
 }
