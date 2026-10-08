@@ -19,7 +19,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, id: await createCategory(body) }, { status: 201 });
   } catch (err) {
     if (err instanceof CategoryError)
-      return NextResponse.json({ error: err.message }, { status: 422 });
+      return NextResponse.json(
+        { error: err.message, ...(err.existing ? { existing: err.existing } : {}) },
+        { status: 422 }
+      );
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Create failed" },
       { status: 500 }

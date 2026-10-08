@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Notice } from "@/components/ui/notice";
 import { LOOM_CATEGORIES } from "@/lib/master/loom-category";
 import { SitooCategoryCreate } from "./sitoo-category-create";
 
@@ -56,6 +57,8 @@ export function NewCategoryForm({
   const [creatingInSitoo, setCreatingInSitoo] = useState(false);
   const sitooOptions = [...options.sitooCategories, ...sitooExtra];
   const [busy, setBusy] = useState(false);
+  // The name is taken: the category that holds it, offered instead of an error.
+  const [existing, setExisting] = useState<CreatedCategory | null>(null);
 
   async function create() {
     setBusy(true);
@@ -72,6 +75,10 @@ export function NewCategoryForm({
         }),
       });
       const json = await res.json();
+      if (!res.ok && json.existing) {
+        setExisting(json.existing);
+        return;
+      }
       if (!res.ok) throw new Error(json.error ?? "Could not create the category");
       const parent = options.parents.find((p) => p.id === parentId);
       toast.success(`Created category ${name.trim()}`);
@@ -101,7 +108,10 @@ export function NewCategoryForm({
             className="mt-1.5"
             value={name}
             autoFocus
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              setExisting(null);
+            }}
             placeholder="e.g. Reed diffusers"
           />
         </div>
@@ -204,6 +214,22 @@ export function NewCategoryForm({
           )}
         </div>
       </div>
+      {existing ? (
+        <Notice
+          title={`"${existing.name}" already exists`}
+          action={
+            <Button type="button" size="sm" onClick={() => onCreated(existing)}>
+              Use “{existing.name}”
+            </Button>
+          }
+        >
+          Names are compared without case and punctuation, so this would be the same category
+          twice.
+          {existing.sitooCategoryId
+            ? ""
+            : " It has no Sitoo navigation yet — set it where the category is used."}
+        </Notice>
+      ) : null}
       <div className="flex justify-end gap-2">
         <Button type="button" size="sm" variant="outline" onClick={onCancel} disabled={busy}>
           Cancel

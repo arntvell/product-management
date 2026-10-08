@@ -29,6 +29,7 @@ import type {
   ImportReport,
 } from "@/lib/master/import-products";
 import { DraftPushPanel } from "@/components/catalog/draft-push-panel";
+import { SetSitooNavigation } from "@/components/catalog/set-sitoo-navigation";
 import {
   NewCategoryForm,
   type CreatedCategory,
@@ -98,8 +99,16 @@ export function ImportProducts({
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   // Categories created on this screen join the list without a reload.
   const [categories, setCategories] = useState<CategoryOption[]>(initialCategories);
+  // A category picked or "created" may already be in the list (a duplicate
+  // name resolves to the existing one), so add only what is new.
   const addCategory = (c: CreatedCategory) =>
-    setCategories((prev) => [...prev, c].sort((a, b) => a.name.localeCompare(b.name)));
+    setCategories((prev) =>
+      prev.some((x) => x.id === c.id)
+        ? prev
+        : [...prev, c].sort((a, b) => a.name.localeCompare(b.name))
+    );
+  const setCategorySitoo = (id: string, sitooCategoryId: string) =>
+    setCategories((prev) => prev.map((x) => (x.id === id ? { ...x, sitooCategoryId } : x)));
   const categoryOptions: NewCategoryOptions = {
     ...newCategoryOptions,
     parents: categories.map((c) => ({ id: c.id, name: c.name, depth: c.depth })),
@@ -515,6 +524,8 @@ export function ImportProducts({
           setDecisions={setDecisions}
           newCategoryOptions={categoryOptions}
           onCategoryCreated={addCategory}
+          onCategorySitoo={setCategorySitoo}
+          sitooTicked={channels.SITOO}
         />
       ) : null}
 
@@ -553,6 +564,8 @@ function ReportView({
   setDecisions,
   newCategoryOptions,
   onCategoryCreated,
+  onCategorySitoo,
+  sitooTicked,
 }: {
   report: ImportReport;
   categories: CategoryOption[];
@@ -560,6 +573,9 @@ function ReportView({
   setDecisions: (f: (d: Record<string, CategoryDecision>) => Record<string, CategoryDecision>) => void;
   newCategoryOptions: NewCategoryOptions;
   onCategoryCreated: (c: CreatedCategory) => void;
+  onCategorySitoo: (categoryId: string, sitooCategoryId: string) => void;
+  /** Whether this import creates for Sitoo — only then is a missing id a blocker. */
+  sitooTicked: boolean;
 }) {
   // The file value a category is being created for, if any. Created at once,
   // with its Shopify, Loom and Sitoo values, then mapped like any other.
@@ -605,6 +621,10 @@ function ReportView({
               const resolvedId =
                 d?.action === "map" ? d.categoryId : c.matchedId ?? "";
               const creating = d?.action === "create";
+              // The category this value resolves to, as it stands now — its Sitoo
+              // id may have been set on this screen since the report was read.
+              const resolved = categories.find((x) => x.id === resolvedId) ?? null;
+              const needsSitoo = sitooTicked && !!resolved && !resolved.sitooCategoryId;
               return (
                 <div
                   key={c.value}
@@ -615,7 +635,7 @@ function ReportView({
                     <div className="text-fine text-muted-foreground">
                       {c.rowCount} row{c.rowCount === 1 ? "" : "s"}
                       {c.matchedId ? ` · matches “${c.matchedName}”` : " · not in the master"}
-                      {c.missingSitooId ? " · no Sitoo id" : ""}
+                      {resolved ? (resolved.sitooCategoryId ? ` · Sitoo ${resolved.sitooCategoryId}` : " · no Sitoo id") : ""}
                     </div>
                   </div>
 
@@ -655,6 +675,9 @@ function ReportView({
                     </select>
                   )}
 
+                  {c.matchedId && !creating ? (
+                    <span />
+                  ) : (
                   <button
                     type="button"
                     className="justify-self-start text-fine underline underline-offset-2 sm:justify-self-end"
@@ -670,6 +693,18 @@ function ReportView({
                   >
                     {creating || creatingFor === c.value ? "cancel" : "create new"}
                   </button>
+                  )}
+
+                  {needsSitoo && creatingFor !== c.value ? (
+                    <div className="sm:col-span-3">
+                      <SetSitooNavigation
+                        categoryId={resolved!.id}
+                        categoryName={resolved!.name}
+                        sitooCategories={newCategoryOptions.sitooCategories}
+                        onSet={(sitooId) => onCategorySitoo(resolved!.id, sitooId)}
+                      />
+                    </div>
+                  ) : null}
 
                   {creatingFor === c.value ? (
                     <div className="sm:col-span-3">

@@ -10,7 +10,15 @@ import { prisma } from "@/lib/db";
 import { LOOM_CATEGORIES } from "./loom-category";
 import { categorySlug, normalizeCategoryKey, type RefSystem } from "./reference-pull";
 
-export class CategoryError extends Error {}
+export class CategoryError extends Error {
+  /** Set when the name is taken: the category that already covers it, so a
+   *  caller can offer to use it instead of stopping at an error. */
+  existing?: { id: string; name: string; path: string; depth: number; sitooCategoryId: string | null };
+  constructor(message: string, existing?: CategoryError["existing"]) {
+    super(message);
+    this.existing = existing;
+  }
+}
 
 export interface CategoryNode {
   id: string;
@@ -118,7 +126,14 @@ export async function createCategory(input: CreateCategoryInput): Promise<string
 
   const slug = categorySlug(name);
   const clash = await prisma.category.findUnique({ where: { slug } });
-  if (clash) throw new CategoryError(`"${clash.name}" already covers that name.`);
+  if (clash)
+    throw new CategoryError(`"${clash.name}" already exists — use it rather than creating it again.`, {
+      id: clash.id,
+      name: clash.name,
+      path: clash.path,
+      depth: clash.depth,
+      sitooCategoryId: clash.sitooCategoryId,
+    });
 
   const parent = input.parentId
     ? await prisma.category.findUnique({ where: { id: input.parentId } })
