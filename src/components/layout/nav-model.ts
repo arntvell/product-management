@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  UsersRound,
   ArrowRightLeft,
   BadgeCheck,
   Barcode,
@@ -87,6 +88,8 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       { href: "/catalog/categories", label: "Categories", icon: FolderTree },
       { href: "/catalog/size-systems", label: "Size systems", icon: Ruler },
+      // Admin-only; the page itself refuses anyone else.
+      { href: "/catalog/users", label: "Users", icon: UsersRound },
     ],
   },
   {

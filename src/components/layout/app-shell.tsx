@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { TopBar } from "@/components/layout/top-bar";
 
 /** Screens that get no application chrome — you are not inside the app yet. */
-const BARE_ROUTES = ["/login"];
+const BARE_ROUTES = ["/login", "/sign-in", "/no-access"];
 
 /**
  * §5: a 232px sidebar, a 56px top bar, and a scrolling main.

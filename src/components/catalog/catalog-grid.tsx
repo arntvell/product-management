@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
 import { PinIcon, PinOffIcon } from "lucide-react";
+import { useCan } from "@/components/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -240,7 +241,27 @@ export function CatalogGrid({
   const seasonal = scope === "seasonal";
   const [rows, setRows] = useState<GridRow[]>(initialRows);
   const [view, setView] = useState<View>("BASE");
-  const [dirty, setDirty] = useState<Map<string, string>>(new Map());
+  // Read-only for roles that cannot change the catalogue (Vintage, Viewer). The
+  // grid autosaves, so letting them type would mean a refusal per keystroke and
+  // a cell stuck "unsaved"; every edit path goes through setDirty, so guarding
+  // it here makes the whole grid read-only in one place. The server refuses
+  // regardless (proxy.ts) — this is the screen agreeing with it.
+  const canEdit = useCan("catalog");
+  const [dirty, setDirtyState] = useState<Map<string, string>>(new Map());
+  const readOnlyNoticeRef = useRef(false);
+  const setDirty = useCallback<typeof setDirtyState>(
+    (next) => {
+      if (!canEdit) {
+        if (!readOnlyNoticeRef.current) {
+          readOnlyNoticeRef.current = true;
+          toast.info("Your role can view these products but not change them.");
+        }
+        return;
+      }
+      setDirtyState(next);
+    },
+    [canEdit]
+  );
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
@@ -1090,7 +1111,7 @@ export function CatalogGrid({
         setSaving(false);
       }
     },
-    [seasonId]
+    [seasonId, setDirty]
   );
 
   /**
@@ -1540,7 +1561,7 @@ export function CatalogGrid({
             size="sm"
             variant="outline"
             onClick={() => void refreshFromShopify()}
-            disabled={refreshBusy}
+            disabled={refreshBusy || !canEdit}
             title="Read status and merchandising fields back from Shopify for these rows. Fills blanks only."
           >
             {refreshBusy ? "Reading…" : "Refresh from Shopify"}
@@ -1679,7 +1700,7 @@ export function CatalogGrid({
               leaving here for Publishing — which is the round trip this button
               exists to remove. The push itself is channel-blind: it reads each
               product's own targets, so the same button is correct in both. */}
-          {pushableSelected > 0 && (
+          {pushableSelected > 0 && canEdit && (
             <Button size="sm" onClick={() => void pushSelected()} disabled={pushBusy}>
               {pushBusy ? "Pushing…" : `Push ${pushableSelected} to their channels`}
             </Button>

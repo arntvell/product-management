@@ -11,6 +11,9 @@ import {
 } from "@/components/layout/nav-model";
 import { activeHref } from "@/components/layout/sidebar";
 import { LiveDot } from "@/components/layout/live-dot";
+import { UserButton } from "@clerk/nextjs";
+import { useCan, useCurrentUser } from "@/components/auth/current-user";
+import { ROLE_LABELS } from "@/lib/auth/permissions";
 
 const ALL_ITEMS = NAV_SECTIONS.flatMap((s) => s.items);
 
@@ -29,6 +32,8 @@ export function TopBar() {
     s.items.some((i) => i.href === active)
   );
   const item = ALL_ITEMS.find((i) => i.href === active);
+  const me = useCurrentUser();
+  const canCreate = useCan("catalog");
 
   return (
     <div className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-ecru px-8">
@@ -45,6 +50,7 @@ export function TopBar() {
           </span>
         )}
       </div>
+      {canCreate ? (
       <Link
         href={NEW_PRODUCT_HREF}
         // Outline, not primary: §5 allows one primary action per view and
@@ -55,6 +61,15 @@ export function TopBar() {
         <PlusIcon />
         New product
       </Link>
+      ) : null}
+      {me.signedIn ? (
+        <div className="flex items-center gap-2">
+          <span className="text-meta uppercase text-muted-foreground" title={me.email ?? undefined}>
+            {ROLE_LABELS[me.role]}
+          </span>
+          <UserButton />
+        </div>
+      ) : null}
     </div>
   );
 }

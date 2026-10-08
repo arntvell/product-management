@@ -4,6 +4,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AppShell } from "@/components/layout/app-shell";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ClerkProvider } from "@clerk/nextjs";
+import { CurrentUserProvider } from "@/components/auth/current-user";
+import { clerkEnabled, getSessionUser } from "@/lib/auth/session";
 import "./globals.css";
 
 // Two families, one weight (400). Display carries page and panel titles in
@@ -29,22 +32,31 @@ export const metadata: Metadata = {
   description: "Livid product master — import, enrich, price and publish every product",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Clerk only once its keys exist; until then the shared password, and every
+  // visitor is the one anonymous admin they always were.
+  const withClerk = clerkEnabled();
+  const user = await getSessionUser();
+  const app = (
+    <CurrentUserProvider user={{ email: user.email, role: user.role, signedIn: withClerk && !!user.id }}>
+      <QueryProvider>
+        <TooltipProvider>
+          <AppShell>{children}</AppShell>
+          <Toaster />
+        </TooltipProvider>
+      </QueryProvider>
+    </CurrentUserProvider>
+  );
   return (
     <html lang="en">
       <body
         className={`${formaDisplay.variable} ${formaText.variable} antialiased`}
       >
-        <QueryProvider>
-          <TooltipProvider>
-            <AppShell>{children}</AppShell>
-            <Toaster />
-          </TooltipProvider>
-        </QueryProvider>
+        {withClerk ? <ClerkProvider>{app}</ClerkProvider> : app}
       </body>
     </html>
   );
