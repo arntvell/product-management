@@ -391,6 +391,28 @@ export async function createManufacturers(
   );
 }
 
+/**
+ * Create one category in Sitoo's navigation.
+ *
+ * Per developer.sitoo.com/api-reference/categories: POST takes a single OBJECT
+ * (unlike manufacturers and products, which take arrays) with `title` required
+ * and `categoryparentid` optional, and answers with the new categoryid as a bare
+ * number.
+ */
+export async function createCategory(
+  input: { title: string; categoryparentid?: number },
+  target: SitooTarget
+): Promise<number> {
+  const id = await call<number>(
+    "/categories",
+    { method: "POST", body: JSON.stringify(input) },
+    target
+  );
+  if (typeof id !== "number" || !Number.isFinite(id))
+    throw new Error(`Sitoo did not return a category id (got ${JSON.stringify(id)})`);
+  return id;
+}
+
 /** Whether credentials for this target are present, without throwing. */
 export function sitooConfigured(target: SitooTarget): boolean {
   try {

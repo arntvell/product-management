@@ -6,6 +6,14 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LOOM_CATEGORIES } from "@/lib/master/loom-category";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { SitooCategoryCreate } from "./sitoo-category-create";
 import type { CategoryNode, UnmappedValue } from "@/lib/master/categories";
 
 export function CategoryManager({
@@ -24,6 +32,8 @@ export function CategoryManager({
   const [showArchived, setShowArchived] = useState(false);
   const [mergeFrom, setMergeFrom] = useState<CategoryNode | null>(null);
   const [busy, setBusy] = useState(false);
+  // The category a Sitoo category is being created for, from its row's dropdown.
+  const [sitooFor, setSitooFor] = useState<CategoryNode | null>(null);
 
   /**
    * Map every pulled value whose name matches exactly one category, and take the
@@ -273,18 +283,24 @@ export function CategoryManager({
                   className="h-7 border bg-transparent px-1.5 text-fine"
                   defaultValue={c.sitooCategoryId ?? ""}
                   title={sitooCategories.find((s) => s.id === c.sitooCategoryId)?.label ?? "No Sitoo navigation"}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    if (e.target.value === "__create__") {
+                      e.target.value = c.sitooCategoryId ?? "";
+                      setSitooFor(c);
+                      return;
+                    }
+                    const value = e.target.value;
                     start(async () => {
                       try {
                         await put(`/api/catalog/categories/${c.id}`, {
-                          sitooCategoryId: e.target.value,
+                          sitooCategoryId: value,
                         });
                         router.refresh();
                       } catch (err) {
                         toast.error(err instanceof Error ? err.message : "Failed");
                       }
-                    })
-                  }
+                    });
+                  }}
                 >
                   <option value="">—</option>
                   {c.sitooCategoryId && !sitooCategories.some((s) => s.id === c.sitooCategoryId) ? (
@@ -295,6 +311,7 @@ export function CategoryManager({
                       {s.label}
                     </option>
                   ))}
+                  <option value="__create__">+ Create in Sitoo…</option>
                 </select>
                 <div className="text-right tabular-nums text-muted-foreground">{c.styles}</div>
                 <div className="text-right tabular-nums text-muted-foreground">
@@ -362,6 +379,30 @@ export function CategoryManager({
           </div>
         </div>
       </section>
+
+      <Dialog open={!!sitooFor} onOpenChange={(o) => !o && setSitooFor(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Create in Sitoo</DialogTitle>
+            <DialogDescription>
+              A category in the till&apos;s navigation for {sitooFor?.name}. It becomes this
+              category&apos;s Sitoo id.
+            </DialogDescription>
+          </DialogHeader>
+          {sitooFor ? (
+            <SitooCategoryCreate
+              initialName={sitooFor.name}
+              sitooCategories={sitooCategories}
+              categoryId={sitooFor.id}
+              onCancel={() => setSitooFor(null)}
+              onDone={() => {
+                setSitooFor(null);
+                router.refresh();
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

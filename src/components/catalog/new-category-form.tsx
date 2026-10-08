@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LOOM_CATEGORIES } from "@/lib/master/loom-category";
+import { SitooCategoryCreate } from "./sitoo-category-create";
 
 export interface NewCategoryOptions {
   /** Every category, for the parent picker. */
@@ -50,6 +51,10 @@ export function NewCategoryForm({
   const [shopifyProductType, setShopifyProductType] = useState(initialName);
   const [loomCategory, setLoomCategory] = useState("");
   const [sitooCategoryId, setSitooCategoryId] = useState("");
+  // Sitoo categories created from here join the list without a reload.
+  const [sitooExtra, setSitooExtra] = useState<{ id: string; label: string }[]>([]);
+  const [creatingInSitoo, setCreatingInSitoo] = useState(false);
+  const sitooOptions = [...options.sitooCategories, ...sitooExtra];
   const [busy, setBusy] = useState(false);
 
   async function create() {
@@ -162,19 +167,41 @@ export function NewCategoryForm({
           <Label htmlFor="nc-sitoo" className="text-fine">
             Sitoo navigation
           </Label>
-          <select
-            id="nc-sitoo"
-            className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
-            value={sitooCategoryId}
-            onChange={(e) => setSitooCategoryId(e.target.value)}
-          >
-            <option value="">— none: products here cannot be created in Sitoo yet —</option>
-            {options.sitooCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+          {creatingInSitoo ? (
+            <div className="mt-1.5">
+              <SitooCategoryCreate
+                initialName={name}
+                sitooCategories={options.sitooCategories}
+                onCancel={() => setCreatingInSitoo(false)}
+                onDone={(c) => {
+                  setSitooExtra((x) => (x.some((y) => y.id === c.id) ? x : [...x, c]));
+                  setSitooCategoryId(c.id);
+                  setCreatingInSitoo(false);
+                }}
+              />
+            </div>
+          ) : (
+            <select
+              id="nc-sitoo"
+              className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
+              value={sitooCategoryId}
+              onChange={(e) => {
+                if (e.target.value === "__create__") {
+                  setCreatingInSitoo(true);
+                  return;
+                }
+                setSitooCategoryId(e.target.value);
+              }}
+            >
+              <option value="">— none: products here cannot be created in Sitoo yet —</option>
+              {sitooOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+              <option value="__create__">+ Create in Sitoo…</option>
+            </select>
+          )}
         </div>
       </div>
       <div className="flex justify-end gap-2">
