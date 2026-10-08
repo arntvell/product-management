@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getDraft, DraftNotFoundError } from "@/lib/master/drafts";
 import { listBrands, listSeasons, listManufacturers } from "@/lib/master/queries";
 import { listSizeSystems } from "@/lib/master/size-systems";
-import { listCategoryTree } from "@/lib/master/categories";
+import { listCategoryTree, newCategoryChoices } from "@/lib/master/categories";
 import { prisma } from "@/lib/db";
 import { ProductWizard } from "@/components/catalog/product-wizard/product-wizard";
 
@@ -22,7 +22,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
   if (draft.status === "COMPLETED") redirect(`/catalog/products/drafts/${id}/done`);
   if (draft.status === "DISCARDED") redirect("/catalog/products/drafts");
 
-  const [brandRows, seasons, sizeSystems, manufacturers, categoryTree] = await Promise.all([
+  const [brandRows, seasons, sizeSystems, manufacturers, categoryTree, newCategory] = await Promise.all([
     prisma.brand.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, isLivid: true, skuToken: true },
@@ -31,6 +31,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
     listSizeSystems(),
     listManufacturers(),
     listCategoryTree(),
+    newCategoryChoices(),
   ]);
 
   // Archived means "never offer this again", so the builder never sees one. A
@@ -69,7 +70,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
         initialPayload={draft.payload}
         initialRevision={draft.revision}
         initialStep={draft.step}
-        options={{ brands: brandRows, seasons, sizeSystems, manufacturers, categories }}
+        options={{ brands: brandRows, seasons, sizeSystems, manufacturers, categories, newCategory }}
       />
     </main>
   );

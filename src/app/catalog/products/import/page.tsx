@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { listSeasons } from "@/lib/master/queries";
 import { missingBrandDefaults } from "@/lib/master/brands";
 import { listSizeSystems } from "@/lib/master/size-systems";
-import { listCategoryTree } from "@/lib/master/categories";
+import { listCategoryTree, newCategoryChoices } from "@/lib/master/categories";
 import { ImportProducts } from "@/components/catalog/import-products";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function ImportProductsPage({
         select: { id: true },
       })
     : null;
-  const [brandRows, seasons, sizeSystems, categoryTree, sitooNav, shopifyTypes] = await Promise.all([
+  const [brandRows, seasons, sizeSystems, categoryTree, choices] = await Promise.all([
     prisma.brand.findMany({
       where: { isLivid: false, archived: false },
       orderBy: { name: "asc" },
@@ -50,16 +50,7 @@ export default async function ImportProductsPage({
     listCategoryTree(),
     // What a new category can be pointed at, so it is created whole rather than
     // fixed up on /catalog/categories afterwards.
-    prisma.categoryChannelMap.findMany({
-      where: { system: "SITOO" },
-      select: { externalKey: true, externalName: true, externalPath: true },
-      orderBy: { externalPath: "asc" },
-    }),
-    prisma.category.findMany({
-      where: { NOT: { shopifyProductType: null } },
-      select: { shopifyProductType: true },
-      distinct: ["shopifyProductType"],
-    }),
+    newCategoryChoices(),
   ]);
 
   const brands = brandRows.map((b) => {
@@ -128,13 +119,7 @@ export default async function ImportProductsPage({
         categories={categories}
         newCategoryOptions={{
           parents: categories.map((c) => ({ id: c.id, name: c.name, depth: c.depth })),
-          shopifyProductTypes: shopifyTypes
-            .map((t) => t.shopifyProductType!)
-            .sort((a, b) => a.localeCompare(b)),
-          sitooCategories: sitooNav.map((n) => ({
-            id: n.externalKey,
-            label: `${n.externalPath ?? n.externalName} (${n.externalKey})`,
-          })),
+          ...choices,
         }}
         resumeBatchId={unfinished?.id ?? null}
       />

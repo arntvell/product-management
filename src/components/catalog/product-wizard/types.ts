@@ -8,6 +8,11 @@ export interface WizardOptions {
   manufacturers: { id: string; name: string }[];
   /** Active categories, in tree order. `depth` drives the indent. */
   categories: { id: string; name: string; path: string; depth: number }[];
+  /** For creating a category in passing — see newCategoryChoices(). */
+  newCategory: {
+    shopifyProductTypes: string[];
+    sitooCategories: { id: string; label: string }[];
+  };
 }
 
 export interface StepProps {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { NewCategoryForm } from "@/components/catalog/new-category-form";
 import type { StepProps } from "./types";
 
 export function StepPrices({ payload, update, options }: StepProps) {
@@ -170,8 +170,6 @@ function TemplateField({
 function CategoryField({ payload, update, options }: StepProps) {
   const [extra, setExtra] = useState<{ id: string; name: string; depth: number }[]>([]);
   const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   const all = [...options.categories, ...extra];
   const chosen = all.find((c) => c.id === payload.template.categoryId);
@@ -184,57 +182,30 @@ function CategoryField({ payload, update, options }: StepProps) {
     }));
   }
 
-  async function create() {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setError(null);
-    try {
-      const res = await fetch("/api/catalog/categories", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: trimmed }),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? "Could not create that category.");
-        return;
-      }
-      setExtra((x) => [...x, { id: body.id, name: trimmed, depth: 0 }]);
-      update((p) => ({
-        ...p,
-        template: { ...p.template, categoryId: body.id, category: trimmed },
-      }));
-      setName("");
-      setCreating(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create that category.");
-    }
+  // Created with its Shopify product type, Loom category and Sitoo navigation —
+  // a name alone left Shopify without a type and the Sitoo push refusing.
+  function created(c: { id: string; name: string; depth: number }) {
+    setExtra((x) => [...x, c]);
+    update((p) => ({
+      ...p,
+      template: { ...p.template, categoryId: c.id, category: c.name },
+    }));
+    setCreating(false);
   }
 
   return (
     <div>
       <Label className="text-fine">Category</Label>
       {creating ? (
-        <div className="mt-1.5 flex gap-2">
-          <Input
-            autoFocus
-            value={name}
-            placeholder="New category name"
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                void create();
-              }
-              if (e.key === "Escape") setCreating(false);
+        <div className="mt-1.5">
+          <NewCategoryForm
+            options={{
+              parents: all.map((c) => ({ id: c.id, name: c.name, depth: c.depth })),
+              ...options.newCategory,
             }}
+            onCancel={() => setCreating(false)}
+            onCreated={created}
           />
-          <Button size="sm" onClick={() => void create()}>
-            Add
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => setCreating(false)}>
-            Cancel
-          </Button>
         </div>
       ) : (
         <select
@@ -258,7 +229,6 @@ function CategoryField({ payload, update, options }: StepProps) {
           <option value="__new__">+ new category…</option>
         </select>
       )}
-      {error ? <p className="mt-1 text-fine text-destructive">{error}</p> : null}
       {!chosen && payload.template.category ? (
         <p className="mt-1 text-fine text-ink">
           &ldquo;{payload.template.category}&rdquo; is not a modelled category — pick one so

@@ -543,3 +543,34 @@ export async function reconcileCategoryOutbound(
   }
   return { changed };
 }
+
+/**
+ * What a new category can be pointed at: the Shopify product types already in
+ * use (suggested, so the shop's filters stay together) and Sitoo's navigation as
+ * last pulled. Shared by the import and the product wizard, which both create
+ * categories in passing.
+ */
+export async function newCategoryChoices(): Promise<{
+  shopifyProductTypes: string[];
+  sitooCategories: { id: string; label: string }[];
+}> {
+  const [types, nav] = await Promise.all([
+    prisma.category.findMany({
+      where: { NOT: { shopifyProductType: null } },
+      select: { shopifyProductType: true },
+      distinct: ["shopifyProductType"],
+    }),
+    prisma.categoryChannelMap.findMany({
+      where: { system: "SITOO" },
+      select: { externalKey: true, externalName: true, externalPath: true },
+      orderBy: { externalPath: "asc" },
+    }),
+  ]);
+  return {
+    shopifyProductTypes: types.map((t) => t.shopifyProductType!).sort((a, b) => a.localeCompare(b)),
+    sitooCategories: nav.map((n) => ({
+      id: n.externalKey,
+      label: `${n.externalPath ?? n.externalName} (${n.externalKey})`,
+    })),
+  };
+}
