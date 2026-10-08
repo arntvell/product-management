@@ -24,7 +24,7 @@ export default async function ImportProductsPage({
         select: { id: true },
       })
     : null;
-  const [brandRows, seasons, sizeSystems, categoryTree] = await Promise.all([
+  const [brandRows, seasons, sizeSystems, categoryTree, sitooNav, shopifyTypes] = await Promise.all([
     prisma.brand.findMany({
       where: { isLivid: false, archived: false },
       orderBy: { name: "asc" },
@@ -48,6 +48,18 @@ export default async function ImportProductsPage({
     listSeasons(),
     listSizeSystems(),
     listCategoryTree(),
+    // What a new category can be pointed at, so it is created whole rather than
+    // fixed up on /catalog/categories afterwards.
+    prisma.categoryChannelMap.findMany({
+      where: { system: "SITOO" },
+      select: { externalKey: true, externalName: true, externalPath: true },
+      orderBy: { externalPath: "asc" },
+    }),
+    prisma.category.findMany({
+      where: { NOT: { shopifyProductType: null } },
+      select: { shopifyProductType: true },
+      distinct: ["shopifyProductType"],
+    }),
   ]);
 
   const brands = brandRows.map((b) => {
@@ -114,6 +126,16 @@ export default async function ImportProductsPage({
         seasons={seasons}
         sizeSystems={sizeSystems.filter((s) => !s.archived)}
         categories={categories}
+        newCategoryOptions={{
+          parents: categories.map((c) => ({ id: c.id, name: c.name, depth: c.depth })),
+          shopifyProductTypes: shopifyTypes
+            .map((t) => t.shopifyProductType!)
+            .sort((a, b) => a.localeCompare(b)),
+          sitooCategories: sitooNav.map((n) => ({
+            id: n.externalKey,
+            label: `${n.externalPath ?? n.externalName} (${n.externalKey})`,
+          })),
+        }}
         resumeBatchId={unfinished?.id ?? null}
       />
     </main>

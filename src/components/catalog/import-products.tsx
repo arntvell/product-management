@@ -29,6 +29,11 @@ import type {
   ImportReport,
 } from "@/lib/master/import-products";
 import { DraftPushPanel } from "@/components/catalog/draft-push-panel";
+import {
+  NewCategoryForm,
+  type CreatedCategory,
+  type NewCategoryOptions,
+} from "@/components/catalog/new-category-form";
 
 interface BrandOption {
   id: string;
@@ -67,13 +72,15 @@ export function ImportProducts({
   brands,
   seasons,
   sizeSystems,
-  categories,
+  categories: initialCategories,
+  newCategoryOptions,
   resumeBatchId,
 }: {
   brands: BrandOption[];
   seasons: { id: string; code: string }[];
   sizeSystems: SizeSystemView[];
   categories: CategoryOption[];
+  newCategoryOptions: NewCategoryOptions;
   /** `?batch=` — a push this screen started that has not finished. Loom jobs
    *  outlive the tab that submitted them, and an import batch belongs to no
    *  single draft, so without this a refresh loses the only handle on it. */
@@ -87,6 +94,14 @@ export function ImportProducts({
   const [kind, setKind] = useState("MERCHANDISE");
   const [sizeSystemId, setSizeSystemId] = useState("");
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  // Categories created on this screen join the list without a reload.
+  const [categories, setCategories] = useState<CategoryOption[]>(initialCategories);
+  const addCategory = (c: CreatedCategory) =>
+    setCategories((prev) => [...prev, c].sort((a, b) => a.name.localeCompare(b.name)));
+  const categoryOptions: NewCategoryOptions = {
+    ...newCategoryOptions,
+    parents: categories.map((c) => ({ id: c.id, name: c.name, depth: c.depth })),
+  };
 
   const [channels, setChannels] = useState<Record<PublishChannelKey, boolean>>({
     SHOPIFY: true,
@@ -297,7 +312,16 @@ export function ImportProducts({
         </div>
 
         <Field label="Categories available in this file" className="mt-4">
-          <CategoryPicker all={categories} selected={categoryIds} onChange={setCategoryIds} />
+          <CategoryPicker
+            all={categories}
+            selected={categoryIds}
+            onChange={setCategoryIds}
+            newCategoryOptions={categoryOptions}
+            onCreated={(c) => {
+              addCategory(c);
+              setCategoryIds((prev) => [...prev, c.id]);
+            }}
+          />
           <p className="text-fine text-muted-foreground">
             The Category column becomes a dropdown of exactly these. Pick every category the
             delivery covers — a brand&apos;s shirts and its bags can share one file. Choose
@@ -442,6 +466,8 @@ export function ImportProducts({
           categories={categories}
           decisions={decisions}
           setDecisions={setDecisions}
+          newCategoryOptions={categoryOptions}
+          onCategoryCreated={addCategory}
         />
       ) : null}
 
@@ -478,12 +504,19 @@ function ReportView({
   categories,
   decisions,
   setDecisions,
+  newCategoryOptions,
+  onCategoryCreated,
 }: {
   report: ImportReport;
   categories: CategoryOption[];
   decisions: Record<string, CategoryDecision>;
   setDecisions: (f: (d: Record<string, CategoryDecision>) => Record<string, CategoryDecision>) => void;
+  newCategoryOptions: NewCategoryOptions;
+  onCategoryCreated: (c: CreatedCategory) => void;
 }) {
+  // The file value a category is being created for, if any. Created at once,
+  // with its Shopify, Loom and Sitoo values, then mapped like any other.
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
   return (
     <div className="space-y-4">
       <div className="border p-5">
@@ -578,27 +611,35 @@ function ReportView({
                   <button
                     type="button"
                     className="justify-self-start text-fine underline underline-offset-2 sm:justify-self-end"
-                    onClick={() =>
-                      setDecisions((prev) => {
-                        const next = { ...prev };
-                        if (creating) delete next[c.value];
-                        else next[c.value] = { value: c.value, action: "create", name: c.value };
-                        return next;
-                      })
-                    }
+                    onClick={() => {
+                      if (creating)
+                        setDecisions((prev) => {
+                          const next = { ...prev };
+                          delete next[c.value];
+                          return next;
+                        });
+                      else setCreatingFor(creatingFor === c.value ? null : c.value);
+                    }}
                   >
-                    {creating ? "cancel" : "create new"}
+                    {creating || creatingFor === c.value ? "cancel" : "create new"}
                   </button>
 
-                  {creating ? (
-                    <p className="text-fine text-muted-foreground sm:col-span-3">
-                      A new category starts with no Sitoo navigation id and no Loom value. That
-                      is deliberate, not an oversight — set them on{" "}
-                      <Link href="/catalog/categories" className="underline underline-offset-2">
-                        /catalog/categories
-                      </Link>{" "}
-                      before a Sitoo push, which refuses without one.
-                    </p>
+                  {creatingFor === c.value ? (
+                    <div className="sm:col-span-3">
+                      <NewCategoryForm
+                        options={newCategoryOptions}
+                        initialName={c.value}
+                        onCancel={() => setCreatingFor(null)}
+                        onCreated={(created) => {
+                          onCategoryCreated(created);
+                          setDecisions((prev) => ({
+                            ...prev,
+                            [c.value]: { value: c.value, action: "map", categoryId: created.id },
+                          }));
+                          setCreatingFor(null);
+                        }}
+                      />
+                    </div>
                   ) : null}
                 </div>
               );
@@ -867,12 +908,17 @@ function CategoryPicker({
   all,
   selected,
   onChange,
+  newCategoryOptions,
+  onCreated,
 }: {
   all: CategoryOption[];
   selected: string[];
   onChange: (ids: string[]) => void;
+  newCategoryOptions: NewCategoryOptions;
+  onCreated: (c: CreatedCategory) => void;
 }) {
   const [q, setQ] = useState("");
+  const [creating, setCreating] = useState(false);
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return all;
@@ -935,6 +981,28 @@ function CategoryPicker({
         {shown.length === 0 ? (
           <p className="px-2 py-3 text-fine text-muted-foreground">Nothing matches.</p>
         ) : null}
+      </div>
+      <div className="border-t p-2">
+        {creating ? (
+          <NewCategoryForm
+            options={newCategoryOptions}
+            initialName={shown.length === 0 ? q.trim() : ""}
+            onCancel={() => setCreating(false)}
+            onCreated={(c) => {
+              onCreated(c);
+              setCreating(false);
+              setQ("");
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="text-fine underline underline-offset-2"
+          >
+            + New category{shown.length === 0 && q.trim() ? ` “${q.trim()}”` : ""}
+          </button>
+        )}
       </div>
     </div>
   );
