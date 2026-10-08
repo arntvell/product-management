@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
+import { PinIcon, PinOffIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -194,7 +195,6 @@ const FIXED_COLS: { key: string; label: string; width: number }[] = [
   { key: "priceNok", label: "NOK", width: 84 },
   { key: "media", label: "Media", width: 78 },
 ];
-const FIXED_W = FIXED_COLS.reduce((s, c) => s + c.width, 0);
 /** Width by key, so adding a column cannot silently shift another one's cell. */
 const FIXED_WIDTH: Record<string, number> = Object.fromEntries(
   FIXED_COLS.map((c) => [c.key, c.width])
@@ -324,14 +324,104 @@ export function CatalogGrid({
   const shownColumns = columns.filter((c) => !hiddenCols.has(c.key));
   const shownRefSingle = REF_SINGLE.filter((c) => !hiddenCols.has(c.key));
   const shownRefMulti = REF_MULTI.filter((c) => !hiddenCols.has(c.key as string));
-  const refWidth = isRefs
-    ? [...shownRefSingle, ...shownRefMulti].reduce((s, c) => s + c.width, 0)
-    : 0;
-  const totalWidth =
-    SELECT_W +
-    LABEL_W +
-    FIXED_W +
-    (isRefs ? refWidth : shownColumns.reduce((sum, c) => sum + c.width, 0));
+  /** The product block and the fixed columns can be hidden like any other. */
+  const shown = (key: string) => !hiddenCols.has(key);
+  const shownFixed = FIXED_COLS.filter((c) => shown(c.key));
+
+  // Frozen columns: pinned to the left, after the checkbox, while the rest
+  // scroll sideways. Per browser, per page, like the hidden set. The product
+  // block is frozen until someone unpins it — a row nobody can name is not
+  // worth editing.
+  const [frozenCols, setFrozenCols] = useState<Set<string>>(() => new Set(["__label"]));
+  const frozenKey = `origo:catalog-grid:${scope}:frozen-columns`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(frozenKey);
+      if (raw) setFrozenCols(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      // Storage unavailable: the default stands.
+    }
+  }, [frozenKey]);
+  const toggleFrozen = (key: string) => {
+    const next = new Set(frozenCols);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setFrozenCols(next);
+    try {
+      localStorage.setItem(frozenKey, JSON.stringify([...next]));
+    } catch {
+      // Applied for this visit only.
+    }
+  };
+
+  // Every column of this view, left to right, with its width.
+  const naturalCols: { key: string; width: number }[] = [
+    ...(shown("__label") ? [{ key: "__label", width: LABEL_W }] : []),
+    ...shownFixed.map((c) => ({ key: c.key, width: c.width })),
+    ...(isRefs
+      ? [...shownRefSingle, ...shownRefMulti].map((c) => ({ key: c.key as string, width: c.width }))
+      : shownColumns.map((c) => ({ key: c.key, width: c.width }))),
+  ];
+  const frozenOrder = naturalCols.filter((c) => frozenCols.has(c.key));
+  const frozenLeft = new Map<string, number>();
+  {
+    let left = SELECT_W;
+    for (const c of frozenOrder) {
+      frozenLeft.set(c.key, left);
+      left += c.width;
+    }
+  }
+  const anyFrozen = frozenOrder.length > 0;
+
+  /**
+   * A cell's placement. Frozen cells move left with flex `order` — the markup
+   * keeps its natural order — and stick with `position: sticky`, on an opaque
+   * ground so the scrolling cells pass beneath them. The edited-cell outline is
+   * unaffected; the row's hover tint is not drawn on a frozen cell.
+   */
+  function place(key: string, width: number, rowSelected = false, header = false): React.CSSProperties {
+    if (key === "__select")
+      return anyFrozen
+        ? {
+            width,
+            order: 0,
+            position: "sticky",
+            left: 0,
+            zIndex: header ? 4 : 3,
+            background: rowSelected ? "var(--selected)" : "var(--paper)",
+          }
+        : { width, order: 0 };
+    const left = frozenLeft.get(key);
+    if (left === undefined) return { width, order: 1000 };
+    return {
+      width,
+      order: 1 + frozenOrder.findIndex((c) => c.key === key),
+      position: "sticky",
+      left,
+      zIndex: header ? 4 : 3,
+      background: rowSelected ? "var(--selected)" : "var(--paper)",
+    };
+  }
+
+  /** Header pin: freezes the column in place, or lets it scroll again. */
+  function pinButton(key: string) {
+    const on = frozenCols.has(key);
+    return (
+      <button
+        type="button"
+        title={on ? "Unfreeze this column" : "Freeze this column on the left"}
+        onClick={() => toggleFrozen(key)}
+        className={cn(
+          "shrink-0 px-0.5 hover:bg-background hover:text-foreground",
+          on ? "text-foreground" : "text-muted-foreground/40"
+        )}
+      >
+        {on ? <PinIcon className="size-3" /> : <PinOffIcon className="size-3" />}
+      </button>
+    );
+  }
+
+  const totalWidth = SELECT_W + naturalCols.reduce((sum, c) => sum + c.width, 0);
 
   // Distinct attribute values for the filter dropdowns.
   const filterOptions = useMemo(() => {
@@ -565,28 +655,30 @@ export function CatalogGrid({
       { key: "name", kind: "text" as const, atLayer: "BASE" as EditLayer },
       { key: "swatchHex", kind: "text" as const, atLayer: "BASE" as EditLayer },
       { key: "priceNok", kind: "text" as const, atLayer: "BASE" as EditLayer },
-    ];
-    if (isRefs)
-      return [
-        ...fixed,
-        ...REF_SINGLE.filter((c) => !hiddenCols.has(c.key)).map((c) => ({
-          key: c.key,
-          kind: "select" as const,
-          atLayer: "BASE" as EditLayer,
-        })),
-      ];
-    const cols = (isBase ? COLUMNS : COLUMNS.filter((c) => c.split)).filter(
-      (c) => !hiddenCols.has(c.key)
-    );
-    return [
-      ...fixed,
-      ...cols.map((c) => ({
-        key: c.key,
-        kind: (c.kind === "status" ? "select" : "text") as "text" | "select",
-        atLayer: layer,
-      })),
-    ];
-  }, [isRefs, isBase, layer, hiddenCols]);
+    ].filter((c) => !hiddenCols.has(c.key));
+    const all = isRefs
+      ? [
+          ...fixed,
+          ...REF_SINGLE.filter((c) => !hiddenCols.has(c.key)).map((c) => ({
+            key: c.key,
+            kind: "select" as const,
+            atLayer: "BASE" as EditLayer,
+          })),
+        ]
+      : [
+          ...fixed,
+          ...(isBase ? COLUMNS : COLUMNS.filter((c) => c.split))
+            .filter((c) => !hiddenCols.has(c.key))
+            .map((c) => ({
+              key: c.key,
+              kind: (c.kind === "status" ? "select" : "text") as "text" | "select",
+              atLayer: layer,
+            })),
+        ];
+    // In screen order: frozen columns are drawn first, so a pasted block lands
+    // in the columns it visibly lines up with.
+    return [...all.filter((c) => frozenCols.has(c.key)), ...all.filter((c) => !frozenCols.has(c.key))];
+  }, [isRefs, isBase, layer, hiddenCols, frozenCols]);
 
   /**
    * What copy-down can offer in this view, each with the layer it writes to.
@@ -1354,15 +1446,28 @@ export function CatalogGrid({
           className="h-8 w-64"
         />
         <ColumnPicker
-          groups={
+          groups={[
+            {
+              title: "Product",
+              columns: [
+                { key: "__label", label: "Style · Colorway" },
+                ...FIXED_COLS.map((c) => ({ key: c.key, label: c.label })),
+              ],
+            },
             isRefs
-              ? [
-                  { title: "References", columns: [...REF_SINGLE, ...REF_MULTI].map((c) => ({ key: c.key as string, label: c.label })) },
-                ]
-              : [{ title: isBase ? "Fields" : `Fields with a ${layer} override`, columns: columns.map((c) => ({ key: c.key, label: c.label })) }]
-          }
+              ? {
+                  title: "References",
+                  columns: [...REF_SINGLE, ...REF_MULTI].map((c) => ({ key: c.key as string, label: c.label })),
+                }
+              : {
+                  title: isBase ? "Fields" : `Fields with a ${layer} override`,
+                  columns: columns.map((c) => ({ key: c.key, label: c.label })),
+                },
+          ]}
           hidden={hiddenCols}
           onChange={updateHiddenCols}
+          frozen={frozenCols}
+          onToggleFrozen={toggleFrozen}
         />
         <div className="flex gap-1" title="Filter by Threadflow dropped status">
           {(["all", "active", "dropped"] as const).map((f) => (
@@ -1607,7 +1712,7 @@ export function CatalogGrid({
             style={{ width: totalWidth }}
           >
             <div
-              style={{ width: SELECT_W }}
+              style={place("__select", SELECT_W, false, true)}
               className="flex shrink-0 items-center justify-center"
             >
               <input
@@ -1617,21 +1722,29 @@ export function CatalogGrid({
                 title="Select all filtered rows"
               />
             </div>
-            <div
-              style={{ width: LABEL_W }}
-              className="flex shrink-0 items-center justify-between gap-1 border-l px-3 py-2"
-            >
-              <span>Style · Colorway</span>
-              {sortButton("__label")}
-            </div>
-            {FIXED_COLS.map((c) => (
+            {shown("__label") ? (
+              <div
+                style={place("__label", LABEL_W, false, true)}
+                className="flex shrink-0 items-center justify-between gap-1 border-l px-3 py-2"
+              >
+                <span className="truncate">Style · Colorway</span>
+                <span className="flex shrink-0 items-center">
+                  {pinButton("__label")}
+                  {sortButton("__label")}
+                </span>
+              </div>
+            ) : null}
+            {shownFixed.map((c) => (
               <div
                 key={c.key}
-                style={{ width: c.width }}
+                style={place(c.key, c.width, false, true)}
                 className="flex shrink-0 items-center justify-between gap-1 border-l px-2 py-2"
               >
                 <span className="truncate">{c.label}</span>
-                {SORTABLE_FIXED.has(c.key) ? sortButton(c.key) : null}
+                <span className="flex shrink-0 items-center">
+                  {pinButton(c.key)}
+                  {SORTABLE_FIXED.has(c.key) ? sortButton(c.key) : null}
+                </span>
               </div>
             ))}
             {/* The "↓" here SORTS. It used to fill the column down every visible
@@ -1641,12 +1754,15 @@ export function CatalogGrid({
             {(isRefs ? [...shownRefSingle, ...shownRefMulti] : shownColumns).map((c) => (
               <div
                 key={c.key}
-                style={{ width: c.width }}
+                style={place(c.key as string, c.width, false, true)}
                 className="flex shrink-0 items-center justify-between gap-1 border-l px-2 py-2"
                 title={COLUMN_HINTS[c.key as string]}
               >
                 <span className="truncate">{c.label}</span>
-                {sortButton(c.key as string)}
+                <span className="flex shrink-0 items-center">
+                  {pinButton(c.key as string)}
+                  {sortButton(c.key as string)}
+                </span>
               </div>
             ))}
           </div>
@@ -1671,7 +1787,7 @@ export function CatalogGrid({
                   }}
                 >
                   <div
-                    style={{ width: SELECT_W }}
+                    style={place("__select", SELECT_W, isSel)}
                     className="flex shrink-0 items-center justify-center"
                   >
                     <input
@@ -1682,9 +1798,10 @@ export function CatalogGrid({
                       title="Select (shift-click for range)"
                     />
                   </div>
-                  {/* Frozen-ish label block */}
+                  {/* The product block — frozen by default, hideable like the rest */}
+                  {shown("__label") ? (
                   <div
-                    style={{ width: LABEL_W }}
+                    style={place("__label", LABEL_W, isSel)}
                     className="flex shrink-0 items-center gap-2 border-l px-3"
                   >
                     <div className="h-6 w-6 shrink-0 overflow-hidden bg-muted">
@@ -1727,10 +1844,12 @@ export function CatalogGrid({
                       </span>
                     </div>
                   </div>
+                  ) : null}
 
-                  {/* Always-visible: name, title, swatch, price, media */}
+                  {/* Name, title, channels, swatch, price, media — each hideable */}
+                  {shown("name") ? (
                   <div
-                    style={{ width: FIXED_WIDTH["name"] }}
+                    style={place("name", FIXED_WIDTH["name"], isSel)}
                     className={cn(
                       "shrink-0 border-l",
                       dirty.has(dkey(row.id, "BASE", "name")) && dirtyCell
@@ -1748,9 +1867,11 @@ export function CatalogGrid({
                       className="h-full w-full bg-transparent px-2 text-fine outline-none focus:bg-background"
                     />
                   </div>
+                  ) : null}
                   {/* Derived, never editable: what channelProductTitle will send. */}
+                  {shown("title") ? (
                   <div
-                    style={{ width: FIXED_WIDTH["title"] }}
+                    style={place("title", FIXED_WIDTH["title"], isSel)}
                     className="flex shrink-0 items-center border-l px-2 text-fine text-muted-foreground"
                     title="What Shopify and the till will show. Loom is sent the name on its own."
                   >
@@ -1765,8 +1886,10 @@ export function CatalogGrid({
                       })}
                     </span>
                   </div>
+                  ) : null}
+                  {shown("channels") ? (
                   <div
-                    style={{ width: FIXED_WIDTH["channels"] }}
+                    style={place("channels", FIXED_WIDTH["channels"], isSel)}
                     className="flex shrink-0 items-center gap-1 border-l px-2 text-fine"
                     title={
                       row.channels.length
@@ -1821,8 +1944,10 @@ export function CatalogGrid({
                       {row.channels.length ? row.channels.join(", ") : "no channel"}
                     </span>
                   </div>
+                  ) : null}
+                  {shown("swatchHex") ? (
                   <div
-                    style={{ width: FIXED_WIDTH["swatchHex"] }}
+                    style={place("swatchHex", FIXED_WIDTH["swatchHex"], isSel)}
                     className={cn(
                       "flex shrink-0 items-center gap-1 border-l px-1",
                       dirty.has(dkey(row.id, "BASE", "swatchHex")) && dirtyCell
@@ -1840,8 +1965,10 @@ export function CatalogGrid({
                       className="w-full bg-transparent text-fine outline-none focus:bg-background"
                     />
                   </div>
+                  ) : null}
+                  {shown("priceNok") ? (
                   <div
-                    style={{ width: FIXED_WIDTH["priceNok"] }}
+                    style={place("priceNok", FIXED_WIDTH["priceNok"], isSel)}
                     className={cn(
                       "shrink-0 border-l",
                       dirty.has(dkey(row.id, "BASE", "priceNok")) && dirtyCell
@@ -1861,14 +1988,17 @@ export function CatalogGrid({
                       className="h-full w-full bg-transparent px-2 text-fine tabular-nums outline-none focus:bg-background disabled:opacity-40"
                     />
                   </div>
+                  ) : null}
+                  {shown("media") ? (
                   <a
                     href={`/catalog/colorways/${row.id}/media`}
-                    style={{ width: FIXED_WIDTH["media"] }}
+                    style={place("media", FIXED_WIDTH["media"], isSel)}
                     className="flex shrink-0 items-center justify-center gap-1 border-l text-fine text-muted-foreground hover:bg-muted hover:underline"
                     title="Manage media"
                   >
                     ▦ {row.mediaCount}
                   </a>
+                  ) : null}
 
                   {/* Editable cells */}
                   {isRefs ? (
@@ -1879,7 +2009,7 @@ export function CatalogGrid({
                         return (
                           <div
                             key={c.key}
-                            style={{ width: c.width }}
+                            style={place(c.key as string, c.width, isSel)}
                             className={cn("shrink-0 border-l", isDirty && dirtyCell)}
                           >
                             <select
@@ -1910,7 +2040,7 @@ export function CatalogGrid({
                         return (
                           <div
                             key={c.key}
-                            style={{ width: c.width }}
+                            style={place(c.key as string, c.width, isSel)}
                             className={cn(
                               "flex shrink-0 items-center justify-between gap-1 border-l px-2 text-fine",
                               isDirty && dirtyCell
@@ -1944,7 +2074,7 @@ export function CatalogGrid({
                       return (
                         <div
                           key={c.key}
-                          style={{ width: c.width }}
+                          style={place(c.key as string, c.width, isSel)}
                           className={cn(
                             "shrink-0 border-l",
                             isDirty && dirtyCell
@@ -2495,18 +2625,22 @@ function applyChanges(rows: GridRow[], changes: BulkChange[]): GridRow[] {
 }
 
 /**
- * Choose which of the view's columns to work with. The left block (product,
- * name, title, channels, swatch, price, media) always shows — it is how a row is
- * recognised, so hiding it would leave cells nobody can place.
+ * Choose which columns to work with, and which to freeze. Every column can be
+ * hidden, the product block included; frozen ones stay on the left while the
+ * rest scroll.
  */
 function ColumnPicker({
   groups,
   hidden,
   onChange,
+  frozen,
+  onToggleFrozen,
 }: {
   groups: { title: string; columns: { key: string; label: string }[] }[];
   hidden: Set<string>;
   onChange: (next: Set<string>) => void;
+  frozen: Set<string>;
+  onToggleFrozen: (key: string) => void;
 }) {
   const all = groups.flatMap((g) => g.columns);
   const hiddenHere = all.filter((c) => hidden.has(c.key)).length;
@@ -2537,8 +2671,9 @@ function ColumnPicker({
         <DialogHeader>
           <DialogTitle>Columns</DialogTitle>
           <DialogDescription>
-            Choose the columns to work with. Hidden columns keep their values and are
-            left out of keyboard movement and copy down. Remembered in this browser.
+            Choose the columns to work with, and pin the ones that should stay on the left
+            while you scroll. Hidden columns keep their values and are left out of keyboard
+            movement and copy down. Remembered in this browser.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] space-y-4 overflow-auto">
@@ -2547,14 +2682,24 @@ function ColumnPicker({
               <p className="mb-2 text-fine text-muted-foreground">{g.title}</p>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
                 {g.columns.map((c) => (
-                  <label key={c.key} className="flex items-center gap-2 text-body">
-                    <input
-                      type="checkbox"
-                      checked={!hidden.has(c.key)}
-                      onChange={() => toggle(c.key)}
-                    />
-                    <span className="truncate">{c.label}</span>
-                  </label>
+                  <div key={c.key} className="flex items-center gap-2 text-body">
+                    <label className="flex min-w-0 flex-1 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!hidden.has(c.key)}
+                        onChange={() => toggle(c.key)}
+                      />
+                      <span className="truncate">{c.label}</span>
+                    </label>
+                    <button
+                      type="button"
+                      title={frozen.has(c.key) ? "Unfreeze" : "Freeze on the left"}
+                      onClick={() => onToggleFrozen(c.key)}
+                      className={frozen.has(c.key) ? "text-foreground" : "text-muted-foreground/40 hover:text-foreground"}
+                    >
+                      {frozen.has(c.key) ? <PinIcon className="size-3.5" /> : <PinOffIcon className="size-3.5" />}
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
