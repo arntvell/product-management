@@ -72,6 +72,30 @@ export const apiCreator: SitooCreator = {
         .filter((x) => x.hit)
         .map((x) => ({ sku: x.sku, productid: x.hit!.productid }));
 
+      // Every SKU already there is normally a refusal: a create must never
+      // touch what it did not make. One shape is our own: a create that landed
+      // its products and was cut off before the family PUT (Mario Ring, 13
+      // loose sizes after a 429). It is recognisable — every size present, none
+      // in any family, each carrying exactly the barcode the master holds — and
+      // createOne() already finishes it: it creates nothing that exists, then
+      // groups and links. Anything short of that exact shape stays refused.
+      const allExist = input.variants.length > 0 && existing.length === skus.length;
+      const interrupted =
+        allExist &&
+        input.variants.every((v) => {
+          const hit = bySku.get(normalizeSku(v.sku))!;
+          return (
+            (hit.variantparentid == null || hit.variantparentid === 0) &&
+            !!v.barcode &&
+            (hit.barcode ?? "") === v.barcode
+          );
+        });
+      if (interrupted)
+        notes.push(
+          `${input.title}: all ${skus.length} sizes exist in Sitoo as loose products with ` +
+            `matching barcodes — an interrupted create. Resuming: grouping them, creating nothing.`
+        );
+
       items.push({
         colorwayId: input.colorwayId,
         title: input.title,
@@ -81,7 +105,7 @@ export const apiCreator: SitooCreator = {
         blocked:
           input.variants.length === 0
             ? "no sizes"
-            : existing.length === skus.length
+            : allExist && !interrupted
               ? "every SKU already exists in Sitoo"
               : null,
       });

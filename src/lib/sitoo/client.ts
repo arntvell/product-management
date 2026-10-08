@@ -68,15 +68,27 @@ async function call<T>(
 ): Promise<T> {
   const { base, auth } = env(resolveTarget(target));
   const url = `${base}/sites/${SITE}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: auth,
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  const text = await res.text();
+  // Sitoo allows one request in flight per account and answers a second with
+  // `429: Too many connections`. That is a refusal BEFORE any work, so retrying
+  // cannot write anything twice — and not retrying is what left Tom Wood's
+  // Mario Ring as 13 loose products on 2026-10-08: the create landed, the next
+  // call in the same push met a 429 from a parallel push, and the family and
+  // the link were never written.
+  let res: Response;
+  let text: string;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: auth,
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+    text = await res.text();
+    if (res.status !== 429 || attempt >= 3) break;
+    await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt + Math.random() * 500));
+  }
   if (!res.ok) {
     throw new Error(`Sitoo ${init?.method ?? "GET"} ${path} → ${res.status}: ${text.slice(0, 400)}`);
   }
