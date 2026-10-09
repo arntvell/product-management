@@ -91,10 +91,33 @@ export async function POST(req: Request) {
   if (body.dryRun) {
     let sitooChanges = 0;
     let untouchedSizes: Array<{ colorwaySku: string; inMaster: number; inSitoo: number }> = [];
+    // Per product, what the till would receive — the same question the Shopify
+    // list below answers, asked of Sitoo. Rolled up from the per-size rows,
+    // because one colorway is one row per size there and a confirm listing
+    // twelve identical price changes for one shoe is a confirm nobody reads.
+    const sitooChangeList: Array<{ colorwaySku: string; send: string[] }> = [];
     if (toSitoo.length) {
       const plan = await planSitooUpdate(toSitoo.map((c) => c.id));
       sitooChanges = plan.rows.filter((r) => r.changes).length;
       untouchedSizes = plan.untouchedSizes;
+
+      const bySku = new Map<string, { titles: Set<string>; prices: Set<string> }>();
+      for (const r of plan.rows) {
+        if (!r.changes) continue;
+        const e = bySku.get(r.colorwaySku) ?? { titles: new Set(), prices: new Set() };
+        if (r.titleFrom !== r.titleTo) e.titles.add(`"${r.titleFrom}" → "${r.titleTo}"`);
+        if (r.priceTo != null && r.priceFrom !== r.priceTo)
+          e.prices.add(`${r.priceFrom ?? "—"} → ${r.priceTo}`);
+        bySku.set(r.colorwaySku, e);
+      }
+      for (const [colorwaySku, e] of bySku)
+        sitooChangeList.push({
+          colorwaySku,
+          send: [
+            ...[...e.titles].map((t) => `title ${t}`),
+            ...[...e.prices].map((t) => `price ${t}`),
+          ],
+        });
     }
     // What each Shopify product would actually receive. An update sends only
     // fields changed in Origo since the last push (shopify-update.ts), so this
@@ -123,10 +146,15 @@ export async function POST(req: Request) {
       ok: true,
       dryRun: true,
       shopifyChanges,
+      sitooChanges: sitooChangeList,
+      // Loom takes the whole registry row every time — there is no baseline to
+      // diff against, so unlike the other two this cannot say "only the price
+      // moved". Named rather than left to be inferred from its absence.
+      loomSendsWholeRow: toLoom.length > 0,
       products: cws.length,
       shopify: toShopify.length,
       sitoo: toSitoo.length,
-      sitooChanges,
+      sitooRowsChanging: sitooChanges,
       loom: toLoom.length,
       noChannel,
       noSeason,

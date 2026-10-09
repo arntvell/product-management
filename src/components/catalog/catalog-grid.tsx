@@ -1310,12 +1310,32 @@ export function CatalogGrid({
           (c.notSent.length ? ` — not sent: ${c.notSent.join("; ")}` : "")
       );
       if (shopifyChanges.length > 8) shopifyLines.push(`  …and ${shopifyChanges.length - 8} more`);
+      // The same question asked of the till: what would each product receive?
+      // Rolled up per colorway server-side, because Sitoo holds one row per size
+      // and twelve identical price lines for one shoe is a confirm nobody reads.
+      const sitooChanges = (plan.sitooChanges ?? []) as Array<{
+        colorwaySku: string;
+        send: string[];
+      }>;
+      const sitooLines = sitooChanges
+        .slice(0, 8)
+        .map((c) => `  ${c.colorwaySku}: ${c.send.join(", ")}`);
+      if (sitooChanges.length > 8) sitooLines.push(`  …and ${sitooChanges.length - 8} more`);
+
       const lines = [
         plan.shopify
           ? `Shopify: ${plan.shopify}` + (shopifyLines.length ? `\n${shopifyLines.join("\n")}` : "")
           : null,
-        plan.sitoo ? `Sitoo: ${plan.sitoo} (${plan.sitooChanges} differ)` : null,
-        plan.loom ? `Loom: ${plan.loom}` : null,
+        plan.sitoo
+          ? `Sitoo: ${plan.sitoo}` +
+            (sitooChanges.length
+              ? ` (${sitooChanges.length} differ)\n${sitooLines.join("\n")}`
+              : " — all match already")
+          : null,
+        // Loom has no baseline to diff against, so it cannot say "only the price
+        // moved" the way the other two can. Say what it does instead of leaving
+        // the silence to be read as "nothing changes".
+        plan.loom ? `Loom: ${plan.loom} — full registry row each time (no per-field diff)` : null,
       ].filter(Boolean);
       if (!lines.length) {
         toast.error("None of these are on a channel yet.");
@@ -1635,10 +1655,9 @@ export function CatalogGrid({
           has to say so rather than let the till drift silently. */}
       {sitooRowsVisible > 0 && (
         <p className="mt-2 border border-line bg-paper px-3 py-2 text-meta normal-case tracking-normal text-muted-foreground">
-          {sitooRowsVisible} of these are in Sitoo (POS).{" "}
-          {seasonal
-            ? "A name or price changed here does not reach the till — update them on the External products page."
-            : "Saving writes the master only; select rows and push to send changes to every channel they are on."}
+          {sitooRowsVisible} of these are in Sitoo (POS). Saving writes the master
+          only; select rows and push to send changes to every channel they are
+          on.
         </p>
       )}
       <p className="mt-2 text-fine text-muted-foreground">
@@ -1655,7 +1674,12 @@ export function CatalogGrid({
             these rows. Shift-click a checkbox to select a range.
           </p>
           <AddTagToSelected count={selected.size} onAdd={addTagToSelected} />
-          {!seasonal && pushableSelected > 0 && (
+          {/* Both editors. Livid products go to all three channels as much as the
+              external ones do, and sending a Livid price change used to mean
+              leaving here for Publishing — which is the round trip this button
+              exists to remove. The push itself is channel-blind: it reads each
+              product's own targets, so the same button is correct in both. */}
+          {pushableSelected > 0 && (
             <Button size="sm" onClick={() => void pushSelected()} disabled={pushBusy}>
               {pushBusy ? "Pushing…" : `Push ${pushableSelected} to their channels`}
             </Button>
