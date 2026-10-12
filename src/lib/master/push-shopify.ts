@@ -8,7 +8,6 @@ import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import {
   PRODUCT_SET_MUTATION,
-  FILE_CREATE_MUTATION,
   METAFIELDS_DELETE_MUTATION,
 } from "@/lib/shopify/mutations";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
@@ -22,6 +21,7 @@ import {
 import { vintageInventory, vintageCost } from "./vintage";
 import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
 import { planShopifyUpdate, applyShopifyUpdate, setShopifyBaseline, labelFor } from "./shopify-update";
+import { ensureShopifyFiles, isPublicUrl, knownFileIds } from "./shopify-media";
 import {
   adoptExistingShopifyProduct,
   recordShopifyVariantRefs,
@@ -415,7 +415,7 @@ export async function pushColorwayToShopify(
   // adopted to Blob first. Routing depends on unisex (see the media rule):
   //   non-unisex: gallery -> product media; flat -> custom.flat
   //   unisex:     flat -> product media; men/women -> custom.men_images/women_images; flat -> custom.flat
-  const isPublic = (u: string) => /^https?:\/\//i.test(u);
+  const isPublic = isPublicUrl;
   const urlsFor = (role: string) =>
     cw.media.filter((m) => m.role === role && isPublic(m.url)).map((m) => m.url);
   const galleryUrls = [
@@ -444,62 +444,16 @@ export async function pushColorwayToShopify(
       "Unisex product with no FLAT image — used the gendered/gallery shots for the product media instead."
     );
 
-  // Idempotent media: reuse the Shopify file GID we cached on first upload
+  // Idempotent media: reuse the Shopify file GID cached on first upload
   // (MediaAsset.shopifyMediaId / SeasonImage.shopifyFileId) so re-pushing does
-  // NOT create duplicate files. Only upload URLs we've never uploaded.
-  // Best-effort: if the token lacks write_files (or any error), skip media and
-  // keep pushing the rest. Requires the `write_files` scope on the token.
-  const gidByUrl = new Map<string, string>();
-  for (const m of cw.media) if (m.shopifyMediaId && isPublic(m.url)) gidByUrl.set(m.url, m.shopifyMediaId);
-  for (const s of cw.seasonImages) if (s.shopifyFileId && isPublic(s.url)) gidByUrl.set(s.url, s.shopifyFileId);
-
-  const allMediaUrls = [...new Set([...productMediaUrls, ...flatUrls, ...menUrls, ...womenUrls])];
-  const toCreate = allMediaUrls.filter((u) => !gidByUrl.has(u));
-  if (toCreate.length) {
-    try {
-      const fc = await shopifyGraphQL<{
-        fileCreate: { files: { id: string }[]; userErrors: { message: string }[] };
-      }>(FILE_CREATE_MUTATION, {
-        files: toCreate.map((u) => ({ originalSource: u, contentType: "IMAGE" })),
-      });
-      if (fc.fileCreate.userErrors.length)
-        warnings.push(`media: ${fc.fileCreate.userErrors.map((e) => e.message).join(", ")}`);
-      const created: { url: string; gid: string }[] = [];
-      toCreate.forEach((u, i) => {
-        const g = fc.fileCreate.files[i]?.id;
-        if (g) {
-          gidByUrl.set(u, g);
-          created.push({ url: u, gid: g });
-        }
-      });
-      // Cache the new GIDs so the next push reuses them instead of duplicating.
-      if (created.length) {
-        try {
-          await prisma.$transaction(
-            created.flatMap(({ url, gid }) => [
-              prisma.mediaAsset.updateMany({
-                where: { colorwayId: id, url, shopifyMediaId: null },
-                data: { shopifyMediaId: gid },
-              }),
-              prisma.seasonImage.updateMany({
-                where: { colorwayId: id, url, shopifyFileId: null },
-                data: { shopifyFileId: gid },
-              }),
-            ])
-          );
-        } catch {
-          /* caching is best-effort; a failure just means we re-upload next time */
-        }
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "unknown";
-      warnings.push(
-        /write_files|Access denied/i.test(msg)
-          ? "Media skipped — the Shopify token needs the write_files scope."
-          : `Media skipped — ${msg}`
-      );
-    }
-  }
+  // NOT create duplicate files — see shopify-media.ts, which the selective
+  // update shares. Requires the `write_files` scope on the token.
+  const gidByUrl = await ensureShopifyFiles(
+    id,
+    [...productMediaUrls, ...flatUrls, ...menUrls, ...womenUrls],
+    knownFileIds(cw),
+    warnings
+  );
   const mediaFileIds = (urls: string[]) =>
     urls.map((u) => gidByUrl.get(u)).filter(Boolean) as string[];
   const flatGid = mediaFileIds(flatUrls);

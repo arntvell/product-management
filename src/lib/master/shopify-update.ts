@@ -19,9 +19,9 @@
 //
 // What this deliberately does NOT do on a live product:
 //   - change the handle (the URL);
-//   - delete a size or an image, or add one. New sizes go through Add size,
-//     which copies a sibling's sale price and stock policy; image changes are
-//     reported, not sent.
+//   - delete a size or an image. New images are ADDED after the ones the
+//     product has (shopify-media.ts); new sizes go through Add size, which
+//     copies a sibling's sale price and stock policy.
 //   - unpublish: a live ACTIVE product keeps its status.
 //
 // Vintage stays on the full push. Its body, inventory and status are generated
@@ -37,6 +37,7 @@ import {
 } from "@/lib/shopify/mutations";
 import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { buildShopifyPreview, getColorwayForPublish } from "./publish";
+import { attachFilesToProduct, ensureShopifyFiles, knownFileIds } from "./shopify-media";
 
 type PublishColorway = NonNullable<Awaited<ReturnType<typeof getColorwayForPublish>>>;
 type Preview = ReturnType<typeof buildShopifyPreview>;
@@ -308,8 +309,23 @@ export async function planShopifyUpdate(
       change.action = "not-sent";
       change.note = "sizes are added with Add size and never deleted by a push";
     } else if (key.startsWith("media.")) {
-      change.action = "not-sent";
-      change.note = "image changes are not pushed to a live product — update them in Shopify";
+      // Sent as an ADDITION: new images join the product after the ones it has.
+      // Nothing Shopify shows is removed or reordered — an image taken out in
+      // Origo stays in the shop until someone removes it there.
+      const before = new Set((stored[key] ?? "").split("\n").filter(Boolean));
+      const now = new Set((current[key] ?? "").split("\n").filter(Boolean));
+      const added = [...now].filter((u) => !before.has(u)).length;
+      const removed = [...before].filter((u) => !now.has(u)).length;
+      if (!added) {
+        change.action = "not-sent";
+        change.note = removed
+          ? `${removed} image(s) removed in Origo — images are never removed from a live product; remove them in Shopify`
+          : "image order changed — the order on a live product is kept as Shopify has it";
+      } else if (removed) {
+        change.note = `${added} new image(s) added; ${removed} removed in Origo stay in Shopify`;
+      } else {
+        change.note = `${added} new image(s) added`;
+      }
     } else if (key.startsWith("barcode.") && !live!.variants.nodes.some((n) => n.sku === key.slice(8))) {
       change.action = "not-sent";
       change.note = "this size is not on the Shopify product";
@@ -492,6 +508,62 @@ export async function applyShopifyUpdate(
       written.push(...variantKeys.map((c) => c.key));
     } catch (err) {
       failed.push({ keys: variantKeys.map((c) => c.key), error: msg(err) });
+    }
+  }
+
+  // --- images: added to the live product, never removed ---
+  const mediaKeys = toWrite.filter((c) => c.key.startsWith("media."));
+  if (mediaKeys.length && live) {
+    const preview = buildShopifyPreview(plan.cw);
+    const urlsFor: Record<string, string[]> = {
+      "media.product": preview.media,
+      "media.flat": preview.roleMedia.flat,
+      "media.men": preview.roleMedia.men,
+      "media.women": preview.roleMedia.women,
+    };
+    try {
+      const gidByUrl = await ensureShopifyFiles(
+        plan.colorwayId,
+        mediaKeys.flatMap((c) => urlsFor[c.key] ?? []),
+        knownFileIds(plan.cw),
+        warnings
+      );
+      const ids = (key: string) =>
+        (urlsFor[key] ?? []).map((u) => gidByUrl.get(u)).filter((g): g is string => !!g);
+      const liveMf = new Map(live.metafields.nodes.map((m) => [m.key, m.value]));
+      const set: { ownerId: string; namespace: string; key: string; type: string; value: string }[] = [];
+      for (const c of mediaKeys) {
+        if (c.key === "media.product") {
+          const added = await attachFilesToProduct(plan.productGid, ids(c.key), warnings);
+          if (added.length) warnings.push(`Added ${added.length} image(s) to the Shopify product.`);
+        } else if (c.key === "media.flat") {
+          const g = ids(c.key)[0];
+          if (g) set.push({ ownerId: plan.productGid, namespace: METAFIELD_NAMESPACE, key: "flat", type: "file_reference", value: g });
+        } else {
+          // men/women: the shop's list, plus Origo's new ones — never fewer.
+          const key = c.key === "media.men" ? "men_images" : "women_images";
+          let existing: string[] = [];
+          try {
+            existing = JSON.parse(liveMf.get(key) ?? "[]");
+          } catch {
+            existing = [];
+          }
+          const merged = [...new Set([...existing, ...ids(c.key)])];
+          if (merged.length > existing.length)
+            set.push({ ownerId: plan.productGid, namespace: METAFIELD_NAMESPACE, key, type: "list.file_reference", value: JSON.stringify(merged) });
+        }
+      }
+      if (set.length) {
+        const r = await shopifyGraphQL<{ metafieldsSet: { userErrors: { message: string }[] } }>(
+          METAFIELDS_SET_MUTATION,
+          { metafields: set }
+        );
+        if (r.metafieldsSet.userErrors.length)
+          throw new Error(r.metafieldsSet.userErrors.map((e) => e.message).join(", "));
+      }
+      written.push(...mediaKeys.map((c) => c.key));
+    } catch (err) {
+      failed.push({ keys: mediaKeys.map((c) => c.key), error: msg(err) });
     }
   }
 
