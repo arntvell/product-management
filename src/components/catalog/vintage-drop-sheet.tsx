@@ -300,6 +300,7 @@ export function VintageDropSheet({
     savingRef.current = true;
     dirtyRef.current = false;
     setSaveState("saving");
+    let failed = false;
     try {
       const res = await fetch(`/api/vintage/drafts/${draft.id}`, {
         method: "PUT",
@@ -340,11 +341,16 @@ export function VintageDropSheet({
       revisionRef.current = json.revision;
       setSaveState(dirtyRef.current ? "pending" : "saved");
     } catch (err) {
+      failed = true;
       dirtyRef.current = true;
       setSaveState("error");
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
       savingRef.current = false;
+      // Typed while that save was in flight: the state is already "pending",
+      // so no new timer would start — save again now instead.
+      // (Not after a failure: that waits for the next edit rather than looping.)
+      if (dirtyRef.current && !failed) void save();
     }
   }, [draft, openDraft]);
 
@@ -369,6 +375,8 @@ export function VintageDropSheet({
 
   /** Anything unsaved goes before an action that reloads the drop. */
   async function flush() {
+    // A save already in flight is waited for, not skipped.
+    for (let i = 0; savingRef.current && i < 100; i++) await new Promise((r) => setTimeout(r, 50));
     if (dirtyRef.current) await save();
   }
 
@@ -398,7 +406,13 @@ export function VintageDropSheet({
       }
       setLegacy(null);
       toast.success(`${drop} is saved in Origo now. Its numbers were checked again — load the photos once more.`);
-    } else toast.success(`${drop} started: ${json.draft.rows[0].itemNumber}–${json.draft.rows.at(-1).itemNumber}.`);
+    } else
+      toast.success(
+        `${drop} started: ${json.draft.rows[0].itemNumber}–${json.draft.rows.at(-1).itemNumber}.` +
+          (json.alreadyCreated
+            ? ` ${drop} already has ${json.alreadyCreated} garment(s) in Origo — these join it.`
+            : "")
+      );
     if (json.beyondPreassigned)
       toast.warning(
         `${json.beyondPreassigned} number(s) are past the sheet's pre-assigned range — their barcodes are extrapolated, not recorded.`

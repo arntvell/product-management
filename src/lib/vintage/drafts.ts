@@ -340,21 +340,22 @@ export async function createDraft(
   drop: string,
   count: number,
   content: Partial<DraftRowContent>[] = []
-): Promise<{ draft: DraftView; beyondPreassigned: number }> {
+): Promise<{ draft: DraftView; beyondPreassigned: number; alreadyCreated: number }> {
   const name = drop.trim().replace(/\s+/g, " ");
   if (!name) throw new DraftError("Which drop?");
   if (!Number.isInteger(count) || count < 1 || count > 300) throw new DraftError("Between 1 and 300 garments.");
 
   // Outside the transaction: a network call has no business holding the lock.
   const onShopify = await highestVintageItemNumber();
+  let already = 0;
 
   const created = await prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(LOCK);
     if (await tx.vintageDropDraft.findUnique({ where: { drop: name } }))
       throw new DraftError(`${name} is already being drafted — open it from the list.`);
-    const already = await tx.colorway.count({ where: { entries: { some: { drop: name } } } });
-    if (already)
-      throw new DraftError(`${name} already has ${already} garment(s) in Origo. Use another drop name, or load it.`);
+    // A drop that already has garments can take more — a late top-up joins
+    // the same drop, numbered after everything else. Said, not refused.
+    already = await tx.colorway.count({ where: { entries: { some: { drop: name } } } });
 
     const drafts = await tx.vintageDropDraft.findMany();
     let highestDraft = 0;
@@ -377,6 +378,7 @@ export async function createDraft(
   return {
     draft,
     beyondPreassigned: draft.rows.filter((r) => Number(r.itemNumber) > LAST_PREASSIGNED_ITEM).length,
+    alreadyCreated: already,
   };
 }
 
