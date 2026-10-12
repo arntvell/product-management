@@ -48,6 +48,8 @@ export interface NavSection {
   note?: string;
   /** Marks a section whose screens write to a live external system. */
   live?: boolean;
+  /** Shown to admins only. The pages refuse anyone else regardless. */
+  adminOnly?: boolean;
   items: NavLink[];
 }
 
@@ -88,8 +90,6 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       { href: "/catalog/categories", label: "Categories", icon: FolderTree },
       { href: "/catalog/size-systems", label: "Size systems", icon: Ruler },
-      // Admin-only; the page itself refuses anyone else.
-      { href: "/catalog/users", label: "Users", icon: UsersRound },
     ],
   },
   {
@@ -125,6 +125,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/media", label: "Media", icon: Image },
       { href: "/models", label: "Models", icon: User },
     ],
+  },
+  {
+    id: "admin",
+    label: "Admin",
+    adminOnly: true,
+    items: [{ href: "/catalog/users", label: "Users", icon: UsersRound }],
   },
 ];
 
