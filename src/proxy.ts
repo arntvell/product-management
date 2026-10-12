@@ -118,15 +118,21 @@ const clerkGate = clerkMiddleware(async (auth, request) => {
     return NextResponse.redirect(to);
   }
 
-  // The Clerk id resolves straight to a User once it has been seen. The first
-  // time, match on the verified email an admin invited, and remember the id.
+  // The Clerk id resolves straight to a User once it has been seen. Otherwise
+  // match on the verified email an admin added, and remember the id. That
+  // includes a user already linked to ANOTHER Clerk id: Clerk's development
+  // and production instances give one person two ids, and the same database
+  // serves both, so someone who signed in locally would otherwise be locked
+  // out of production. The email is verified by Clerk (Google, or a code), so
+  // it is the identity; the id is only a shortcut to it.
   let user = await prisma.user.findUnique({ where: { clerkUserId: userId } });
   if (!user) {
     const cu = await (await clerkClient()).users.getUser(userId);
     const email = cu.primaryEmailAddress?.emailAddress?.toLowerCase();
-    if (email) {
+    const verified = cu.primaryEmailAddress?.verification?.status === "verified";
+    if (email && verified) {
       const invited = await prisma.user.findUnique({ where: { email } });
-      if (invited && !invited.clerkUserId)
+      if (invited)
         user = await prisma.user.update({
           where: { id: invited.id },
           data: {
