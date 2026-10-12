@@ -12,7 +12,7 @@ export default async function AddSizePage({
   const { colorwayId } = await searchParams;
   const [brands, categories] = await Promise.all([
     prisma.brand.findMany({
-      where: { isLivid: false },
+      where: { isLivid: false, archived: false },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),

@@ -23,7 +23,15 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
   if (draft.status === "DISCARDED") redirect("/catalog/products/drafts");
 
   const [brandRows, seasons, sizeSystems, manufacturers, categoryTree, newCategory] = await Promise.all([
+    // Archived brands are not offered — except the one this draft already
+    // holds, so archiving a brand does not quietly empty work in progress.
     prisma.brand.findMany({
+      where: {
+        OR: [
+          { archived: false },
+          ...(draft.payload?.brand?.id ? [{ id: draft.payload.brand.id }] : []),
+        ],
+      },
       orderBy: { name: "asc" },
       select: { id: true, name: true, isLivid: true, skuToken: true },
     }),

@@ -2,26 +2,67 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import type { BrandListItem } from "@/lib/master/brands";
 
-export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
+export function BrandsTable({ brands: initial }: { brands: BrandListItem[] }) {
+  const router = useRouter();
+  const [brands, setBrands] = useState(initial);
   const [q, setQ] = useState("");
   const [onlyIssues, setOnlyIssues] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  // Archived brands are out of every picker, so they are out of the warnings
+  // too — a duplicate nobody can choose is not a problem to fix.
+  const live = useMemo(() => brands.filter((b) => !b.archived), [brands]);
+  const archivedCount = brands.length - live.length;
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return brands.filter((b) => {
+      if (b.archived !== showArchived) return false;
       if (needle && !b.name.toLowerCase().includes(needle)) return false;
       if (onlyIssues && !issue(b)) return false;
       return true;
     });
-  }, [brands, q, onlyIssues]);
+  }, [brands, q, onlyIssues, showArchived]);
 
-  const dupes = brands.filter((b) => b.possibleDuplicateOf.length).length;
-  const noToken = brands.filter((b) => !b.isLivid && !b.skuToken).length;
-  const noSitoo = brands.filter((b) => b.sitooManufacturerIds.length === 0).length;
-  const manySitoo = brands.filter((b) => b.sitooManufacturerIds.length > 1).length;
+  async function setArchived(b: BrandListItem, archived: boolean) {
+    if (
+      archived &&
+      b.activeColorways > 0 &&
+      !confirm(
+        `${b.name} still has ${b.activeColorways} product(s) that are not archived. Archive the brand anyway?\n\n` +
+          "It disappears from the brand pickers; its products and their channels are not touched."
+      )
+    )
+      return;
+    setBusy(b.id);
+    try {
+      const res = await fetch(`/api/catalog/brands/${b.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Failed");
+      setBrands((bs) => bs.map((x) => (x.id === b.id ? { ...x, archived } : x)));
+      toast.success(archived ? `${b.name} archived.` : `${b.name} restored.`);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const dupes = live.filter((b) => b.possibleDuplicateOf.length).length;
+  const noToken = live.filter((b) => !b.isLivid && !b.skuToken).length;
+  const noSitoo = live.filter((b) => b.sitooManufacturerIds.length === 0).length;
+  const manySitoo = live.filter((b) => b.sitooManufacturerIds.length > 1).length;
 
   return (
     <div className="space-y-4">
@@ -40,12 +81,20 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
           />
           Needs attention
         </label>
+        <label className="flex items-center gap-2 text-body">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+          />
+          Archived ({archivedCount})
+        </label>
         <span className="ml-auto text-fine text-muted-foreground">
-          {rows.length} of {brands.length}
+          {rows.length} of {showArchived ? archivedCount : live.length}
         </span>
       </div>
 
-      {(dupes || noToken || noSitoo || manySitoo) && !onlyIssues ? (
+      {(dupes || noToken || noSitoo || manySitoo) && !onlyIssues && !showArchived ? (
         <div className="border border-ink bg-paper px-3 py-2 text-meta normal-case tracking-normal text-ink">
           {noToken ? (
             <div>
@@ -83,8 +132,8 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
       ) : null}
 
       <div className="overflow-x-auto border">
-        <div className="min-w-[58rem]">
-          <div className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
+        <div className="min-w-[64rem]">
+          <div className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem_5.5rem] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-fine text-muted-foreground">
             <div>Brand</div>
             <div>Token</div>
             <div>Rule</div>
@@ -94,13 +143,16 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
               Shopify
             </div>
             <div className="text-right">Styles</div>
-            <div className="text-right">Colorways</div>
+            <div className="text-right" title="Not archived / all">
+              Colorways
+            </div>
+            <div />
           </div>
           {rows.map((b) => (
             <Link
               key={b.id}
               href={`/catalog/brands/${b.id}`}
-              className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem] items-center gap-3 border-b px-3 py-2 text-body transition-colors last:border-0 hover:bg-muted/50"
+              className="grid grid-cols-[minmax(12rem,2fr)_5rem_5rem_minmax(8rem,1fr)_5rem_7rem_4rem_5rem_5.5rem] items-center gap-3 border-b px-3 py-2 text-body transition-colors last:border-0 hover:bg-muted/50"
             >
               <div className="min-w-0">
                 <div className="truncate">
@@ -163,14 +215,40 @@ export function BrandsTable({ brands }: { brands: BrandListItem[] }) {
                 {b.shopifyVendors.join(", ") || "—"}
               </div>
               <div className="text-right tabular-nums text-muted-foreground">{b.styles}</div>
-              <div className="text-right tabular-nums text-muted-foreground">
+              <div
+                className="text-right tabular-nums text-muted-foreground"
+                title={`${b.activeColorways} not archived, ${b.colorways} in all`}
+              >
+                <span className={b.activeColorways === 0 ? "" : "text-ink"}>{b.activeColorways}</span>
+                {" / "}
                 {b.colorways}
+              </div>
+              <div className="text-right">
+                {b.merged ? (
+                  <span className="text-fine text-muted-foreground" title="Merged into another brand">
+                    merged
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={(e) => {
+                      // The row is a link to the brand; the button is not.
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setArchived(b, !b.archived);
+                    }}
+                    className="border px-2 py-0.5 text-fine transition-colors hover:bg-muted disabled:opacity-40"
+                  >
+                    {busy === b.id ? "…" : b.archived ? "Restore" : "Archive"}
+                  </button>
+                )}
               </div>
             </Link>
           ))}
           {rows.length === 0 ? (
             <div className="px-3 py-8 text-center text-body text-muted-foreground">
-              No brands match.
+              {showArchived ? "No archived brands." : "No brands match."}
             </div>
           ) : null}
         </div>

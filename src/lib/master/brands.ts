@@ -27,6 +27,14 @@ export interface BrandListItem {
   defaultSizeSystem: { id: string; name: string } | null;
   styles: number;
   colorways: number;
+  /** Colourways not archived — what is left to sell. Zero means archiving costs nothing. */
+  activeColorways: number;
+  /**
+   * Hidden from every brand picker. Merged brands are archived too, and stay so:
+   * their products have moved to the winner.
+   */
+  archived: boolean;
+  merged: boolean;
   /**
    * Set when this brand's name normalises to the same thing as another's, or is
    * one character away. `P.F. Candle` and `P.F. Candles` are both live, 27 and
@@ -91,6 +99,8 @@ export async function listBrandsWithSettings(): Promise<BrandListItem[]> {
       name: true,
       isLivid: true,
       skuToken: true,
+      archived: true,
+      mergedIntoId: true,
       _count: { select: { styles: true, colorways: true } },
       template: {
         select: { id: true, defaultSizeSystem: { select: { id: true, name: true } } },
@@ -102,6 +112,13 @@ export async function listBrandsWithSettings(): Promise<BrandListItem[]> {
       },
     },
   });
+
+  const active = await prisma.colorway.groupBy({
+    by: ["brandId"],
+    where: { status: { not: "ARCHIVED" }, brandId: { not: null } },
+    _count: { _all: true },
+  });
+  const activeBy = new Map(active.map((a) => [a.brandId!, a._count._all]));
 
   const byKey = new Map<string, string[]>();
   for (const b of brands) {
@@ -126,6 +143,9 @@ export async function listBrandsWithSettings(): Promise<BrandListItem[]> {
       defaultSizeSystem: b.template?.defaultSizeSystem ?? null,
       styles: b._count.styles,
       colorways: b._count.colorways,
+      activeColorways: activeBy.get(b.id) ?? 0,
+      archived: b.archived,
+      merged: b.mergedIntoId !== null,
       possibleDuplicateOf: [...dupes].sort(),
       // Deduped on the id, matching how the Sitoo push decides: two refs naming
       // the SAME manufacturerid are one answer, not an ambiguity. Without this
@@ -258,6 +278,8 @@ export function exampleStyleSku(
 
 export interface SaveBrandSettingsInput {
   skuToken?: string | null;
+  /** Hide the brand from every picker. Its products, and their pushes, are untouched. */
+  archived?: boolean;
   template?: Partial<BrandSettings["template"]>;
 }
 
@@ -265,8 +287,16 @@ export async function saveBrandSettings(
   id: string,
   input: SaveBrandSettingsInput
 ): Promise<void> {
-  const brand = await prisma.brand.findUnique({ where: { id }, select: { id: true } });
+  const brand = await prisma.brand.findUnique({ where: { id }, select: { id: true, mergedIntoId: true } });
   if (!brand) throw new BrandError("Brand not found.");
+
+  if (input.archived !== undefined) {
+    // A merged brand's products live under the winner; bringing the loser back
+    // would offer a second spelling of the same label again.
+    if (!input.archived && brand.mergedIntoId)
+      throw new BrandError("This brand was merged into another — restore that one instead.");
+    await prisma.brand.update({ where: { id }, data: { archived: input.archived } });
+  }
 
   if (input.skuToken !== undefined) {
     await prisma.brand.update({ where: { id }, data: { skuToken: cleanSkuToken(input.skuToken) } });

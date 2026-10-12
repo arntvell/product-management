@@ -17,6 +17,7 @@ export async function listBrands(): Promise<
   { id: string; name: string; isLivid: boolean; hasTemplate: boolean }[]
 > {
   const brands = await prisma.brand.findMany({
+    where: { archived: false },
     orderBy: { name: "asc" },
     select: { id: true, name: true, isLivid: true, template: { select: { id: true } } },
   });
