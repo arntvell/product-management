@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { toast } from "sonner";
-import { PinIcon, PinOffIcon } from "lucide-react";
+import { CheckIcon, PinIcon, PinOffIcon } from "lucide-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { useCan } from "@/components/auth/current-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +49,8 @@ import { usePages } from "@/hooks/use-pages";
 import { useCollections } from "@/hooks/use-collections";
 import { useModels } from "@/hooks/use-models";
 import { CellPanel, type CellPanelTarget } from "./cell-panel";
+import { MediaPanel } from "./media-panel";
+import { withFrom } from "@/lib/back-link";
 import { CopyFieldsDialog } from "./copy-fields-dialog";
 import type { CopyableField } from "@/lib/master/copy-fields";
 import type { GridRow } from "@/lib/master/queries";
@@ -265,17 +275,44 @@ export function CatalogGrid({
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
-  const [filters, setFilters] = useState({
-    vendor: "",
-    productType: "",
-    gender: "",
-    status: "",
-    source: "",
-    needs: "",
-    drop: "",
-    origin: "",
-    channel: "",
-  });
+  // Where this grid is, with its query, so a product opened from it can come
+  // back here. Read after mount — the server has no window.
+  const [here, setHere] = useState<string | null>(null);
+  useEffect(() => setHere(window.location.pathname + window.location.search), []);
+  // The product whose images are open in the side panel.
+  const [mediaFor, setMediaFor] = useState<string | null>(null);
+
+  // Every filter takes several values (OR within a filter, AND across them).
+  const [filters, setFilters] = useState<GridFilters>(EMPTY_FILTERS);
+
+  // Filters, search and the dropped toggle survive leaving the grid and coming
+  // back — to a product and back, say — for the rest of the browser session.
+  // Per grid: Livid and External keep their own.
+  const filterKey = `origo:catalog-grid:${scope}:filters`;
+  const filtersLoaded = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(filterKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as { filters?: Partial<GridFilters>; search?: string; dropped?: string };
+        setFilters({ ...EMPTY_FILTERS, ...(saved.filters ?? {}) });
+        if (typeof saved.search === "string") setSearch(saved.search);
+        if (saved.dropped === "all" || saved.dropped === "active" || saved.dropped === "dropped")
+          setDroppedFilter(saved.dropped);
+      }
+    } catch {
+      // Storage unavailable: start unfiltered.
+    }
+    filtersLoaded.current = true;
+  }, [filterKey]);
+  useEffect(() => {
+    if (!filtersLoaded.current) return;
+    try {
+      sessionStorage.setItem(filterKey, JSON.stringify({ filters, search, dropped: droppedFilter }));
+    } catch {
+      // Not remembered; still applied.
+    }
+  }, [filterKey, filters, search, droppedFilter]);
   const [saving, setSaving] = useState(false);
   const [autosave, setAutosave] = useState(true);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -457,8 +494,8 @@ export function CatalogGrid({
     };
   }, [rows]);
 
-  function needsMatch(r: GridRow): boolean {
-    switch (filters.needs) {
+  function needsMatch(r: GridRow, need: string): boolean {
+    switch (need) {
       case "noPrice":
         return !r.priceNok;
       case "noMedia":
@@ -525,24 +562,30 @@ export function CatalogGrid({
     const filtered = rows.filter((r) => {
       if (droppedFilter === "active" && r.dropped) return false;
       if (droppedFilter === "dropped" && !r.dropped) return false;
-      if (filters.vendor && r.vendor !== filters.vendor) return false;
-      if (filters.productType && r.productType !== filters.productType) return false;
-      if (filters.gender && r.gender !== filters.gender) return false;
-      if (filters.status && r.status !== filters.status) return false;
-      if (filters.source && r.source !== filters.source) return false;
+      const pass = (chosen: string[], value: string) => !chosen.length || chosen.includes(value);
+      if (!pass(filters.vendor, r.vendor)) return false;
+      if (!pass(filters.productType, r.productType)) return false;
+      if (!pass(filters.gender, r.gender)) return false;
+      if (!pass(filters.status, r.status)) return false;
+      if (!pass(filters.source, r.source)) return false;
+      if (!pass(filters.origin, r.origin)) return false;
       // "__none" is the work queue: everything not yet placed in a drop.
-      if (filters.drop === "__none" ? !!r.drop : filters.drop && r.drop !== filters.drop)
+      if (
+        filters.drop.length &&
+        !((filters.drop.includes("__none") && !r.drop) || (!!r.drop && filters.drop.includes(r.drop)))
+      )
         return false;
-      if (filters.origin && r.origin !== filters.origin) return false;
       // "__none" is everything on no channel at all — targeted nowhere, so no
       // edit here reaches a customer until someone chooses where it goes.
       if (
-        filters.channel === "__none"
-          ? r.channels.length > 0
-          : filters.channel && !r.channels.includes(filters.channel)
+        filters.channel.length &&
+        !(
+          (filters.channel.includes("__none") && r.channels.length === 0) ||
+          r.channels.some((c) => filters.channel.includes(c))
+        )
       )
         return false;
-      if (filters.needs && !needsMatch(r)) return false;
+      if (filters.needs.length && !filters.needs.some((n) => needsMatch(r, n))) return false;
       if (!q) return true;
       return (
         r.name.toLowerCase().includes(q) ||
@@ -1578,20 +1621,20 @@ export function CatalogGrid({
 
       {/* Attribute filter bar (universal across views) */}
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <FilterSelect label="Vendor" value={filters.vendor} options={filterOptions.vendor}
+        <FilterMulti label="Vendor" value={filters.vendor} options={filterOptions.vendor}
           onChange={(v) => setFilters((f) => ({ ...f, vendor: v }))} />
-        <FilterSelect label="Type" value={filters.productType} options={filterOptions.productType}
+        <FilterMulti label="Type" value={filters.productType} options={filterOptions.productType}
           onChange={(v) => setFilters((f) => ({ ...f, productType: v }))} />
-        <FilterSelect label="Gender" value={filters.gender} options={filterOptions.gender}
+        <FilterMulti label="Gender" value={filters.gender} options={filterOptions.gender}
           onChange={(v) => setFilters((f) => ({ ...f, gender: v }))} />
-        <FilterSelect label="Status" value={filters.status} options={[...PRODUCT_STATUSES]}
+        <FilterMulti label="Status" value={filters.status} options={[...PRODUCT_STATUSES]}
           onChange={(v) => setFilters((f) => ({ ...f, status: v }))} />
-        <FilterSelect label="Source" value={filters.source} options={filterOptions.source}
+        <FilterMulti label="Source" value={filters.source} options={filterOptions.source}
           onChange={(v) => setFilters((f) => ({ ...f, source: v }))} />
         {/* Which system holds the product. The one filter that separates store
             vintage from online vintage: both are Vendor = Vintage, and only the
             channel tells them apart. */}
-        <FilterSelect
+        <FilterMulti
           label="Channel"
           value={filters.channel}
           options={[
@@ -1605,7 +1648,7 @@ export function CatalogGrid({
         />
         {seasonal && season && (
           <>
-            <FilterSelect
+            <FilterMulti
               label="Drop"
               value={filters.drop}
               options={[
@@ -1614,7 +1657,7 @@ export function CatalogGrid({
               ]}
               onChange={(v) => setFilters((f) => ({ ...f, drop: v }))}
             />
-            <FilterSelect
+            <FilterMulti
               label="Origin"
               value={filters.origin}
               options={[
@@ -1625,7 +1668,7 @@ export function CatalogGrid({
             />
           </>
         )}
-        <FilterSelect
+        <FilterMulti
           label="Needs"
           value={filters.needs}
           options={[
@@ -1636,11 +1679,9 @@ export function CatalogGrid({
           ]}
           onChange={(v) => setFilters((f) => ({ ...f, needs: v }))}
         />
-        {Object.values(filters).some(Boolean) && (
+        {Object.values(filters).some((v) => v.length > 0) && (
           <button
-            onClick={() =>
-              setFilters({ vendor: "", productType: "", gender: "", status: "", source: "", needs: "", drop: "", origin: "", channel: "" })
-            }
+            onClick={() => setFilters(EMPTY_FILTERS)}
             className="text-fine text-muted-foreground underline underline-offset-4"
           >
             Clear filters
@@ -1861,7 +1902,7 @@ export function CatalogGrid({
                     </div>
                     <div className="min-w-0 leading-tight">
                       <a
-                        href={`/catalog/colorways/${row.id}`}
+                        href={withFrom(`/catalog/colorways/${row.id}`, here)}
                         className="block truncate text-fine hover:underline"
                       >
                         {row.dropped && (
@@ -2036,10 +2077,17 @@ export function CatalogGrid({
                   ) : null}
                   {shown("media") ? (
                   <a
-                    href={`/catalog/colorways/${row.id}/media`}
+                    href={withFrom(`/catalog/colorways/${row.id}/media`, here)}
+                    // A plain click opens the images in place; cmd/ctrl-click
+                    // still opens the full media page in a new tab.
+                    onClick={(e) => {
+                      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                      e.preventDefault();
+                      setMediaFor(row.id);
+                    }}
                     style={place("media", FIXED_WIDTH["media"], isSel)}
                     className="flex shrink-0 items-center justify-center gap-1 border-l text-fine text-muted-foreground hover:bg-muted hover:underline"
-                    title="Manage media"
+                    title="Images — click to manage here"
                   >
                     ▦ {row.mediaCount}
                   </a>
@@ -2203,6 +2251,14 @@ export function CatalogGrid({
         onOpenChange={setCopyOpen}
         targetCount={targetRows.length}
         onCopy={copyFieldsToTargets}
+      />
+
+      <MediaPanel
+        colorwayId={mediaFor}
+        onClose={() => setMediaFor(null)}
+        onChanged={(id, items) =>
+          setRows((prev) => prev.map((r) => (r.id === id ? { ...r, mediaCount: items.length } : r)))
+        }
       />
 
       {panel && (
@@ -2425,37 +2481,88 @@ function AddTagToSelected({
   );
 }
 
-function FilterSelect({
+type FilterKey = "vendor" | "productType" | "gender" | "status" | "source" | "needs" | "drop" | "origin" | "channel";
+type GridFilters = Record<FilterKey, string[]>;
+const EMPTY_FILTERS: GridFilters = {
+  vendor: [], productType: [], gender: [], status: [], source: [], needs: [], drop: [], origin: [], channel: [],
+};
+
+/**
+ * One filter, several values, with a search box — a brand list runs to a
+ * hundred names. Nothing chosen means everything.
+ */
+function FilterMulti({
   label,
   value,
   options,
   onChange,
 }: {
   label: string;
-  value: string;
+  value: string[];
   options: (string | { value: string; label: string })[];
-  onChange: (value: string) => void;
+  onChange: (value: string[]) => void;
 }) {
-  const opts = options.map((o) =>
-    typeof o === "string" ? { value: o, label: o } : o
-  );
+  const [open, setOpen] = useState(false);
+  const opts = options.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
+  const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  const shown =
+    value.length === 0
+      ? "all"
+      : value.length === 1
+        ? opts.find((o) => o.value === value[0])?.label ?? value[0]
+        : `${value.length} selected`;
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      title={label}
-      className={cn(
-        "h-8 border bg-transparent px-2 text-fine",
-        value ? "border-foreground" : "text-muted-foreground"
-      )}
-    >
-      <option value="">{label}: all</option>
-      {opts.map((o) => (
-        <option key={o.value} value={o.value}>
-          {label}: {o.label}
-        </option>
-      ))}
-    </select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title={label}
+          className={cn(
+            "h-8 max-w-[16rem] truncate border bg-transparent px-2 text-left text-fine",
+            value.length ? "border-foreground" : "text-muted-foreground"
+          )}
+        >
+          {label}: {shown}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-64 p-0">
+        <Command>
+          {opts.length > 6 ? <CommandInput placeholder={`Search ${label.toLowerCase()}…`} /> : null}
+          <CommandList>
+            <CommandEmpty>Nothing matches.</CommandEmpty>
+            <CommandGroup>
+              {opts.map((o) => {
+                const on = value.includes(o.value);
+                return (
+                  <CommandItem key={o.value} value={o.label} onSelect={() => toggle(o.value)}>
+                    <span
+                      className={cn(
+                        "mr-2 flex size-4 shrink-0 items-center justify-center border",
+                        on ? "border-ink bg-ink text-offwhite" : "border-line"
+                      )}
+                    >
+                      {on ? <CheckIcon className="size-3" /> : null}
+                    </span>
+                    <span className="truncate">{o.label}</span>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+        {value.length ? (
+          <div className="border-t p-1">
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="w-full px-2 py-1 text-left text-fine text-muted-foreground hover:bg-muted"
+            >
+              Clear {label.toLowerCase()}
+            </button>
+          </div>
+        ) : null}
+      </PopoverContent>
+    </Popover>
   );
 }
 
