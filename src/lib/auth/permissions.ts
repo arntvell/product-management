@@ -99,3 +99,34 @@ export function refusal(role: UserRole, permission: Permission): string {
   };
   return `Your role (${ROLE_LABELS[role]}) can't ${what[permission]}.`;
 }
+
+// ---------------------------------------------------------------------------
+// Pages
+// ---------------------------------------------------------------------------
+
+/** Pages that are purely for changing things — no use to a role that cannot. */
+const PAGE_RULES: Array<[RegExp, Permission]> = [
+  [/^\/catalog\/users(\/|$)/, "admin"],
+  // Data repair: bulk tools over the whole master.
+  [/^\/catalog\/(fix|import-gaps|skus|duplicates|style-splits|cutover|identity)(\/|$)/, "admin"],
+  // Creating, importing, publishing, and the variant and season-drop editors.
+  [/^\/catalog\/products(\/|$)/, "catalog"],
+  [/^\/catalog\/(publishing|variants|drops)(\/|$)/, "catalog"],
+  [/^\/catalog\/colorways\/[^/]+\/media(\/|$)/, "catalog"],
+  // The original Shopify screens write to the live store directly.
+  [/^\/(groups|media|models)?$/, "catalog"],
+  [/^\/(groups|media|models)\//, "catalog"],
+];
+
+/** What opening a page needs. Everything not listed is readable by every role. */
+export function pagePermission(pathname: string): Permission {
+  for (const [re, p] of PAGE_RULES) if (re.test(pathname)) return p;
+  return "read";
+}
+
+/** Where a role lands when it opens a page it cannot use. */
+export function roleHome(role: UserRole): string {
+  if (role === "VINTAGE") return "/catalog/vintage";
+  if (role === "VIEWER") return "/catalog";
+  return "/";
+}

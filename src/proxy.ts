@@ -1,7 +1,7 @@
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { clerkClient, clerkMiddleware } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/db";
-import { can, permissionFor, refusal } from "@/lib/auth/permissions";
+import { can, pagePermission, permissionFor, refusal, roleHome } from "@/lib/auth/permissions";
 import {
   clerkEnabled,
   USER_EMAIL_HEADER,
@@ -155,6 +155,9 @@ const clerkGate = clerkMiddleware(async (auth, request) => {
     const needed = permissionFor(path, request.method);
     if (!can(user.role, needed))
       return NextResponse.json({ error: refusal(user.role, needed) }, { status: 403 });
+  } else if (!can(user.role, pagePermission(path))) {
+    // A page the role cannot use at all goes to that role's own start page.
+    return NextResponse.redirect(new URL(roleHome(user.role), request.url));
   }
 
   // Seen-at, at most once an hour: the users page shows who is active.

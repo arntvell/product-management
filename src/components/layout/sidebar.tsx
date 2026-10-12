@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import { NAV_SECTIONS, type NavLink } from "@/components/layout/nav-model";
 import { LividMark } from "@/components/layout/livid-mark";
 import { LiveDot } from "@/components/layout/live-dot";
-import { useCan } from "@/components/auth/current-user";
+import { useCan, useCurrentUser } from "@/components/auth/current-user";
+import { can, pagePermission } from "@/lib/auth/permissions";
 
 /**
  * The active item is the longest href the current path sits under, so a nested
@@ -34,6 +35,11 @@ const ALL_ITEMS = NAV_SECTIONS.flatMap((s) => s.items);
 export function Sidebar() {
   const pathname = usePathname();
   const isAdmin = useCan("admin");
+  const { role } = useCurrentUser();
+  // Only the pages this role can open; a section left empty is not shown.
+  const sections = NAV_SECTIONS.filter((section) => isAdmin || !section.adminOnly)
+    .map((section) => ({ ...section, items: section.items.filter((i) => can(role, pagePermission(i.href))) }))
+    .filter((section) => section.items.length > 0);
   const active = activeHref(pathname, ALL_ITEMS);
 
   return (
@@ -46,7 +52,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex flex-1 flex-col gap-5 overflow-y-auto p-3" aria-label="Main">
-        {NAV_SECTIONS.filter((section) => isAdmin || !section.adminOnly).map((section) => (
+        {sections.map((section) => (
           <div key={section.id} className="flex flex-col gap-0.5">
             <div className="flex flex-col gap-0.5 px-3 pb-1">
               <div className="flex items-center gap-1.5 text-meta uppercase text-muted-foreground">
