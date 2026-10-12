@@ -332,6 +332,16 @@ export async function planShopifyUpdate(
     } else if (key === "status" && live!.status === "ACTIVE" && current.status !== "ACTIVE") {
       change.action = "not-sent";
       change.note = "a live product is never unpublished by a push — change status in Shopify";
+    } else if (key === "tags") {
+      // Tags are only ever ADDED to a live product (a tag Shopify has that
+      // Origo lacks stays), so the question is whether Shopify lacks any of
+      // Origo's. Without this, a tag removed on both sides — the drop reveal
+      // takes "hide" off a vintage garment in Origo and in Shopify — read as an
+      // edit waiting to be pushed.
+      const liveTags = new Set(live!.tags.map((t) => t.trim().toLowerCase()));
+      const missing = (current.tags ? current.tags.split(", ") : []).filter((t) => !liveTags.has(t.toLowerCase()));
+      if (!missing.length) change.action = "same-in-shopify";
+      else change.note = `adds ${missing.join(", ")}`;
     } else {
       const lv = liveValue(key, live!);
       const same =
