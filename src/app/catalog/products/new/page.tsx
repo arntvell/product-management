@@ -35,10 +35,10 @@ export default function NewProductPage() {
         />
         <Choice
           href="/catalog/products/import"
-          title="Import a file"
-          lead="A whole delivery in one spreadsheet."
-          body="Pick the brand, season, type and size system, download a template with those filled in, and paste the rows. Sizes are a dropdown, so nothing arrives that no size system knows about."
-          cta="Start an import"
+          title="Several styles at once"
+          lead="A brand's delivery — typed in, or as a spreadsheet."
+          body="Pick the brand, season, size system and categories once, then type one line per colourway for as many styles as you like — or download the template and upload it. Each style becomes its own draft, created together."
+          cta="Start"
         />
         <Choice
           href="/catalog/products/new/size"

@@ -120,6 +120,10 @@ export function ImportProducts({
     SITOO: true,
   });
   const [file, setFile] = useState<File | null>(null);
+  // Typed in on this page, or a filled-in file. Both end as the same workbook
+  // on the server, so everything after step 3 is identical.
+  const [mode, setMode] = useState<"type" | "file">("type");
+  const [lines, setLines] = useState<QuickLine[]>([]);
   const [report, setReport] = useState<ImportReport | null>(null);
   const [decisions, setDecisions] = useState<Record<string, CategoryDecision>>({});
   const [busy, setBusy] = useState<null | "parse" | "commit">(null);
@@ -163,12 +167,30 @@ export function ImportProducts({
 
   async function post(dryRun: boolean) {
     const f = file ?? fileRef.current?.files?.[0] ?? null;
-    if (!f) {
-      toast.error("Choose the filled-in file first.");
-      return;
-    }
-    setBusy(dryRun ? "parse" : "commit");
-    try {
+    let request: RequestInit & { url: string };
+    if (mode === "type") {
+      const rows = expandLines(lines, chosenSystems);
+      if (!rows.length) {
+        toast.error("Type at least one style, colourway and size first.");
+        return;
+      }
+      request = {
+        url: "/api/catalog/import/rows",
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batch: { brandId, seasonId, kind, sizeSystemIds, categoryIds },
+          rows,
+          dryRun,
+          channels: PUBLISH_CHANNELS.filter((c) => channels[c]),
+          decisions: Object.values(decisions),
+        }),
+      };
+    } else {
+      if (!f) {
+        toast.error("Choose the filled-in file first.");
+        return;
+      }
       const form = new FormData();
       form.set("file", f);
       form.set("dryRun", dryRun ? "1" : "0");
@@ -179,7 +201,12 @@ export function ImportProducts({
         );
         form.set("decisions", JSON.stringify(Object.values(decisions)));
       }
-      const res = await fetch("/api/catalog/import/products", { method: "POST", body: form });
+      request = { url: "/api/catalog/import/products", method: "POST", body: form };
+    }
+    setBusy(dryRun ? "parse" : "commit");
+    try {
+      const { url, ...init } = request;
+      const res = await fetch(url, init);
       const json = await res.json();
       if (!res.ok) {
         if (json.report) setReport(json.report);
@@ -492,28 +519,84 @@ export function ImportProducts({
         )}
       </Section>
 
-      {/* ---------------- Step 3 — upload ---------------- */}
-      <Section step={3} title="Upload the filled-in file">
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx"
-            onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
-              setReport(null);
-              setDecisions({});
-            }}
-            className="text-body file:mr-3 file: file:border file:bg-transparent file:px-3 file:py-1.5 file:text-body"
-          />
-          <Button size="sm" variant="outline" onClick={() => post(true)} disabled={busy !== null}>
-            {busy === "parse" ? "Reading…" : "Check the file"}
-          </Button>
+      {/* ---------------- Step 3 — the products ---------------- */}
+      <Section
+        step={3}
+        title="The products"
+        hint="Type them in here — several styles at once — or fill in the downloaded file and upload it. Both are checked the same way."
+      >
+        <div className="mb-4 flex gap-1.5">
+          {(
+            [
+              ["type", "Type them in"],
+              ["file", "Upload a file"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setMode(m);
+                setReport(null);
+                setDecisions({});
+              }}
+              className={
+                "rounded-full border px-3 py-1 text-fine transition-colors " +
+                (mode === m ? "border-foreground bg-foreground text-background" : "text-muted-foreground hover:bg-muted")
+              }
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        <p className="mt-2 text-fine text-muted-foreground">
-          Checking writes nothing. It reads the file, groups it into styles and colourways, and
-          says what would be created.
-        </p>
+
+        {mode === "type" ? (
+          canGenerate ? (
+            <QuickStyles
+              lines={lines}
+              setLines={(fn) => {
+                setLines(fn);
+                setReport(null);
+              }}
+              systems={chosenSystems}
+              categoryNames={categoryIds
+                .map((id) => categories.find((c) => c.id === id)?.name)
+                .filter((n): n is string => !!n)}
+            />
+          ) : (
+            <p className="text-fine text-muted-foreground">
+              Finish step 1 first — brand, season, size systems and categories decide what can be typed here.
+            </p>
+          )
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx"
+              onChange={(e) => {
+                setFile(e.target.files?.[0] ?? null);
+                setReport(null);
+                setDecisions({});
+              }}
+              className="text-body file:mr-3 file: file:border file:bg-transparent file:px-3 file:py-1.5 file:text-body"
+            />
+          </div>
+        )}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => post(true)}
+            disabled={busy !== null || (mode === "type" && !canGenerate)}
+          >
+            {busy === "parse" ? "Checking…" : mode === "type" ? "Check" : "Check the file"}
+          </Button>
+          <p className="text-fine text-muted-foreground">
+            Checking writes nothing. It groups the {mode === "type" ? "lines" : "file"} into styles and
+            colourways, builds the SKUs, and says what would be created.
+          </p>
+        </div>
       </Section>
 
       {report ? (
@@ -1141,6 +1224,196 @@ function Field({
     <div className={`space-y-1.5 ${className}`}>
       <Label className="text-fine">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Typing several styles in, instead of a file
+// ---------------------------------------------------------------------------
+
+/** One colourway of one style, with the sizes it comes in. */
+interface QuickLine {
+  key: string;
+  style: string;
+  colorway: string;
+  sizeSystemId: string;
+  sizes: string[];
+  priceIn: string;
+  priceOut: string;
+  category: string;
+}
+
+const activeSizes = (sys: SizeSystemView | undefined) =>
+  (sys?.entries ?? []).filter((e) => !e.archived).map((e) => e.sizeLabel);
+
+/** Lines → the template's rows: one per size, as the file would have them. */
+function expandLines(lines: QuickLine[], systems: SizeSystemView[]): Array<Record<string, string>> {
+  return lines
+    .filter((l) => l.style.trim() && l.colorway.trim())
+    .flatMap((l) => {
+      const sys = systems.find((s) => s.id === l.sizeSystemId) ?? systems[0];
+      return l.sizes.map((size) => ({
+        style: l.style.trim(),
+        colorway: l.colorway.trim(),
+        size,
+        priceIn: l.priceIn.trim(),
+        priceOut: l.priceOut.trim(),
+        barcode: "",
+        category: l.category,
+        sizeSystem: sys?.name ?? "",
+      }));
+    });
+}
+
+function QuickStyles({
+  lines,
+  setLines,
+  systems,
+  categoryNames,
+}: {
+  lines: QuickLine[];
+  setLines: (fn: (l: QuickLine[]) => QuickLine[]) => void;
+  systems: SizeSystemView[];
+  categoryNames: string[];
+}) {
+  const blank = (from?: QuickLine): QuickLine => ({
+    key: crypto.randomUUID(),
+    style: from?.style ?? "",
+    colorway: "",
+    sizeSystemId: from?.sizeSystemId ?? systems[0]?.id ?? "",
+    sizes: from?.sizes ?? activeSizes(systems[0]),
+    priceIn: from?.priceIn ?? "",
+    priceOut: from?.priceOut ?? "",
+    category: from?.category ?? categoryNames[0] ?? "",
+  });
+  const shown = lines;
+  const update = (key: string, patch: Partial<QuickLine>) =>
+    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const cell = "h-8 w-full border bg-transparent px-2 text-body outline-none focus:ring-1 focus:ring-ring";
+  const styles = new Set(shown.map((l) => l.style.trim().toLowerCase()).filter(Boolean)).size;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-fine text-muted-foreground">
+        One line per colourway. Lines with the same style name become one style with several
+        colourways. Sizes start as the whole run — click one to leave it out. Barcodes can be added
+        on each draft afterwards.
+      </p>
+      <div className="overflow-x-auto">
+        <div className="min-w-[56rem] space-y-1.5">
+          <div className="grid grid-cols-[1.3fr_1fr_1fr_0.6fr_0.6fr_1fr_auto] gap-2 text-fine text-muted-foreground">
+            <span>Style</span>
+            <span>Colourway</span>
+            <span>Category</span>
+            <span>Price in</span>
+            <span>Price out</span>
+            <span>{systems.length > 1 ? "Size system" : ""}</span>
+            <span />
+          </div>
+          {!shown.length ? (
+            <p className="py-2 text-fine text-muted-foreground">Nothing yet — add the first style below.</p>
+          ) : null}
+          {shown.map((l) => {
+            const sys = systems.find((s) => s.id === l.sizeSystemId) ?? systems[0];
+            const all = activeSizes(sys);
+            return (
+              <div key={l.key} className="space-y-1 border-b pb-2">
+                <div className="grid grid-cols-[1.3fr_1fr_1fr_0.6fr_0.6fr_1fr_auto] items-center gap-2">
+                  <input className={cell} placeholder="Ada Chain" value={l.style} onChange={(e) => update(l.key, { style: e.target.value })} />
+                  <input className={cell} placeholder="Silver" value={l.colorway} onChange={(e) => update(l.key, { colorway: e.target.value })} />
+                  <select className={cell} value={l.category} onChange={(e) => update(l.key, { category: e.target.value })}>
+                    {categoryNames.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <input className={cell} inputMode="decimal" placeholder="Cost" value={l.priceIn} onChange={(e) => update(l.key, { priceIn: e.target.value })} />
+                  <input className={cell} inputMode="decimal" placeholder="NOK" value={l.priceOut} onChange={(e) => update(l.key, { priceOut: e.target.value })} />
+                  {systems.length > 1 ? (
+                    <select
+                      className={cell}
+                      value={sys?.id ?? ""}
+                      onChange={(e) => {
+                        const next = systems.find((s) => s.id === e.target.value);
+                        update(l.key, { sizeSystemId: e.target.value, sizes: activeSizes(next) });
+                      }}
+                    >
+                      {systems.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="flex gap-1">
+                    <button
+                      type="button"
+                      title="Another colourway of this style"
+                      className="border px-2 py-1 text-fine hover:bg-muted"
+                      onClick={() =>
+                        setLines((ls) => {
+                          const i = ls.findIndex((x) => x.key === l.key);
+                          return [...ls.slice(0, i + 1), blank(l), ...ls.slice(i + 1)];
+                        })
+                      }
+                    >
+                      + colour
+                    </button>
+                    <button
+                      type="button"
+                      title="Remove this line"
+                      className="border px-2 py-1 text-fine hover:bg-muted"
+                      onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {all.map((size) => {
+                    const on = l.sizes.includes(size);
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() =>
+                          update(l.key, {
+                            sizes: on ? l.sizes.filter((x) => x !== size) : all.filter((x) => x === size || l.sizes.includes(x)),
+                          })
+                        }
+                        className={
+                          "border px-1.5 py-0.5 font-mono text-fine " +
+                          (on ? "border-foreground" : "text-muted-foreground line-through opacity-60")
+                        }
+                      >
+                        {size}
+                      </button>
+                    );
+                  })}
+                  {!l.sizes.length ? <span className="text-fine text-ink">no sizes — this line imports nothing</span> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          className="border px-3 py-1.5 text-body hover:bg-muted"
+          onClick={() => setLines((ls) => [...ls, blank()])}
+        >
+          + New style
+        </button>
+        <span className="text-fine text-muted-foreground">
+          {styles} style{styles === 1 ? "" : "s"}, {shown.filter((l) => l.colorway.trim()).length} colourway(s),{" "}
+          {shown.reduce((a, l) => a + (l.style.trim() && l.colorway.trim() ? l.sizes.length : 0), 0)} sizes
+        </span>
+      </div>
     </div>
   );
 }

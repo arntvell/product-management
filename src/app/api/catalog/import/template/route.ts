@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 import { buildImportTemplate } from "@/lib/master/import-template";
-import { listSizeSystems } from "@/lib/master/size-systems";
+import { ImportContextError, resolveTemplateContext } from "@/lib/master/import-context";
 
 export const dynamic = "force-dynamic";
 
@@ -26,68 +25,9 @@ export async function GET(req: Request) {
     .map((x) => x.trim())
     .filter(Boolean);
 
-  const missing = [
-    !brandId && "brand",
-    !seasonId && "season",
-    !sizeSystemIds.length && "size system",
-    !categoryIds.length && "category",
-  ].filter(Boolean);
-  if (missing.length)
-    return NextResponse.json(
-      { error: `Choose a ${missing.join(", a ")} before generating the file.` },
-      { status: 400 }
-    );
-
   try {
-    const [brand, season, systems, categories] = await Promise.all([
-      prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { id: true, name: true, isLivid: true },
-      }),
-      prisma.season.findUnique({ where: { id: seasonId }, select: { id: true, code: true } }),
-      listSizeSystems(),
-      prisma.category.findMany({
-        where: { id: { in: categoryIds }, archived: false },
-        select: { id: true, name: true },
-      }),
-    ]);
-
-    if (!brand) return NextResponse.json({ error: "Brand not found." }, { status: 404 });
-    if (brand.isLivid)
-      return NextResponse.json(
-        {
-          error:
-            "Livid product comes from Threadflow. This importer creates external brands only.",
-        },
-        { status: 422 }
-      );
-    if (!season) return NextResponse.json({ error: "Season not found." }, { status: 404 });
-    const sizeSystems = sizeSystemIds
-      .map((id) => systems.find((s) => s.id === id))
-      .filter((s): s is (typeof systems)[number] => !!s);
-    if (sizeSystems.length !== sizeSystemIds.length)
-      return NextResponse.json({ error: "A chosen size system no longer exists." }, { status: 404 });
-    if (categories.length !== categoryIds.length)
-      return NextResponse.json(
-        { error: "One of the chosen categories no longer exists — pick them again." },
-        { status: 404 }
-      );
-
-    // Ordered as the operator picked them, so the dropdown in the file reads the
-    // way the screen did.
-    const ordered = categoryIds
-      .map((id) => categories.find((c) => c.id === id))
-      .filter((c): c is { id: string; name: string } => !!c);
-
-    const { filename, body } = await buildImportTemplate({
-      brandId: brand.id,
-      brandName: brand.name,
-      seasonId: season.id,
-      seasonCode: season.code,
-      kind,
-      sizeSystems,
-      categories: ordered,
-    });
+    const ctx = await resolveTemplateContext({ brandId, seasonId, kind, sizeSystemIds, categoryIds });
+    const { filename, body } = await buildImportTemplate(ctx);
 
     return new NextResponse(new Uint8Array(body), {
       headers: {
@@ -98,6 +38,8 @@ export async function GET(req: Request) {
       },
     });
   } catch (err) {
+    if (err instanceof ImportContextError)
+      return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not build the template" },
       { status: 500 }

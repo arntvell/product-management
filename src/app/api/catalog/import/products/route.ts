@@ -1,13 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  commitImport,
-  parseImportWorkbook,
-  ImportError,
-  type CategoryDecision,
-  type CommitOptions,
-} from "@/lib/master/import-products";
-import { CategoryError } from "@/lib/master/categories";
-import { DraftConflictError } from "@/lib/master/drafts";
+import type { CategoryDecision, CommitOptions } from "@/lib/master/import-products";
+import { runImport } from "@/lib/master/import-run";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -48,46 +41,11 @@ export async function POST(req: Request) {
     );
 
   const buffer = Buffer.from(await file.arrayBuffer());
-
-  try {
-    const report = await parseImportWorkbook(buffer);
-
-    const dryRun = form.get("dryRun") !== "0";
-    if (dryRun) return NextResponse.json({ ok: true, report, dryRun: true });
-
-    if (!report.ok)
-      return NextResponse.json(
-        { error: "This file still has errors.", report },
-        { status: 422 }
-      );
-
-    const opts: CommitOptions = {
-      channels: json(form.get("channels"), []) as CommitOptions["channels"],
-      decisions: json(form.get("decisions"), []) as CategoryDecision[],
-    };
-
-    const result = await commitImport(report, opts);
-    return NextResponse.json({ ok: true, report, result }, { status: 201 });
-  } catch (err) {
-    if (err instanceof ImportError || err instanceof CategoryError)
-      return NextResponse.json({ error: err.message }, { status: 422 });
-    if (err instanceof DraftConflictError)
-      return NextResponse.json({ error: err.message }, { status: 409 });
-    // A new model whose migration has not been deployed yet reads as P2021.
-    if (typeof err === "object" && err !== null && (err as { code?: string }).code === "P2021")
-      return NextResponse.json(
-        {
-          error:
-            "A table this importer needs does not exist in this database yet. The migration " +
-            "has not been deployed.",
-        },
-        { status: 503 }
-      );
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Import failed" },
-      { status: 500 }
-    );
-  }
+  return runImport(buffer, {
+    dryRun: form.get("dryRun") !== "0",
+    channels: json(form.get("channels"), []) as CommitOptions["channels"],
+    decisions: json(form.get("decisions"), []) as CategoryDecision[],
+  });
 }
 
 function json(value: FormDataEntryValue | null, fallback: unknown): unknown {

@@ -96,12 +96,12 @@ export default async function ImportProductsPage({
           >
             ← New product
           </Link>
-          <h1 className="mt-1 text-page">Import products</h1>
+          <h1 className="mt-1 text-page">Several styles at once</h1>
           <p className="mt-1 text-body text-muted-foreground">
-            The file is generated for one brand, season, type and size system, with the
-            categories you choose as a dropdown, and carries those choices inside it — so a
-            sheet filled in for one batch cannot be imported against another. Customs,
-            weight and country come from the brand, not from the file.
+            Choose the brand, season, size systems and categories once, then type the styles in
+            — one line per colourway — or fill in the generated file. Each style becomes a draft,
+            and the drafts are checked and created together. Customs, weight and country come
+            from the brand.
           </p>
         </div>
         <Link
