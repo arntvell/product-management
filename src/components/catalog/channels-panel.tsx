@@ -17,59 +17,59 @@ interface Publication {
   lastPushStatus: string | null;
 }
 
-interface Preview {
-  action: "create" | "update";
-  externalId: string | null;
-  unisex: boolean;
-  product: {
-    title: string;
-    handle: string;
-    vendor: string | null;
-    productType: string | null;
-    status: string;
-    tags: string[];
-  };
-  metafields: { key: string; type: string; value: string }[];
-  variants: { sku: string; barcode: string | null; size: string; price: string | null }[];
-  media: string[];
-  roleMedia: { flat: string[]; men: string[]; women: string[] };
-  warnings: string[];
+/** What a preview or a push reported, per channel. */
+interface ChannelReport {
+  dryRun?: boolean;
+  ok?: boolean;
+  summary?: string;
+  send?: string[];
+  notSent?: string[];
+  warnings?: string[];
+  error?: string;
+  adminUrl?: string;
 }
 
+/**
+ * Where this product goes, and pushing it there — one row per channel.
+ *
+ * Each row targets the channel, says whether the product is there yet, previews
+ * exactly what a push would send, and pushes to that channel alone. The pushes
+ * go through /push-to, the same paths the grids and the wizard use: Shopify
+ * creates (and lists on the sales channels) or sends only what changed; Sitoo
+ * updates the till's title and price, or creates the product; Loom gets the
+ * stock registry or, for Livid, the catalogue.
+ */
 export function ChannelsPanel({
   colorwayId,
   initialPublications,
   seasonCodes = [],
   brandIsLivid,
+  sitooSizes,
+  shopifyAdminUrl,
 }: {
   colorwayId: string;
   initialPublications: Publication[];
   seasonCodes?: string[];
-  /** Decides which Loom job this product goes to. See `loomMode` below. */
   brandIsLivid: boolean;
+  /** How many of the product's sizes the till already holds. */
+  sitooSizes: { linked: number; total: number };
+  /** The product in Shopify's admin, once it is there. */
+  shopifyAdminUrl: string | null;
 }) {
   const [pubs, setPubs] = useState<Publication[]>(initialPublications);
   const [saving, setSaving] = useState(false);
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [pushing, setPushing] = useState(false);
-  const [pushResult, setPushResult] = useState<{
-    action: string;
-    variants: number;
-    metafields: number;
-    adminUrl: string;
-  } | null>(null);
+  const [busy, setBusy] = useState<ChannelKey | "ALL" | null>(null);
+  const [reports, setReports] = useState<Partial<Record<ChannelKey, ChannelReport>>>({});
+  const [sitooLinked, setSitooLinked] = useState(sitooSizes.linked);
+  const [adminUrl, setAdminUrl] = useState(shopifyAdminUrl);
 
   const targeted = (c: ChannelKey) => pubs.some((p) => p.channel === c);
   const pubFor = (c: ChannelKey) => pubs.find((p) => p.channel === c);
 
   async function toggle(channel: ChannelKey) {
-    // Every channel, read from its current state — not a hand-written pair. The
-    // route treats an absent key as "keep", so omitting one is safe; sending the
-    // whole picture is what keeps this panel honest about what it is changing.
-    const next = Object.fromEntries(
-      CHANNELS.map((c) => [c, targeted(c)])
-    ) as Record<ChannelKey, boolean>;
+    // Every channel, from its current state — the route treats an absent key as
+    // "keep", but sending the whole picture keeps this honest about the change.
+    const next = Object.fromEntries(CHANNELS.map((c) => [c, targeted(c)])) as Record<ChannelKey, boolean>;
     next[channel] = !next[channel];
     setSaving(true);
     try {
@@ -88,241 +88,181 @@ export function ChannelsPanel({
     }
   }
 
-  // Shopify isn't per-season, but the price is — scope to the first season the
-  // product belongs to so we send that season's price (not an arbitrary one).
-  const shopifySeason = seasonCodes[0];
-  async function pushToShopify() {
-    if (
-      !confirm(
-        `Push this product to Shopify now? Creates or updates the live Shopify product${
-          shopifySeason ? ` (price from season ${shopifySeason})` : ""
-        }.`
-      )
-    )
-      return;
-    setPushing(true);
-    try {
-      const res = await fetch(`/api/catalog/colorways/${colorwayId}/push`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonCode: shopifySeason }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Push failed");
-      setPushResult(data);
-      setPubs((prev) =>
-        prev.map((p) =>
-          p.channel === "SHOPIFY" ? { ...p, published: true } : p
-        )
-      );
-      // Warnings include a Loom follow-up that failed — the one sign the stock
-      // registry did not get this product's Shopify ids.
-      const w = (data.warnings ?? []) as string[];
-      if (w.length) toast.warning(`Pushed (${data.action}) — ${data.variants} variants. ${w.join(" · ")}`);
-      else toast.success(`Pushed (${data.action}) — ${data.variants} variants`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Push failed");
-    } finally {
-      setPushing(false);
-    }
+  async function call(channel: ChannelKey, dryRun: boolean): Promise<ChannelReport> {
+    const res = await fetch(`/api/catalog/colorways/${colorwayId}/push-to`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel, dryRun }),
+    });
+    const data = (await res.json().catch(() => ({}))) as ChannelReport;
+    if (!res.ok && !data.summary) throw new Error(data.error ?? `${CHANNEL_LABELS[channel]} failed`);
+    return data;
   }
 
-  const [pushingLoom, setPushingLoom] = useState(false);
-
-  /**
-   * NAMED, never inherited — the same reasoning as the Sitoo target in
-   * push-orchestrator.
-   *
-   * The route defaults `mode` to "full", the wholesale catalogue, and
-   * `isLoomEligible(_, "catalogue")` is Livid-only. This panel sent no mode, so
-   * pressing Push to Loom on an external or vintage product reached Loom's
-   * eligibility check and came back `skipped: not a Livid-brand product` — the
-   * button was present and did nothing, on the 2,498 vintage colorways where it
-   * is the only button there is. Their Loom rows came from the drop sheet, which
-   * passes "data" explicitly.
-   *
-   * "data" is the stock registry: it carries everything that moves, and it
-   * bypasses the catalogue readiness gate because a registry row is identity and
-   * stock, not a sellable listing.
-   */
-  const loomMode = brandIsLivid ? "full" : "data";
-
-  async function pushToLoom() {
-    if (seasonCodes.length === 0) {
-      toast.error("This product isn't in any season — can't push to Loom.");
-      return;
-    }
-    if (
-      !confirm(
-        `Push to Loom for season(s): ${seasonCodes.join(", ")}?` +
-          (loomMode === "data"
-            ? "\n\nThis product is not Livid's own, so it goes to the stock registry rather than the wholesale catalogue."
-            : "")
-      )
-    )
-      return;
-    setPushingLoom(true);
+  async function preview(channel: ChannelKey) {
+    setBusy(channel);
     try {
-      let sentAny = false;
-      const notes: string[] = [];
-      for (const seasonCode of seasonCodes) {
-        const res = await fetch(`/api/catalog/push/loom`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ colorwayIds: [colorwayId], seasonCode, mode: loomMode }),
-        });
-        const data = await res.json();
-        if (!res.ok && data.sent === undefined)
-          throw new Error(data.error ?? data.raw ?? "Loom push failed");
-        if (data.ok && data.sent > 0) sentAny = true;
-        for (const s of (data.skipped ?? []) as { reason: string }[])
-          notes.push(`${seasonCode}: ${s.reason}`);
-      }
-      if (sentAny)
-        setPubs((prev) => prev.map((p) => (p.channel === "LOOM" ? { ...p, published: true } : p)));
-      if (sentAny && notes.length === 0) toast.success(`Pushed to Loom (${seasonCodes.join(", ")})`);
-      else if (sentAny) toast.warning(`Pushed to Loom; some seasons skipped: ${notes.join("; ")}`);
-      else toast.error(`Not pushed — ${notes.join("; ") || "not ready for Loom"}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Loom push failed");
-    } finally {
-      setPushingLoom(false);
-    }
-  }
-
-  async function loadPreview() {
-    setLoadingPreview(true);
-    try {
-      const res = await fetch(`/api/catalog/colorways/${colorwayId}/publish-preview`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed");
-      setPreview(data.preview);
+      const r = await call(channel, true);
+      setReports((p) => ({ ...p, [channel]: r }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Preview failed");
     } finally {
-      setLoadingPreview(false);
+      setBusy(null);
     }
   }
 
+  /** Push one channel. Returns whether it went through, for Push to all. */
+  async function push(channel: ChannelKey, ask = true): Promise<boolean> {
+    // From Push to all (ask=false) the whole run holds busy="ALL".
+    if (ask) {
+      // The confirm states what will be sent — the preview, run first.
+      let plan: ChannelReport;
+      try {
+        plan = await call(channel, true);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Preview failed");
+        return false;
+      }
+      setReports((p) => ({ ...p, [channel]: plan }));
+      const lines = [plan.summary, ...(plan.send ?? []).map((s) => `• ${s}`)].filter(Boolean).join("\n");
+      if (!confirm(`Push to ${CHANNEL_LABELS[channel]}?\n\n${lines}`)) return false;
+    }
+    if (ask) setBusy(channel);
+    try {
+      const r = await call(channel, false);
+      setReports((p) => ({ ...p, [channel]: r }));
+      const now = new Date().toISOString();
+      if (r.ok !== false) {
+        setPubs((prev) =>
+          prev.map((p) => (p.channel === channel ? { ...p, published: true, lastPushedAt: now, lastPushStatus: "ok" } : p))
+        );
+        if (channel === "SITOO") setSitooLinked(sitooSizes.total);
+        if (channel === "SHOPIFY" && r.adminUrl) setAdminUrl(r.adminUrl);
+      }
+      const w = r.warnings ?? [];
+      if (r.ok === false) toast.error(`${CHANNEL_LABELS[channel]}: ${r.summary ?? "not sent"}${w.length ? ` — ${w[0]}` : ""}`);
+      else if (w.length) toast.warning(`${CHANNEL_LABELS[channel]}: ${r.summary} ${w.join(" · ")}`);
+      else toast.success(`${CHANNEL_LABELS[channel]}: ${r.summary}`);
+      return r.ok !== false;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Push failed");
+      return false;
+    } finally {
+      if (ask) setBusy(null);
+    }
+  }
+
+  async function pushAll() {
+    const list = CHANNELS.filter((c) => targeted(c));
+    if (!list.length) return toast.error("Choose at least one channel first.");
+    if (!confirm(`Push to ${list.map((c) => CHANNEL_LABELS[c]).join(", ")}? Each sends only what it needs; Loom goes last.`))
+      return;
+    setBusy("ALL");
+    // Shopify before Loom: Loom's registry joins on the Shopify ids a create mints.
+    for (const c of list) {
+      const ok = await push(c, false);
+      if (!ok && c === "SHOPIFY" && list.includes("LOOM")) {
+        toast.error("Stopped before Loom — Shopify did not go through.");
+        break;
+      }
+    }
+    setBusy(null);
+  }
+
+  function liveText(c: ChannelKey): string {
+    const p = pubFor(c);
+    if (c === "SHOPIFY") return p?.externalId || adminUrl ? "On Shopify" : "Not on Shopify yet";
+    if (c === "SITOO")
+      return sitooLinked >= sitooSizes.total && sitooSizes.total > 0
+        ? "In the till"
+        : sitooLinked > 0
+          ? `${sitooLinked} of ${sitooSizes.total} sizes in the till`
+          : "Not in the till yet";
+    return p?.lastPushedAt ? (brandIsLivid ? "In Loom's catalogue" : "In Loom's stock registry") : "Not sent to Loom yet";
+  }
+
   return (
-    <div className="mx-auto mt-6 max-w-3xl px-6">
-      <section className="border p-5">
-        <h2 className="text-body">Channels</h2>
-        <p className="mt-1 text-fine text-muted-foreground">
-          Choose where this product publishes. Pushing to the channel is done
-          separately (Phase 3) — this sets the target.
-        </p>
-        <div className="mt-3 space-y-2">
-          {CHANNELS.map((c) => {
-            const pub = pubFor(c);
-            return (
-              <label key={c} className="flex items-center gap-3 text-body">
-                <input
-                  type="checkbox"
-                  checked={targeted(c)}
-                  disabled={saving}
-                  onChange={() => toggle(c)}
-                />
-                <span>{CHANNEL_LABELS[c]}</span>
-                {pub && (
-                  <span className="text-fine text-muted-foreground">
-                    {pub.published ? "published" : "targeted (not pushed)"}
-                    {pub.externalId ? ` · ${pub.externalId.slice(0, 24)}…` : ""}
-                  </span>
-                )}
-              </label>
-            );
-          })}
+    <section className="mx-auto max-w-3xl px-6 pb-12">
+      <div className="flex items-baseline justify-between gap-3 border-t border-line pt-6">
+        <div>
+          <h2 className="text-section">Channels</h2>
+          <p className="mt-1 text-fine text-muted-foreground">
+            Saving changes Origo only. Push a channel to send it there — the preview shows exactly what
+            goes.{seasonCodes.length ? ` Price from ${seasonCodes[0]}.` : ""}
+          </p>
         </div>
+        <Button size="sm" onClick={pushAll} disabled={busy !== null || saving}>
+          {busy === "ALL" ? "Pushing…" : "Push to all"}
+        </Button>
+      </div>
 
-        {targeted("SHOPIFY") && (
-          <div className="mt-4 border-t pt-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" onClick={loadPreview} disabled={loadingPreview}>
-                {loadingPreview ? "Computing…" : "Preview Shopify push"}
-              </Button>
-              <Button size="sm" onClick={pushToShopify} disabled={pushing}>
-                {pushing ? "Pushing…" : "Push to Shopify"}
-              </Button>
-              <span className="text-fine text-muted-foreground">
-                Preview is a dry-run; Push writes to the live store.
-              </span>
-            </div>
-            {pushResult && (
-              <p className="mt-2 text-fine text-muted-foreground">
-                ✓ {pushResult.action} · {pushResult.variants} variants ·{" "}
-                {pushResult.metafields} metafields ·{" "}
-                <a href={pushResult.adminUrl} target="_blank" rel="noreferrer" className="underline">
-                  open in Shopify
-                </a>
-              </p>
-            )}
-          </div>
-        )}
-
-        {targeted("LOOM") && (
-          <div className="mt-4 border-t pt-4">
-            <Button size="sm" onClick={pushToLoom} disabled={pushingLoom}>
-              {pushingLoom ? "Pushing…" : "Push to Loom"}
-            </Button>
-            <span className="ml-2 text-fine text-muted-foreground">
-              Pushes to Loom for season(s): {seasonCodes.join(", ") || "—"} (B2B).
-            </span>
-          </div>
-        )}
-
-        {preview && (
-          <div className="mt-4 space-y-3 border bg-muted/30 p-4 text-fine">
-            <div>
-              Would {preview.action} product
-              {preview.externalId ? ` (${preview.externalId})` : ""}
-            </div>
-            {preview.warnings.length > 0 && (
-              <ul className="list-disc pl-4 text-ink">
-                {preview.warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            )}
-            <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1">
-              <dt className="text-muted-foreground">Title</dt><dd>{preview.product.title}</dd>
-              <dt className="text-muted-foreground">Handle</dt><dd className="font-mono">{preview.product.handle}</dd>
-              <dt className="text-muted-foreground">Vendor</dt><dd>{preview.product.vendor ?? "—"}</dd>
-              <dt className="text-muted-foreground">Type</dt><dd>{preview.product.productType ?? "—"}</dd>
-              <dt className="text-muted-foreground">Status</dt><dd>{preview.product.status}</dd>
-              <dt className="text-muted-foreground">Tags</dt><dd>{preview.product.tags.join(", ") || "—"}<span className="ml-1 text-muted-foreground">(merged additively with existing Shopify tags)</span></dd>
-            </dl>
-            <div>
-              <div>Metafields ({preview.metafields.length})</div>
-              <div className="mt-1 space-y-0.5">
-                {preview.metafields.map((m) => (
-                  <div key={m.key} className="font-mono">
-                    custom.{m.key}{" "}
-                    <span className="text-muted-foreground">({m.type})</span>:{" "}
-                    {m.value.length > 60 ? m.value.slice(0, 60) + "…" : m.value}
+      <div className="mt-4 divide-y border">
+        {CHANNELS.map((c) => {
+          const p = pubFor(c);
+          const on = targeted(c);
+          const report = reports[c];
+          return (
+            <div key={c} className="p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex min-w-[9rem] items-center gap-2 text-body">
+                  <input type="checkbox" checked={on} disabled={saving} onChange={() => toggle(c)} />
+                  {CHANNEL_LABELS[c]}
+                </label>
+                <span className="text-fine text-muted-foreground">
+                  {liveText(c)}
+                  {p?.lastPushedAt ? ` · last pushed ${new Date(p.lastPushedAt).toLocaleString("nb-NO")}` : ""}
+                  {c === "SHOPIFY" && adminUrl ? (
+                    <>
+                      {" · "}
+                      <a className="underline underline-offset-4" target="_blank" rel="noreferrer" href={adminUrl}>
+                        open in Shopify
+                      </a>
+                    </>
+                  ) : null}
+                </span>
+                <span className="ml-auto flex gap-2">
+                  <Button size="sm" variant="outline" disabled={!on || busy !== null} onClick={() => preview(c)}>
+                    Preview
+                  </Button>
+                  <Button size="sm" disabled={!on || busy !== null} onClick={() => push(c)}>
+                    {busy === c ? "Pushing…" : `Push to ${CHANNEL_LABELS[c]}`}
+                  </Button>
+                </span>
+              </div>
+              {!on ? (
+                <p className="mt-2 text-fine text-muted-foreground">
+                  Not targeted — tick it to make this product a {CHANNEL_LABELS[c]} product.
+                </p>
+              ) : null}
+              {report ? (
+                <div className="mt-3 space-y-1 bg-muted/40 p-3 text-fine">
+                  <div className="text-body">
+                    {report.dryRun ? "Would: " : ""}
+                    {report.summary ?? report.error}
                   </div>
-                ))}
-              </div>
+                  {report.send?.length ? (
+                    <ul className="list-disc pl-5">
+                      {report.send.map((s) => (
+                        <li key={s}>{s}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {report.notSent?.map((s) => (
+                    <div key={s} className="text-muted-foreground">
+                      Not sent — {s}
+                    </div>
+                  ))}
+                  {report.warnings?.map((w) => (
+                    <div key={w} className="text-ink">
+                      {w}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <div>
-              <div>
-                Variants ({preview.variants.length}) · Gallery media ({preview.media.length})
-              </div>
-              <div className="mt-1 font-mono text-muted-foreground">
-                {preview.variants.slice(0, 8).map((v) => `${v.size}${v.price ? ` @${v.price}` : ""}`).join("  ")}
-                {preview.variants.length > 8 ? " …" : ""}
-              </div>
-              <div className="mt-1 text-muted-foreground">
-                {preview.unisex ? (
-                  <>Unisex routing: media section = flat only; gallery → men_images ({preview.roleMedia.men.length}) / women_images ({preview.roleMedia.women.length}); custom.flat ({preview.roleMedia.flat.length}).</>
-                ) : (
-                  <>Men/Women routing: gallery → media section; custom.flat ({preview.roleMedia.flat.length}).</>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-    </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

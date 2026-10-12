@@ -22,6 +22,7 @@ import { vintageInventory, vintageCost } from "./vintage";
 import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
 import { planShopifyUpdate, applyShopifyUpdate, setShopifyBaseline, labelFor } from "./shopify-update";
 import { ensureShopifyFiles, isPublicUrl, knownFileIds } from "./shopify-media";
+import { revealProducts } from "@/lib/shopify/reveal";
 import {
   adoptExistingShopifyProduct,
   recordShopifyVariantRefs,
@@ -595,6 +596,24 @@ export async function pushColorwayToShopify(
   if (errs.length) throw new Error(`productSet: ${errs.map((e) => e.message).join(", ")}`);
   const product = res.productSet?.product;
   if (!product) throw new Error("productSet returned no product");
+
+  // A new product goes on the store's sales channels at once. productSet sets
+  // status but does not publish, so a created product was carried by no
+  // channel: 59 of the last 120 pushed (all of Tom Wood among them) would have
+  // gone ACTIVE and appeared nowhere. Status still decides visibility — a DRAFT
+  // on every channel shows nothing. Vintage drops did this already through
+  // /api/vintage/channels; doing it here covers every create path.
+  if (action === "create") {
+    try {
+      const pub = await revealProducts([product.id], { removeTags: false, publish: true });
+      warnings.push(...pub.warnings);
+      if (!pub.published.length) warnings.push("Not put on any sales channel — publish it in Shopify.");
+    } catch (err) {
+      warnings.push(
+        `Created, but not put on the sales channels: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
 
   // Identity first, before the metafield tidy-up below — a failure there must
   // not cost us the variant and inventory-item ids. Until now these rows came

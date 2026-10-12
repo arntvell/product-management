@@ -151,22 +151,12 @@ export function ColorwayEditor({
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? `Save failed (${res.status})`);
       }
-      // Saving writes the master and nothing else. Which channels can be
-      // brought up to date from this page is NOT the same as which ones hold
-      // the product: Sitoo has no update path, so naming it beside a push
-      // button that does not exist would be the one misleading sentence on the
-      // screen.
-      const pushable = targetedChannels.filter((c) => c !== "SITOO");
-      const stuck = targetedChannels.filter((c) => c === "SITOO");
+      // Saving writes the master and nothing else; every targeted channel
+      // keeps the old values until it is pushed from the Channels panel below.
       const label = (c: string) => CHANNEL_LABELS[c as ChannelKey] ?? c;
-      const parts = [
-        pushable.length
-          ? `${pushable.map(label).join(" and ")} still hold the old values — push below.`
-          : "",
-        stuck.length
-          ? `${stuck.map(label).join(" and ")} cannot be updated from Origio yet and still show the old name and price.`
-          : "",
-      ].filter(Boolean);
+      const parts = targetedChannels.length
+        ? [`${targetedChannels.map(label).join(", ")} still hold the old values — push them under Channels below.`]
+        : [];
       if (parts.length) toast.success(`Saved. ${parts.join(" ")}`);
       else toast.success("Saved.");
       router.refresh();
@@ -239,7 +229,7 @@ export function ColorwayEditor({
                 Shared with {styleColorwayCount - 1} other colourway
                 {styleColorwayCount - 1 === 1 ? "" : "s"} — rename it on{" "}
                 <a
-                  href={`/catalog/styles/${header.styleId}`}
+                  href={withFrom(`/catalog/styles/${header.styleId}`, from)}
                   className="underline underline-offset-4"
                 >
                   the style page

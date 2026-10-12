@@ -1,3 +1,4 @@
+import { prisma } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { safeFrom } from "@/lib/back-link";
 import { getColorwayForEdit, listColorwayOptions } from "@/lib/master/queries";
@@ -74,6 +75,16 @@ export default async function ColorwayEditPage({
     lastPushStatus: p.lastPushStatus,
   }));
 
+  // How much of the product the till holds: a Sitoo push updates when every
+  // size is there, and creates the product otherwise.
+  const [sizeTotal, sizesInSitoo] = await Promise.all([
+    prisma.variant.count({ where: { colorwayId: cw.id } }),
+    prisma.variant.count({ where: { colorwayId: cw.id, channelRefs: { some: { channel: "SITOO" } } } }),
+  ]);
+  const shopifyGid = cw.publications.find((p) => p.channel === "SHOPIFY")?.externalId;
+  const store = (process.env.SHOPIFY_STORE_URL ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const shopifyAdminUrl = shopifyGid && store ? `https://${store}/admin/products/${shopifyGid.split("/").pop()}` : null;
+
   return (
     <>
       <ColorwayEditor
@@ -117,6 +128,8 @@ export default async function ColorwayEditPage({
         initialPublications={initialPublications}
         seasonCodes={cw.entries.map((e) => e.season.code)}
         brandIsLivid={cw.brand?.isLivid === true}
+        sitooSizes={{ linked: sizesInSitoo, total: sizeTotal }}
+        shopifyAdminUrl={shopifyAdminUrl}
       />
     </>
   );
