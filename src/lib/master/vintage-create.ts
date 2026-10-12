@@ -26,6 +26,7 @@ import { normalizeSku } from "./sku";
 import { storedForm, barcodeKey, barcodeSpellings } from "./barcode";
 import { buildVintageBody, vintageBodyShape, REQUIRED_MEASUREMENTS } from "./vintage-body";
 import { VINTAGE_BRAND_NAME, VINTAGE_CUSTOMS, VINTAGE_SIZE_TOKEN } from "./vintage";
+import { normalizeVintageSize } from "./vintage-size";
 
 export class VintageError extends Error {}
 
@@ -60,6 +61,12 @@ export interface VintageItemInput {
   barcode: string;
   /** BRAND (R) — the garment's original maker, a Shopify tag. */
   originalBrand?: string | null;
+  /**
+   * Fibre composition — "100% cotton". Its own field rather than a phrase in
+   * the description: stored as the colourway's fibre composition (what customs
+   * reads) and printed as a line under the measurements.
+   */
+  composition?: string | null;
   /** Ordered photo URLs, base photo first. Empty until the shoot uploads. */
   photoUrls: string[];
   /**
@@ -199,6 +206,7 @@ export function vintagePlainDescription(i: VintageItemInput): string {
       );
     lines.push(`Waist: ${i.waist ?? ""}`, `Front rise: ${i.frontRise ?? ""}`, `Inseam Length: ${i.inseam ?? ""}`);
   }
+  if (i.composition?.trim()) lines.push(`Composition: ${i.composition.trim()}`);
   lines.push("", "Hot tip for buying vintage online");
   lines.push(
     "Please be aware that sizes and fits vary greatly from brand to brand, and decade to decade. " +
@@ -206,6 +214,18 @@ export function vintagePlainDescription(i: VintageItemInput): string {
       "measurements with a similar product you own and know fits you."
   );
   return lines.join("\n");
+}
+
+/**
+ * The maker is always a tag — it is what the storefront's brand filter reads.
+ * The drop sheet sends its own tag list, which never carried it: DROP 188 and
+ * 189 went live with no brand tags at all.
+ */
+function withBrandTag(tags: string[], originalBrand?: string | null): string[] {
+  const b = originalBrand?.trim();
+  if (!b || tags.some((t) => t.toLowerCase() === b.toLowerCase())) return tags;
+  const hideAt = tags.indexOf("hide");
+  return hideAt >= 0 ? [...tags.slice(0, hideAt), b, ...tags.slice(hideAt)] : [...tags, b];
 }
 
 /** Shopify tags: the drop, the original brand, and the storefront's own flags. */
@@ -229,6 +249,13 @@ export async function createVintageItems(
   items: VintageItemInput[],
   opts: { dryRun?: boolean } = {}
 ): Promise<CreateVintageResult> {
+  // One spelling per size, whatever the client sent (vintage-size.ts).
+  items = items.map((i) => ({
+    ...i,
+    taggedSize: normalizeVintageSize(i.taggedSize) || null,
+    approxSize: normalizeVintageSize(i.approxSize) || null,
+    composition: i.composition?.trim() || null,
+  }));
   const problems = validateVintageItems(items);
   if (problems.length)
     throw new VintageError(
@@ -342,9 +369,13 @@ export async function createVintageItems(
       vendor: VINTAGE_BRAND_NAME,
       productType: i.category.trim(),
       countryOfOrigin: VINTAGE_CUSTOMS.countryOfOrigin,
-      tags: i.tags?.length ? i.tags.map((t) => t.trim()).filter(Boolean) : vintageTags(drop, i.originalBrand),
+      tags: withBrandTag(
+        i.tags?.length ? i.tags.map((t) => t.trim()).filter(Boolean) : vintageTags(drop, i.originalBrand),
+        i.originalBrand
+      ),
       fullDescription: vintagePlainDescription(i),
       shortDescription: i.description.trim(),
+      fiberCompositionOverride: i.composition?.trim() || null,
     });
 
     variantRows.push({
@@ -468,6 +499,7 @@ export function bodyForDetail(d: {
   waist: string | null;
   frontRise: string | null;
   inseam: string | null;
+  composition?: string | null;
 }): string {
   return buildVintageBody(d);
 }

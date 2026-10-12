@@ -40,6 +40,12 @@ export interface VintageBodyInput {
   waist?: string | number | null;
   frontRise?: string | number | null;
   inseam?: string | number | null;
+  /**
+   * Fibre composition, e.g. "100% cotton". Added as one more line under the
+   * measurements, and only when set — a garment without one gets the
+   * template byte for byte as before.
+   */
+  composition?: string | null;
 }
 
 /** Which of the three templates this garment takes. */
@@ -74,6 +80,10 @@ function esc(s: string): string {
 
 const cm = (v: unknown) => `${String(v ?? "").trim()} cm`;
 
+/** The composition line, inside the measurements paragraph, or nothing. */
+const compositionLine = (c?: string | null) =>
+  c?.trim() ? `<br><strong>Composition </strong>${esc(c.trim())}` : "";
+
 /** Build the Shopify body HTML. */
 export function buildVintageBody(i: VintageBodyInput): string {
   const shape = vintageBodyShape(i);
@@ -83,7 +93,7 @@ export function buildVintageBody(i: VintageBodyInput): string {
     return (
       intro +
       `<p><strong>Chest width </strong>${cm(i.chestWidth)}<br>` +
-      `<strong>Front Length </strong>${cm(i.frontLength)}</p>` +
+      `<strong>Front Length </strong>${cm(i.frontLength)}${compositionLine(i.composition)}</p>` +
       HOT_TIP
     );
 
@@ -92,7 +102,7 @@ export function buildVintageBody(i: VintageBodyInput): string {
       intro +
       `<p><strong>Waist </strong>${cm(i.waist)}<br>` +
       `<strong>Front rise </strong>${cm(i.frontRise)}<br>` +
-      `<strong>Inseam Length </strong>${cm(i.inseam)}</p>` +
+      `<strong>Inseam Length </strong>${cm(i.inseam)}${compositionLine(i.composition)}</p>` +
       HOT_TIP
     );
 
@@ -102,7 +112,7 @@ export function buildVintageBody(i: VintageBodyInput): string {
     `<strong>Tagged size: </strong>${esc(String(i.taggedSize ?? "").trim())}<br>` +
     `<strong>Waist </strong>${cm(i.waist)}<br>` +
     `<strong>Front rise </strong>${cm(i.frontRise)}<br>` +
-    `<strong>Inseam Length </strong>${cm(i.inseam)}</p>` +
+    `<strong>Inseam Length </strong>${cm(i.inseam)}${compositionLine(i.composition)}</p>` +
     JEANS_NOTE
   );
 }

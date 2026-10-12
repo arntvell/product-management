@@ -34,6 +34,7 @@ export async function GET(
       tags: true,
       productType: true,
       vintage: true,
+      fiberCompositionOverride: true,
       publications: { select: { channel: true, published: true, externalId: true } },
       media: { orderBy: { position: "asc" }, select: { url: true, position: true, shopifyMediaId: true } },
       variants: { select: { variantSku: true, barcode: true, sizeLabel: true } },
@@ -65,6 +66,7 @@ export async function GET(
         cost: cost?.amount?.toString() ?? null,
         photos: c.media.map((m) => ({ url: m.url, position: m.position, pushed: !!m.shopifyMediaId })),
         detail: c.vintage,
+        composition: c.fiberCompositionOverride,
         // What is left to do, which is the reason to load a drop at all.
         onLoom: !!loom?.published,
         onShopify: !!shopify?.externalId,

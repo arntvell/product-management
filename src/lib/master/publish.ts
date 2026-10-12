@@ -249,7 +249,12 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
       status: cw.status,
       tags,
       ...(isVintage && cw.vintage
-        ? { descriptionHtml: buildVintageBody(cw.vintage) }
+        ? {
+            descriptionHtml: buildVintageBody({
+              ...cw.vintage,
+              composition: cw.fiberCompositionOverride,
+            }),
+          }
         : {}),
     },
     metafields: mf,
