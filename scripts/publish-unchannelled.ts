@@ -16,6 +16,12 @@
 //   vintage            hidden until its drop is revealed; reveal publishes it
 //   hide / rocket-hide tagged as hidden by someone — not ours to undo
 //   ARCHIVED           off sale
+//   (Caveat: Shopify reports a DRAFT as unpublished on every channel even
+//   once it has been added to them, so drafts stay in this list after
+//   --apply. Only an ACTIVE product's channels can be read back here; for a
+//   draft, check "Sales channels" on the product in Shopify admin.)
+//
+// Also left alone:
 //   not made by Origo  a product that existed in Shopify before Origo knew of
 //                      it (old drafts made by hand, imports) — Origo only
 //                      linked it, and whoever left it a draft off the
@@ -114,6 +120,13 @@ async function main() {
   console.log();
   for (const p of todo.sort((a, b) => a.vendor.localeCompare(b.vendor) || a.title.localeCompare(b.title)))
     console.log(line(p));
+
+  const drafts = todo.filter((p) => p.status === "DRAFT").length;
+  if (drafts)
+    console.log(
+      `\n${drafts} of these are drafts. Shopify reads every draft back as unpublished, so they ` +
+        `stay listed here even after --apply — check one's Sales channels in Shopify admin.`
+    );
 
   if (!apply) {
     console.log(`\nNothing written. Re-run with --apply to publish these ${todo.length}.`);
