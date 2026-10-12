@@ -124,6 +124,7 @@ export const NAV_SECTIONS: NavSection[] = [
     // the same.
     items: [
       { href: "/", label: "Products", icon: Package },
+      { href: "/collections", label: "Collections", icon: Layers },
       { href: "/groups", label: "Groups", icon: Boxes },
       { href: "/media", label: "Media", icon: Image },
       { href: "/models", label: "Models", icon: User },

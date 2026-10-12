@@ -114,8 +114,8 @@ const PAGE_RULES: Array<[RegExp, Permission]> = [
   [/^\/catalog\/(publishing|variants|drops)(\/|$)/, "catalog"],
   [/^\/catalog\/colorways\/[^/]+\/media(\/|$)/, "catalog"],
   // The original Shopify screens write to the live store directly.
-  [/^\/(groups|media|models)?$/, "catalog"],
-  [/^\/(groups|media|models)\//, "catalog"],
+  [/^\/(groups|media|models|collections)?$/, "catalog"],
+  [/^\/(groups|media|models|collections)\//, "catalog"],
 ];
 
 /** What opening a page needs. Everything not listed is readable by every role. */
