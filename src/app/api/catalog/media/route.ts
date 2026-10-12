@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server";
-import { createBlobMedia, reorderMedia } from "@/lib/master/media";
+import { prisma } from "@/lib/db";
+import { createBlobMedia, listColorwayMedia, reorderMedia } from "@/lib/master/media";
 
 export const dynamic = "force-dynamic";
+
+// GET /api/catalog/media?colorwayId= — one product's images, for the media
+// panel the bulk editors open in place.
+export async function GET(req: Request) {
+  const colorwayId = new URL(req.url).searchParams.get("colorwayId");
+  if (!colorwayId) return NextResponse.json({ error: "colorwayId required" }, { status: 400 });
+  const cw = await prisma.colorway.findUnique({
+    where: { id: colorwayId },
+    select: { id: true, name: true, styleId: true, colorwaySku: true, style: { select: { styleName: true } } },
+  });
+  if (!cw) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+  return NextResponse.json({ colorway: cw, media: await listColorwayMedia(colorwayId) });
+}
 
 // POST /api/catalog/media — record an uploaded blob as a MediaAsset.
 export async function POST(req: Request) {

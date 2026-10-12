@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   UsersRound,
+  Images,
   ArrowRightLeft,
   BadgeCheck,
   Barcode,
@@ -62,6 +63,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/catalog/collections", label: "Collections", icon: Layers },
       { href: "/catalog/drops", label: "Drops", icon: CalendarRange },
       { href: "/catalog/vintage", label: "Vintage drops", icon: CalendarRange },
+      { href: "/catalog/media", label: "Media", icon: Images },
       // The catalogue is two jobs, so it is two destinations.
       //
       // Livid's own production is seasonal: it arrives through Threadflow, moves

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { upload } from "@vercel/blob/client";
 import {
@@ -21,6 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { catalogImageSrc } from "@/lib/catalog-image";
 import { cn } from "@/lib/utils";
+import { backLabel, withFrom } from "@/lib/back-link";
 
 export type MediaRole = "GALLERY" | "FLAT" | "MEN" | "WOMEN" | "SWATCH";
 
@@ -53,13 +54,33 @@ export function MediaManager({
   colorwayName,
   styleId,
   initialMedia,
+  from = null,
+  embedded = false,
+  onChanged,
 }: {
   colorwayId: string;
   colorwayName: string;
   styleId: string;
   initialMedia: MediaItem[];
+  /** The page the product was opened from — kept on the way back. */
+  from?: string | null;
+  /** Inside a side panel: no page chrome, no back links. */
+  embedded?: boolean;
+  /** Told the new image list after every change, so a grid can update its count. */
+  onChanged?: (items: MediaItem[]) => void;
 }) {
   const [items, setItems] = useState<MediaItem[]>(initialMedia);
+  // Tell an embedding grid about every change, so its Media count keeps up.
+  const onChangedRef = useRef(onChanged);
+  onChangedRef.current = onChanged;
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    onChangedRef.current?.(items);
+  }, [items]);
   const [uploading, setUploading] = useState(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -160,14 +181,18 @@ export function MediaManager({
   const externalCount = items.filter((i) => i.source !== "BLOB").length;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <a
-        href={`/catalog/colorways/${colorwayId}`}
-        className="text-fine text-muted-foreground underline underline-offset-4"
-      >
-        ← {colorwayName}
-      </a>
-      <h1 className="mt-1 text-page">Media</h1>
+    <div className={embedded ? "" : "mx-auto max-w-4xl px-6 py-10"}>
+      {embedded ? null : (
+        <>
+          <a
+            href={withFrom(`/catalog/colorways/${colorwayId}`, from)}
+            className="text-fine text-muted-foreground underline underline-offset-4"
+          >
+            ← {colorwayName}
+          </a>
+          <h1 className="mt-1 text-page">Media</h1>
+        </>
+      )}
 
       {/* Dropzone */}
       <div
@@ -215,12 +240,14 @@ export function MediaManager({
         <p className="mt-6 text-body text-muted-foreground">No media yet.</p>
       )}
 
-      <a
-        href={`/catalog/styles/${styleId}`}
-        className="mt-8 inline-block text-body text-muted-foreground underline underline-offset-4"
-      >
-        Back to style
-      </a>
+      {embedded ? null : (
+        <a
+          href={from ?? `/catalog/styles/${styleId}`}
+          className="mt-8 inline-block text-body text-muted-foreground underline underline-offset-4"
+        >
+          {from ? `Back to ${backLabel(from)}` : "Back to style"}
+        </a>
+      )}
     </div>
   );
 }
