@@ -18,8 +18,9 @@ export default async function UsersPage() {
     <main className="mx-auto max-w-4xl px-6 py-8">
       <h1 className="text-page">Users</h1>
       <p className="mt-1 text-body text-muted-foreground">
-        Who may use Origo, and as what. Staff sign in with Google on @livid.no; anyone else
-        with a code emailed to their address. Only the addresses listed here get in.
+        Who may use Origo, and as what. Adding someone emails them an invitation; they sign in
+        with Google (livid.no) or a code sent to their address. Only the addresses listed here
+        get in.
         {clerkEnabled()
           ? ""
           : " Sign-in is not switched on yet — the shared password still applies until Clerk is configured."}

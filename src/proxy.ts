@@ -101,7 +101,7 @@ function deny(request: NextRequest, reason: string) {
 // Clerk mode
 // ---------------------------------------------------------------------------
 
-const PUBLIC_PATHS = [/^\/sign-in(\/|$)/, /^\/no-access$/];
+const PUBLIC_PATHS = [/^\/sign-in(\/|$)/, /^\/sign-up(\/|$)/, /^\/no-access$/];
 
 const clerkGate = clerkMiddleware(async (auth, request) => {
   const path = request.nextUrl.pathname;

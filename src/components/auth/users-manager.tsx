@@ -43,7 +43,10 @@ export function UsersManager({ initial }: { initial: Row[] }) {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? "Failed");
-      toast.success(ok);
+      // Adding someone, or resending, also sends their Clerk invitation.
+      const inv = json.invitation as { sent: boolean; reason?: string } | undefined;
+      if (inv && !inv.sent) toast.warning(`${ok} — no invitation sent: ${inv.reason}`);
+      else toast.success(inv?.sent ? `${ok} — invitation emailed` : ok);
       router.refresh();
       return true;
     } catch (err) {
@@ -111,7 +114,7 @@ export function UsersManager({ initial }: { initial: Row[] }) {
                   ? u.lastSeenAt
                     ? `last seen ${new Date(u.lastSeenAt).toLocaleString("nb-NO")}`
                     : "signed in"
-                  : "not signed in yet"}
+                  : "invited — not signed in yet"}
               </div>
             </div>
             <select
@@ -126,6 +129,16 @@ export function UsersManager({ initial }: { initial: Row[] }) {
                 </option>
               ))}
             </select>
+            {!u.clerkUserId && u.active ? (
+              <button
+                className="text-fine underline underline-offset-4"
+                disabled={busy}
+                onClick={() => void send(`/api/users/${u.id}/invite`, "POST", {}, `${u.email}`)}
+                title="Email the Clerk invitation again — the old link stops working"
+              >
+                Resend invitation
+              </button>
+            ) : null}
             <button
               className="text-fine underline underline-offset-4"
               disabled={busy}
