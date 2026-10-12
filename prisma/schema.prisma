@@ -559,6 +559,40 @@ model VintageSourceProduct {
 // Keyed by the drop label as the entries carry it ("DROP 187"), because that
 // is the only identity a drop has — there is no drop entity, just a string on
 // SeasonEntry.
+// A vintage drop being written, before any of it is in the master.
+//
+// Saved in Origo rather than one browser, so a drop can be started on one
+// machine and finished on another, and several drops can be in hand at once.
+// Each row carries the item number it currently holds. Numbers are NOT
+// chosen per row: drafts are packed in order from one anchor, so growing an
+// earlier drop renumbers the drafts after it (src/lib/vintage/drafts.ts).
+// Created garments leave the draft for the master.
+model VintageDropDraft {
+  id       String @id @default(cuid())
+  drop     String @unique
+  /// [{ rowId, itemNumber, include, photos, title, … }] — see DraftRow.
+  rows     Json
+  /// Compare-and-swap for autosave: a save names the revision it was based on.
+  revision Int    @default(0)
+  /// Set when a repack moved this drop's numbers, until someone has seen it.
+  notice   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// The makers a vintage garment can be tagged with (VintageDetail.originalBrand,
+// and the Shopify tag). Maintained by the vintage team; seeded from every
+// brand tag already on a vintage product.
+model VintageBrand {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  archived Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model VintageDropReveal {
   drop String @id
 

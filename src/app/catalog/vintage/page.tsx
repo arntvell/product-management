@@ -6,25 +6,16 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * The brand list, taken from what vintage has actually been tagged with.
- *
- * Not a table to maintain: every vintage garment's Origio brand is "Vintage",
- * and the maker — Carhartt, Levi's, "Other / Unbranded" — travels as a Shopify
- * tag. Reading the distinct tags back makes the list self-maintaining and, more
- * usefully, makes it a spelling authority: the catalogue currently holds both
- * "Looney Tunes" and "Loony Toons" because nothing ever offered the first one
- * back.
+ * The makers the Brand field offers — the vintage team's own list, kept at
+ * /catalog/vintage/brands (seeded from every brand tag already in use).
  */
 async function brandList(): Promise<string[]> {
-  const rows = await prisma.$queryRawUnsafe<{ tag: string; n: bigint }[]>(
-    `select t as tag, count(*) as n
-       from "Colorway" c, unnest(c.tags) as t
-      where c."colorwaySku" like 'VN-ONLN-%'
-        and t !~ '^DROP' and t not in ('rocket-hide','hide','Vintage')
-      group by 1 having count(*) > 1
-      order by count(*) desc`
-  );
-  return rows.map((r) => r.tag);
+  const rows = await prisma.vintageBrand.findMany({
+    where: { archived: false },
+    orderBy: { name: "asc" },
+    select: { name: true },
+  });
+  return rows.map((r) => r.name);
 }
 
 /**
