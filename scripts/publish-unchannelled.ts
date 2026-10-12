@@ -16,8 +16,10 @@
 //   vintage            hidden until its drop is revealed; reveal publishes it
 //   hide / rocket-hide tagged as hidden by someone — not ours to undo
 //   ARCHIVED           off sale
-//   imported products  came from Shopify as they were; --include-imported
-//                      lists them too
+//   not made by Origo  a product that existed in Shopify before Origo knew of
+//                      it (old drafts made by hand, imports) — Origo only
+//                      linked it, and whoever left it a draft off the
+//                      channels may have meant to
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.ts";
@@ -30,6 +32,7 @@ const NODES = `
       ... on Product {
         id
         title
+        createdAt
         status
         vendor
         tags
@@ -42,6 +45,7 @@ const NODES = `
 type P = {
   id: string;
   title: string;
+  createdAt: string;
   status: string;
   vendor: string;
   tags: string[];
@@ -50,7 +54,6 @@ type P = {
 
 async function main() {
   const apply = process.argv.includes("--apply");
-  const includeImported = process.argv.includes("--include-imported");
   const prisma = new PrismaClient({
     adapter: new PrismaPg({ connectionString: process.env.ORIGO_POSTGRES_URL_NON_POOLING }),
   });
@@ -59,13 +62,14 @@ async function main() {
     where: {
       channel: "SHOPIFY",
       externalId: { startsWith: "gid://shopify/Product/" },
-      ...(includeImported ? {} : { colorway: { source: { not: "SHOPIFY_IMPORT" } } }),
+      // Origo made it: pushed from Origo at least once…
+      lastPushedAt: { not: null },
     },
-    select: { externalId: true, colorway: { select: { colorwaySku: true, source: true } } },
+    select: { externalId: true, colorway: { select: { colorwaySku: true, createdAt: true } } },
   });
   const skuByGid = new Map(pubs.map((p) => [p.externalId!, p.colorway]));
   const gids = [...skuByGid.keys()];
-  console.log(`${gids.length} Shopify product(s) linked in Origo${includeImported ? "" : " (imports excluded)"}\n`);
+  console.log(`${gids.length} Shopify product(s) pushed from Origo at least once\n`);
 
   const products: P[] = [];
   let missing = 0;
@@ -78,10 +82,19 @@ async function main() {
   }
 
   const unchannelled = products.filter((p) => !p.resourcePublicationsV2.nodes.some((n) => n.isPublished));
-  const skip: Record<string, P[]> = { vintage: [], "hide-tagged": [], archived: [] };
+  const skip: Record<string, P[]> = {
+    "existed in Shopify before Origo": [],
+    vintage: [],
+    "hide-tagged": [],
+    archived: [],
+  };
   const todo: P[] = [];
   for (const p of unchannelled) {
-    if (/vintage/i.test(p.vendor)) skip.vintage.push(p);
+    // …and the Shopify product is younger than Origo's record of it, so the
+    // push created it rather than updated something already there.
+    const origoSince = skuByGid.get(p.id)?.createdAt;
+    if (!origoSince || new Date(p.createdAt) < origoSince) skip["existed in Shopify before Origo"].push(p);
+    else if (/vintage/i.test(p.vendor)) skip.vintage.push(p);
     else if (p.tags.some((t) => (HIDE_TAGS as readonly string[]).includes(t))) skip["hide-tagged"].push(p);
     else if (p.status === "ARCHIVED") skip.archived.push(p);
     else todo.push(p);
