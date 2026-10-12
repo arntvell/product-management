@@ -115,10 +115,16 @@ export async function preflightPayload(
     allSkus.push(cw.colorwaySku);
     for (const v of cw.variants) allSkus.push(v.variantSku);
   }
-  for (const sku of allSkus) {
+  // A new style may share its colourway's code — the house shape for a style
+  // with one colourway (every store-vintage bucket: EXT-VN-AQSCT is both).
+  // Style and colourway are different tables, so that is not a collision.
+  const sharedWithStyle =
+    p.style?.mode === "new" && p.colorways.length === 1 &&
+    normalizeSku(p.style.styleSku) === normalizeSku(p.colorways[0].colorwaySku);
+  for (const [i, sku] of allSkus.entries()) {
     const n = normalizeSku(sku);
     if (!n) continue;
-    if (seen.has(n)) errors.push(`${sku} is listed twice in this batch.`);
+    if (seen.has(n) && !(sharedWithStyle && i === 1)) errors.push(`${sku} is listed twice in this batch.`);
     seen.set(n, sku);
   }
 
