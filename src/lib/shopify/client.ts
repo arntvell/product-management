@@ -1,6 +1,11 @@
 import type { GraphQLResponse } from "./types";
 
-const SHOPIFY_API_VERSION = "2025-10";
+// 2026-07 since 2026-10-12. 2025-10 silently left 15 of the store's 200
+// collections out (Men FW26, Men/Women clothing, the brand collections…) —
+// from the collections editor and from every collection picker. Every
+// GraphQL document in src/ was validated against the 2026-07 schema before
+// the switch, and the selective-update previews compared identical on both.
+const SHOPIFY_API_VERSION = "2026-07";
 const MAX_RETRIES = 3;
 const THROTTLE_WAIT_MS = 1000;
 
@@ -17,12 +22,7 @@ function getConfig() {
   return { store, token };
 }
 
-/**
- * One Admin GraphQL call. `apiVersion` overrides the app-wide version for a
- * caller that needs a newer one — the collections editor does: 2025-10 leaves
- * 15 of the store's collections out entirely (Men FW26 among them), while
- * 2026-07 returns all of them. Moving every caller is a separate change.
- */
+/** One Admin GraphQL call. `apiVersion` overrides the app-wide version. */
 export async function shopifyGraphQL<T>(
   query: string,
   variables?: Record<string, unknown>,

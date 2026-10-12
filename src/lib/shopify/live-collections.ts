@@ -8,15 +8,7 @@
 // here without a code change. SEO title and description are collection fields
 // (`seo`), which Shopify stores as global.title_tag / description_tag.
 
-import { shopifyGraphQL as gql } from "./client";
-
-/**
- * Newer than the app-wide 2025-10, on purpose: that version omits 15 of the
- * store's collections (Men FW26, Men/Women clothing, the brand collections…)
- * — verified 2026-10-12: 185 collections on 2025-10, 200 on 2026-07.
- */
-const API_VERSION = "2026-07";
-const shopifyGraphQL = <T,>(q: string, v?: Record<string, unknown>) => gql<T>(q, v, { apiVersion: API_VERSION });
+import { shopifyGraphQL } from "./client";
 
 export interface CollectionMetafieldDef {
   /** "custom.show-image" */
@@ -164,8 +156,9 @@ export interface CollectionResult {
   errors: string[];
 }
 
-const UPDATE = `mutation($input: CollectionInput!) {
-  collectionUpdate(input: $input) { collection { id } userErrors { field message } }
+// `collection:`, not the deprecated `input:` (both accepted on 2026-07).
+const UPDATE = `mutation($input: CollectionUpdateInput!) {
+  collectionUpdate(collection: $input) { collection { id } userErrors { field message } }
 }`;
 const MF_SET = `mutation($m: [MetafieldsSetInput!]!) {
   metafieldsSet(metafields: $m) { userErrors { field message } }
