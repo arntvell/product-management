@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { safeFrom } from "@/lib/back-link";
 import { getColorwayForEdit, listColorwayOptions } from "@/lib/master/queries";
 import {
   ColorwayEditor,
@@ -19,10 +20,13 @@ export const dynamic = "force-dynamic";
 
 export default async function ColorwayEditPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const from = safeFrom((await searchParams).from);
   const [cw, colorwayOptions] = await Promise.all([
     getColorwayForEdit(id),
     listColorwayOptions(),
@@ -92,6 +96,7 @@ export default async function ColorwayEditPage({
         styleColorwayCount={cw.style._count.colorways}
         initialPrices={seasonPrices}
         targetedChannels={targetedChannels}
+        from={from}
       />
       <ReferencesPanel
         colorwayId={cw.id}

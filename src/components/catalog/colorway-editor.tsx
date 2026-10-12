@@ -18,6 +18,7 @@ import {
   type ProductStatusValue,
 } from "@/lib/master/fields";
 import { channelProductTitle } from "@/lib/master/channel-title";
+import { backLabel, withFrom } from "@/lib/back-link";
 
 type Values = Record<string, string>;
 type Overrides = Record<ChannelKey, Values>;
@@ -48,6 +49,8 @@ export interface ColorwayEditorProps {
   initialPrices: SeasonPrice[];
   /** Channels this product is actually on — which systems a save has to reach. */
   targetedChannels: string[];
+  /** The page this was opened from (?from=), which "back" returns to. */
+  from?: string | null;
 }
 
 export function ColorwayEditor({
@@ -60,6 +63,7 @@ export function ColorwayEditor({
   styleColorwayCount,
   initialPrices,
   targetedChannels,
+  from = null,
 }: ColorwayEditorProps) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -74,7 +78,7 @@ export function ColorwayEditor({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `Delete failed (${res.status})`);
       toast.success("Product removed");
-      router.push("/catalog/styles");
+      router.push(from ?? "/catalog/styles");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
       setDeleting(false);
@@ -178,19 +182,26 @@ export function ColorwayEditor({
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <a
-        href={`/catalog/styles/${header.styleId}`}
-        className="text-fine text-muted-foreground underline underline-offset-4"
-      >
-        ← {header.styleName}
-      </a>
+      <div className="flex flex-wrap gap-x-4 text-fine text-muted-foreground">
+        {from ? (
+          <a href={from} className="underline underline-offset-4">
+            ← {backLabel(from)}
+          </a>
+        ) : null}
+        <a
+          href={withFrom(`/catalog/styles/${header.styleId}`, from)}
+          className="underline underline-offset-4"
+        >
+          {from ? `Style: ${header.styleName}` : `← ${header.styleName}`}
+        </a>
+      </div>
       <div className="mt-2 flex flex-wrap items-baseline gap-x-3">
         <h1 className="text-page">{header.name}</h1>
         <span className="font-mono text-body text-muted-foreground">
           {header.colorwaySku}
         </span>
         <a
-          href={`/catalog/colorways/${colorwayId}/media`}
+          href={withFrom(`/catalog/colorways/${colorwayId}/media`, from)}
           className="text-body underline underline-offset-4"
         >
           Manage media →
