@@ -230,7 +230,9 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
     externalId: shopifyPub?.externalId ?? null,
     unisex,
     product: {
-      title: channelProductTitle(cw),
+      // A Shopify-only title wins when one is set; Sitoo and Loom never see it
+      // (they call channelProductTitle / cw.name themselves).
+      title: resolveShopify(cw, "title", null)?.trim() || channelProductTitle(cw),
       // Vintage handles are `<item number>-vintage`, not the SKU: that is the
       // URL all 2,086 live products already have, and a handle is an address.
       // Pushing `vn-onln-13644` at a product living at `13644-vintage` would

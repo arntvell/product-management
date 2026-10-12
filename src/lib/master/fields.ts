@@ -77,7 +77,24 @@ export const OVERRIDE_FIELDS: OverrideField[] = [
   })),
 ];
 
-export const OVERRIDE_FIELD_KEYS = OVERRIDE_FIELDS.map((f) => f.key);
+/**
+ * Overrides that exist on one channel only, edited in their own place rather
+ * than in the layer list. `title` is the Shopify product title: blank means the
+ * composed "<style> <name>", which Sitoo (and Loom's name) always keep.
+ */
+export const SHOPIFY_ONLY_OVERRIDE_KEYS = ["title"] as const;
+
+/** Every field a ChannelContent row may hold — what a save writes or clears. */
+export const OVERRIDE_FIELD_KEYS: string[] = [
+  ...OVERRIDE_FIELDS.map((f) => f.key),
+  ...SHOPIFY_ONLY_OVERRIDE_KEYS,
+];
+
+/** Whether `field` may be overridden on `channel`. */
+export function overridableOn(channel: string, field: string): boolean {
+  if ((SHOPIFY_ONLY_OVERRIDE_KEYS as readonly string[]).includes(field)) return channel === "SHOPIFY";
+  return OVERRIDE_FIELD_KEYS.includes(field);
+}
 
 export const PRODUCT_STATUSES = ["ACTIVE", "DRAFT", "ARCHIVED"] as const;
 export type ProductStatusValue = (typeof PRODUCT_STATUSES)[number];

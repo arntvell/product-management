@@ -1954,25 +1954,51 @@ export function CatalogGrid({
                     />
                   </div>
                   ) : null}
-                  {/* Derived, never editable: what channelProductTitle will send. */}
-                  {shown("title") ? (
-                  <div
-                    style={place("title", FIXED_WIDTH["title"], isSel)}
-                    className="flex shrink-0 items-center border-l px-2 text-fine text-muted-foreground"
-                    title="What Shopify and the till will show. Loom is sent the name on its own."
-                  >
-                    <span className="truncate">
-                      {channelProductTitle({
-                        name: cellValue(row, "BASE", "name"),
-                        style: {
-                          styleName: row.ownsStyle
-                            ? cellValue(row, "BASE", "name")
-                            : row.styleName,
-                        },
-                      })}
-                    </span>
-                  </div>
-                  ) : null}
+                  {/* The composed title — what the till shows. In the Shopify
+                      view it becomes editable: a Shopify-only title, blank
+                      meaning "same as the till". */}
+                  {shown("title") ? (() => {
+                    const composed = channelProductTitle({
+                      name: cellValue(row, "BASE", "name"),
+                      style: {
+                        styleName: row.ownsStyle ? cellValue(row, "BASE", "name") : row.styleName,
+                      },
+                    });
+                    return layer === "SHOPIFY" ? (
+                      <div
+                        style={place("title", FIXED_WIDTH["title"], isSel)}
+                        className={cn(
+                          "shrink-0 border-l",
+                          dirty.has(dkey(row.id, "SHOPIFY", "title")) && dirtyCell
+                        )}
+                      >
+                        <input
+                          value={cellValue(row, "SHOPIFY", "title")}
+                          placeholder={composed}
+                          onChange={(e) => setCell(row, "title", e.target.value, "SHOPIFY")}
+                          title="Shopify-only title. Empty uses the till's title."
+                          className="h-full w-full bg-transparent px-2 text-fine outline-none placeholder:text-muted-foreground/70 focus:bg-background"
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        style={place("title", FIXED_WIDTH["title"], isSel)}
+                        className="flex shrink-0 items-center border-l px-2 text-fine text-muted-foreground"
+                        title={
+                          row.overrides.SHOPIFY?.title
+                            ? `The till shows this; Shopify shows "${row.overrides.SHOPIFY.title}". Loom gets the name alone.`
+                            : "What Shopify and the till will show. Loom is sent the name on its own."
+                        }
+                      >
+                        <span className="truncate">{composed}</span>
+                        {row.overrides.SHOPIFY?.title ? (
+                          <span className="ml-1 shrink-0 text-ink" aria-label="Shopify has its own title">
+                            *
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })() : null}
                   {shown("channels") ? (
                   <div
                     style={place("channels", FIXED_WIDTH["channels"], isSel)}

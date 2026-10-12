@@ -241,7 +241,7 @@ export function ColorwayEditor({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Title on Shopify and the till</Label>
+          <Label>Title on the till (Sitoo)</Label>
           <p className="border bg-muted/40 px-3 py-2 font-mono text-body">
             {composedTitle || "—"}
           </p>
@@ -249,6 +249,29 @@ export function ColorwayEditor({
             Composed from the style and the product name. Loom is sent the
             product name on its own — it nests style → colour → size, so the
             style is already one level up.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label>Title on Shopify</Label>
+            <span
+              className={cn(
+                "text-fine uppercase tracking-wide",
+                overrides.SHOPIFY?.title?.trim() ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {overrides.SHOPIFY?.title?.trim() ? "Own title" : "Same as the till"}
+            </span>
+          </div>
+          <Input
+            value={overrides.SHOPIFY?.title ?? ""}
+            placeholder={composedTitle || "—"}
+            onChange={(e) => setOverride("SHOPIFY", "title", e.target.value)}
+          />
+          <p className="text-fine text-muted-foreground">
+            What the webshop shows customers. Leave it empty to use the till&rsquo;s
+            title; anything typed here goes to Shopify only.
           </p>
         </div>
 

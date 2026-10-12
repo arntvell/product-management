@@ -6,6 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import {
   CHANNELS,
   OVERRIDE_FIELD_KEYS,
+  overridableOn,
   SPLIT_FIELD_KEYS,
   type ChannelKey,
   type ProductStatusValue,
@@ -262,7 +263,8 @@ export async function applyBulkChanges(
         }
         if (OWNED_BASE_FIELDS.has(ch.field)) ownerFields.push(ch.field);
       } else {
-        // Channel override for a split text field.
+        // Channel override for a split text field, or the Shopify-only title.
+        if (!overridableOn(ch.layer, ch.field)) continue;
         const value = norm(typeof ch.value === "string" ? ch.value : null);
         if (value !== null) {
           ops.push(
@@ -453,6 +455,7 @@ export async function updateColorway(
   for (const channel of CHANNELS) {
     const chOverrides = input.overrides[channel] ?? {};
     for (const field of OVERRIDE_FIELD_KEYS) {
+      if (!overridableOn(channel, field)) continue;
       const value = norm(chOverrides[field]);
       if (value !== null) {
         ops.push(
