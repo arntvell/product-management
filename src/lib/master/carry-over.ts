@@ -14,6 +14,7 @@
 // `carryPrices` and the same action fills the gap it just reported.
 import { prisma } from "@/lib/db";
 import { runCarryPrices } from "./carry-prices";
+import { currentUserId } from "@/lib/auth/session";
 
 export interface CarryOverPreview {
   seasonCode: string;
@@ -110,6 +111,8 @@ export async function applyCarryOver(
   seasonCode: string,
   opts: { carryPrices?: boolean } = {}
 ): Promise<CarryOverResult> {
+  // Who made this edit, onto each field it locks. Null for scripts and syncs.
+  const by = await currentUserId();
   const preview = await previewCarryOver(colorwayIds, seasonCode);
   const season = await resolveSeason(seasonCode);
   const ids = [...new Set(colorwayIds)].filter(Boolean);
@@ -137,8 +140,9 @@ export async function applyCarryOver(
         field: "origin",
         owner: "MANUAL",
         lockedAt: new Date(),
+        editedByUserId: by,
       },
-      update: { owner: "MANUAL", lockedAt: new Date() },
+      update: { owner: "MANUAL", lockedAt: new Date(), editedByUserId: by },
     });
     added++;
   }

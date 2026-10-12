@@ -35,6 +35,7 @@ import type { Channel } from "@/generated/prisma/enums";
 import { declareChannel } from "./channel-membership";
 import { channelProductTitle } from "./channel-title";
 import { sendChannelIdsToLoom } from "./loom-follow-up";
+import { currentUserId } from "@/lib/auth/session";
 
 export type PushChannel = "SHOPIFY" | "LOOM" | "SITOO";
 
@@ -208,6 +209,8 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
       allowIncomplete: Boolean(input.allowIncomplete),
       note: input.note ?? null,
       draftId: input.draftId ?? null,
+      // Who started it. Null for scripts and the cron.
+      createdByUserId: await currentUserId(),
       status: "pending",
       items: { create: items },
     },

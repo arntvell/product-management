@@ -87,3 +87,16 @@ export async function vintageOnlyRefusal(colorwayIds: string[]): Promise<string 
     }.`;
   return null;
 }
+
+/**
+ * The signed-in user's id, for recording who changed something. Null outside a
+ * request (scripts, syncs, cron) and in shared-password mode, where there is
+ * no person to name.
+ */
+export async function currentUserId(): Promise<string | null> {
+  try {
+    return (await getSessionUser()).id;
+  } catch {
+    return null;
+  }
+}

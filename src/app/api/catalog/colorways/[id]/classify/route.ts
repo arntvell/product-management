@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { currentUserId } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,8 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Who made this edit, onto each field it locks. Null for scripts and syncs.
+  const by = await currentUserId();
   const { id } = await params;
   let body: {
     isCore?: boolean;
@@ -32,8 +35,8 @@ export async function POST(
       await prisma.colorway.update({ where: { id }, data: { isCore: body.isCore } });
       await prisma.fieldOwner.upsert({
         where: { entityType_entityId_field: { entityType: "colorway", entityId: id, field: "isCore" } },
-        create: { entityType: "colorway", entityId: id, field: "isCore", owner: "MANUAL", lockedAt: new Date() },
-        update: { owner: "MANUAL", lockedAt: new Date() },
+        create: { entityType: "colorway", entityId: id, field: "isCore", owner: "MANUAL", lockedAt: new Date(), editedByUserId: by },
+        update: { owner: "MANUAL", lockedAt: new Date(), editedByUserId: by },
       });
     }
 
@@ -95,8 +98,8 @@ export async function POST(
       });
       await prisma.fieldOwner.upsert({
         where: { entityType_entityId_field: { entityType: "seasonEntry", entityId: entry.id, field: "origin" } },
-        create: { entityType: "seasonEntry", entityId: entry.id, field: "origin", owner: "MANUAL", lockedAt: new Date() },
-        update: { owner: "MANUAL", lockedAt: new Date() },
+        create: { entityType: "seasonEntry", entityId: entry.id, field: "origin", owner: "MANUAL", lockedAt: new Date(), editedByUserId: by },
+        update: { owner: "MANUAL", lockedAt: new Date(), editedByUserId: by },
       });
     }
 

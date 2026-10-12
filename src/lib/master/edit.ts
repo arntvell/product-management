@@ -11,6 +11,7 @@ import {
   type ProductStatusValue,
   type SplitFieldKey,
 } from "./fields";
+import { currentUserId } from "@/lib/auth/session";
 
 /**
  * A refusal, not a fault: the input asked for something this editor will not do.
@@ -129,6 +130,8 @@ const MULTI_REF_FIELDS = new Set<string>([
 export async function applyBulkChanges(
   changes: BulkChange[]
 ): Promise<{ colorways: number; changes: number }> {
+  // Who made this edit, onto each field it locks. Null for scripts and syncs.
+  const by = await currentUserId();
   const byColorway = new Map<string, BulkChange[]>();
   for (const c of changes) {
     const list = byColorway.get(c.colorwayId) ?? [];
@@ -309,8 +312,9 @@ export async function applyBulkChanges(
             field,
             owner: "MANUAL",
             lockedAt: new Date(),
+            editedByUserId: by,
           },
-          update: { owner: "MANUAL", lockedAt: new Date() },
+          update: { owner: "MANUAL", lockedAt: new Date(), editedByUserId: by },
         })
       );
     }
@@ -324,6 +328,8 @@ export async function updateColorway(
   id: string,
   input: UpdateColorwayInput
 ): Promise<void> {
+  // Who made this edit, onto each field it locks. Null for scripts and syncs.
+  const by = await currentUserId();
   const current = await prisma.colorway.findUnique({
     where: { id },
     select: {
@@ -489,8 +495,9 @@ export async function updateColorway(
           field,
           owner: "MANUAL",
           lockedAt: new Date(),
+          editedByUserId: by,
         },
-        update: { owner: "MANUAL", lockedAt: new Date() },
+        update: { owner: "MANUAL", lockedAt: new Date(), editedByUserId: by },
       })
     );
   }

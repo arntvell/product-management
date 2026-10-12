@@ -10,6 +10,7 @@
 // rewrite its siblings.
 import { prisma } from "@/lib/db";
 import type { EditableField } from "./fix-list";
+import { currentUserId } from "@/lib/auth/session";
 
 export type CustomsPatch = Partial<Record<EditableField, string | null>>;
 
@@ -59,6 +60,8 @@ export async function writeCustoms(
   colorwayIds: string[],
   patch: CustomsPatch
 ): Promise<CustomsWriteResult> {
+  // Who made this edit, onto each field it locks. Null for scripts and syncs.
+  const by = await currentUserId();
   const { data, fields } = buildData(patch);
   if (!fields.length || !colorwayIds.length) return { updated: 0, fields: [] };
 
@@ -98,8 +101,9 @@ export async function writeCustoms(
               field,
               owner: "MANUAL",
               lockedAt: now,
+              editedByUserId: by,
             },
-            update: { owner: "MANUAL", lockedAt: now },
+            update: { owner: "MANUAL", lockedAt: now, editedByUserId: by },
           })
         )
       ),
