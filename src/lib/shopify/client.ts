@@ -17,12 +17,19 @@ function getConfig() {
   return { store, token };
 }
 
+/**
+ * One Admin GraphQL call. `apiVersion` overrides the app-wide version for a
+ * caller that needs a newer one — the collections editor does: 2025-10 leaves
+ * 15 of the store's collections out entirely (Men FW26 among them), while
+ * 2026-07 returns all of them. Moving every caller is a separate change.
+ */
 export async function shopifyGraphQL<T>(
   query: string,
-  variables?: Record<string, unknown>
+  variables?: Record<string, unknown>,
+  opts: { apiVersion?: string } = {}
 ): Promise<T> {
   const { store, token } = getConfig();
-  const url = `https://${store}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const url = `https://${store}/admin/api/${opts.apiVersion ?? SHOPIFY_API_VERSION}/graphql.json`;
 
   let lastError: Error | null = null;
 
