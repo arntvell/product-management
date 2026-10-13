@@ -517,7 +517,11 @@ export function toWritableVariantRow(v: SitooVariantRow): SitooVariantRow {
     moneyprice: v.moneyprice,
     moneypriceorg: v.moneypriceorg,
     moneyofferprice: v.moneyofferprice,
-    ...(v.moneypricein !== undefined ? { moneypricein: v.moneypricein } : {}),
+    // Unconditional. The variants PUT answers `400 Missing required field
+    // 'moneypricein'` to an absent one — the schema calls it optional and the
+    // endpoint does not — so a row read back without it must still be written
+    // with it. "0.00" is what Sitoo writes itself when a create omits it.
+    moneypricein: v.moneypricein ?? "0.00",
     barcode: v.barcode,
     ...(v.barcodealiases !== undefined ? { barcodealiases: v.barcodealiases } : {}),
     friendly: v.friendly,

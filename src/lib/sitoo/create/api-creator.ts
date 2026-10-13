@@ -202,7 +202,12 @@ async function createOne(
   const toCreate = input.variants.filter((v) => planned.toCreate.includes(v.sku));
   const payload: SitooProductCreate[] = toCreate.map((v) => ({
     sku: v.sku,
-    title: `${input.title} ${v.sizeLabel}`.trim(),
+    // The master's title, verbatim. Sitoo already carries the size in the
+    // family's `attributes`, and appending it here produced "Midweight knit OS"
+    // in the till — along with the 16 live titles ending ", OS" and " OS" that
+    // sitoo/update.ts had to be careful not to inherit. A size belongs in a
+    // title only for the online-vintage drops, and those are Shopify's.
+    title: input.title,
     // Through money() like every other price field: the master's Decimal
     // prints "230", and Sitoo 400s anything without two decimals.
     ...(input.priceNok ? { moneyprice: money(input.priceNok) } : {}),
@@ -264,7 +269,7 @@ async function createOne(
       active: input.active,
       deliverystatus: existing?.deliverystatus ?? "1",
       activepos: input.activePos,
-      title: `${input.title} ${v.sizeLabel}`.trim(),
+      title: input.title,
       attributes: [v.sizeLabel],
       // All three price fields are required by this endpoint. Defaulting to the
       // retail price rather than "0" matters: moneypriceorg is the struck-through
@@ -273,7 +278,18 @@ async function createOne(
       moneyprice: money(input.priceNok ?? existing?.moneyprice),
       moneypriceorg: money(existing?.moneypriceorg ?? input.priceNok),
       moneyofferprice: money(existing?.moneyofferprice),
-      ...(input.costNok ? { moneypricein: money(input.costNok) } : {}),
+      // ALWAYS SENT, even with no cost price in the master.
+      //
+      // The schema marks it optional and this endpoint does not care:
+      //   400 Missing required field 'moneypricein'
+      // which is how "Midweight knit" failed — a vintage garment with an MSRP
+      // and no COST, so the key was omitted and the whole family PUT was
+      // rejected after its product row had already been created. The documented
+      // rule for this endpoint is that every field is sent or it resets to a
+      // default; it turns out an absent one is a 400 instead.
+      //
+      // money(null) is "0.00", which is what Sitoo itself writes on the create.
+      moneypricein: money(input.costNok ?? existing?.moneypricein),
       // Required on this endpoint. An empty string is how you say "none" —
       // `barcode: null` is rejected with a 400, which updateBarcode already
       // documents for the product endpoint and which holds here too.
