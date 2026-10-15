@@ -450,25 +450,36 @@ const ACCEPTED: MasterOutcome[] = ["fill", "change", "unchanged"];
  * hold, so a row reads "Shopify: 7072… → 7072…" before anything has changed.
  */
 export async function planVariantBarcodeEdits(
-  edits: VariantBarcodeEdit[]
+  edits: VariantBarcodeEdit[],
+  opts: { skipLoom?: boolean } = {}
 ): Promise<VariantBarcodeReport> {
-  return run(edits, { dryRun: true });
+  return run(edits, { dryRun: true, skipLoom: opts.skipLoom ?? false });
 }
 
 /**
  * Write the master, then Shopify and Sitoo. Returns the Loom groups for the
  * caller to push — see the note at the top of the file.
+ *
+ * `skipLoom` leaves Loom out altogether: no scope read, no groups, and every
+ * row's Loom outcome says why. For a barcode that CAME from Loom there is
+ * nothing to tell it — the warehouse typed it there, and the handover asks only
+ * that our feed carry the same value when it next runs, which it now will.
+ * Sending it straight back is a round trip that changes nothing.
  */
 export async function applyVariantBarcodeEdits(
   edits: VariantBarcodeEdit[],
-  opts: { evidence?: string | null } = {}
+  opts: { evidence?: string | null; skipLoom?: boolean } = {}
 ): Promise<VariantBarcodeReport> {
-  return run(edits, { dryRun: false, evidence: opts.evidence ?? null });
+  return run(edits, {
+    dryRun: false,
+    evidence: opts.evidence ?? null,
+    skipLoom: opts.skipLoom ?? false,
+  });
 }
 
 async function run(
   edits: VariantBarcodeEdit[],
-  opts: { dryRun: boolean; evidence?: string | null }
+  opts: { dryRun: boolean; evidence?: string | null; skipLoom?: boolean }
 ): Promise<VariantBarcodeReport> {
   // One edit per SKU; the last one typed wins.
   const bySku = new Map<string, VariantBarcodeEdit>();
@@ -597,12 +608,15 @@ async function run(
     }
   }
 
-  // 3. Loom. Planned here, pushed by the caller.
+  // 3. Loom. Planned here, pushed by the caller — unless the caller has asked
+  //    for it to be left out, in which case nothing here reads or writes Loom.
   const colorwayIds = [...new Set(accepted.map((a) => a.s.colorwayId))];
-  const loom = await loomScope(colorwayIds);
+  const loom = opts.skipLoom
+    ? { groups: [] as LoomGroup[], archived: new Set<string>(), live: new Set<string>() }
+    : await loomScope(colorwayIds);
   report.loomGroups = loom.groups;
   const loomSkipped = new Map<string, string>();
-  if (opts.dryRun && loom.groups.length) {
+  if (!opts.skipLoom && opts.dryRun && loom.groups.length) {
     // Dry-run each group so "not in season" shows before anything is sent.
     try {
       for (const g of loom.groups) {
@@ -635,7 +649,9 @@ async function run(
     };
 
     let loomOutcome: ChannelOutcome = na;
-    if (ok) {
+    if (ok && opts.skipLoom) {
+      loomOutcome = { state: "n/a", note: "not sent — Loom is where this barcode came from" };
+    } else if (ok) {
       if (loom.archived.has(s!.colorwayId)) {
         loomOutcome = { state: "refused", note: "colourway is archived — re-pushing would un-archive it in Loom" };
       } else if (!loom.live.has(s!.colorwayId)) {

@@ -1,17 +1,25 @@
 // Carrying warehouse barcodes out to the channels.
 //
-// The receiver files a barcode in the master and stops there: Shopify and Sitoo
-// writes do not fit inside Loom's 15 s reply budget, and a Loom push needs a
-// person. So the master holds barcodes that the channels do not, and this is the
-// step that closes that gap.
+// The receiver files a barcode in the master and answers Loom inside its 15 s
+// budget. Shopify and Sitoo do not fit in that budget, so this is the step that
+// closes the gap — and since a delivery arriving is not a decision anybody
+// needs to take, it runs on its own straight after the reply (see the receiver's
+// `after()` call). The screen keeps a Send button for whatever a run could not
+// finish: a Sitoo outage is retried by a person, not re-attempted forever.
+//
+// LOOM IS NOT A TARGET HERE, and that is the point. The barcode came FROM Loom:
+// the warehouse typed it in there while receiving. The handover asks only that
+// "your feed next sends that size with the same barcode" — the normal feed
+// cadence, which now carries it — and §4 only cares about the case where Origio
+// sends a DIFFERENT barcode. Pushing Loom the value it just gave us is a round
+// trip that changes nothing, so `skipLoom` keeps it out of the scope read too.
 //
 // Nothing here writes a channel itself. It works out WHAT should be sent and
 // hands it to `variant-barcodes.ts`, which is the path the variant editor
 // already uses — master first, then every Shopify variant and Sitoo product the
-// garment is linked to, then Loom per season, with the guards those modules
-// carry (check digit, one code per garment, rotations, archived colourways,
-// wrong-product ids). A second route to the same channels would be a second set
-// of guards to keep right.
+// garment is linked to, with the guards those modules carry (check digit, one
+// code per garment, rotations, wrong-product ids). A second route to the same
+// channels would be a second set of guards to keep right.
 //
 // The master write is a no-op by design. The barcodes passed in are the ones the
 // master already holds, so every row plans as `unchanged` — which `ACCEPTED`
@@ -45,7 +53,7 @@ export interface PendingScope {
   rows: PendingRow[];
   /** Event ids the rows came from — what gets marked sent afterwards. */
   eventIds: string[];
-  /** Distinct colorways, which is the unit Loom is pushed in. */
+  /** Distinct colorways the pending sizes belong to, for the screen's count. */
   colorwayIds: string[];
 }
 
@@ -153,15 +161,20 @@ export async function pendingChannelScope(eventId?: string): Promise<PendingScop
 export interface SyncResult {
   scope: PendingScope;
   report: VariantBarcodeReport;
+  /** Set on an apply: what was recorded against the events. */
+  summary?: ChannelSendSummary;
+  /** True when something failed, so the rows stay pending. */
+  stillPending?: boolean;
 }
 
 /**
  * Preview or carry out the send.
  *
- * A preview reads Shopify, Sitoo and Loom and changes nothing; an apply writes
- * the master (a no-op — see the note at the top), Shopify and Sitoo, and returns
- * `loomGroups` for the caller to push. Loom is the caller's job for the reason
- * the editor has it that way: a Loom job can outlast one request.
+ * A preview reads Shopify and Sitoo and changes nothing. An apply writes the
+ * master (a no-op — see the note at the top), then Shopify and Sitoo, and
+ * records the outcome against the events itself. One call, because with Loom out
+ * of the picture there is no job that can outlast the request — that was the
+ * only reason the editor hands its Loom step back to the caller.
  */
 export async function syncWarehouseBarcodes(
   opts: { eventId?: string; dryRun: boolean } = { dryRun: true }
@@ -188,17 +201,19 @@ export async function syncWarehouseBarcodes(
   const refs = [...new Set(scope.rows.map((r) => r.inboundRef).filter(Boolean))].join(", ");
   const evidence = `loom warehouse scan${refs ? ` · inbound ${refs}` : ""}`;
 
-  const report = opts.dryRun
-    ? await planVariantBarcodeEdits(edits)
-    : await applyVariantBarcodeEdits(edits, { evidence });
+  if (opts.dryRun) {
+    return { scope, report: await planVariantBarcodeEdits(edits, { skipLoom: true }) };
+  }
 
-  return { scope, report };
+  const report = await applyVariantBarcodeEdits(edits, { evidence, skipLoom: true });
+  const summary = summariseSend(report);
+  const { pending } = await recordChannelSend(scope.eventIds, summary);
+  return { scope, report, summary, stillPending: pending };
 }
 
 export interface ChannelSendSummary {
   shopify: { written: number; failed: number; notLive: number; agrees: number };
   sitoo: { written: number; failed: number; notLive: number; agrees: number };
-  loom: { written: number; failed: number; refused: number };
   channelErrors: VariantBarcodeReport["channelErrors"];
 }
 
@@ -218,11 +233,9 @@ export function summariseSend(report: VariantBarcodeReport): ChannelSendSummary 
   };
   const sh = tally((r) => r.shopify);
   const si = tally((r) => r.sitoo);
-  const lo = tally((r) => r.loom);
   return {
     shopify: { written: sh.written, failed: sh.failed, notLive: sh.notLive, agrees: sh.agrees },
     sitoo: { written: si.written, failed: si.failed, notLive: si.notLive, agrees: si.agrees },
-    loom: { written: lo.written, failed: lo.failed, refused: lo.refused },
     channelErrors: report.channelErrors,
   };
 }
@@ -242,8 +255,11 @@ export async function recordChannelSend(
 ): Promise<{ marked: number; pending: boolean }> {
   if (!eventIds.length) return { marked: 0, pending: false };
   const failed =
-    summary.shopify.failed + summary.sitoo.failed + summary.loom.failed > 0 ||
-    Object.values(summary.channelErrors).some(Boolean);
+    summary.shopify.failed + summary.sitoo.failed > 0 ||
+    // `loom` is never read here — see the note at the top — so a Loom read error
+    // left over from another caller's report must not hold these events open.
+    Boolean(summary.channelErrors.shopify) ||
+    Boolean(summary.channelErrors.sitoo);
 
   const res = await prisma.loomInboundEvent.updateMany({
     where: { eventId: { in: eventIds } },

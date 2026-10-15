@@ -181,18 +181,16 @@ export function WarehouseBarcodeLog({
                                   <>
                                     {" — "}
                                     Shopify {e.channelReport.shopify.written}, Sitoo{" "}
-                                    {e.channelReport.sitoo.written}, Loom {e.channelReport.loom.written}{" "}
-                                    written
+                                    {e.channelReport.sitoo.written} written
                                   </>
                                 ) : null}
                                 .
                               </>
                             ) : (
                               <>
-                                The master holds these barcodes now. Shopify, Sitoo and Loom do not
-                                until someone sends them: the receiver does not push, because a Loom
-                                push needs a person and the channel writes do not fit inside the
-                                fifteen seconds Loom allows a reply.
+                                The master holds these barcodes. Shopify and Sitoo are written
+                                straight after the delivery is filed, so rows left here are ones a
+                                run could not finish — use Send above to try them again.
                               </>
                             )}
                           </p>
@@ -293,55 +291,16 @@ function ChannelSend({ summary }: { summary: InboundSummary }) {
   }
 
   async function send() {
-    if (!preview) return;
     setBusy("Writing Shopify and Sitoo…");
     try {
+      // One call. The route writes the channels and records the outcome itself —
+      // with Loom out of scope there is no job that can outlast the request.
       const r = await post({ dryRun: false });
       if (!r) return;
-
-      // Loom last, one push per season — see variant-barcodes.ts. A fresh
-      // delivery id each time: the content-derived default makes Loom dedupe a
-      // re-send after a failed job into that job and hand back its stale failure.
-      const runId = Date.now().toString(36);
-      const loom = { written: 0, failed: 0, refused: 0 };
-      for (const g of r.report.loomGroups) {
-        setBusy(`Sending ${g.colorwayIds.length} colourway(s) to Loom (${g.seasonCode})…`);
-        try {
-          const res = await fetch("/api/catalog/push/loom", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              colorwayIds: g.colorwayIds,
-              seasonCode: g.seasonCode,
-              mode: "data",
-              eventId: `origio-warehouse-barcodes-${g.seasonCode.toLowerCase()}-${runId}`,
-            }),
-          });
-          const data = await res.json();
-          const skipped: { colorwayId: string }[] = data.skipped ?? [];
-          const itemErrors: unknown[] = data.job?.itemErrors ?? [];
-          if (!res.ok || data.error || itemErrors.length) {
-            loom.failed += g.colorwayIds.length - skipped.length;
-            toast.error(
-              `Loom (${g.seasonCode}): ${data.error ?? data.job?.fatalError ?? `${itemErrors.length} item error(s)`}`
-            );
-          } else {
-            loom.written += g.colorwayIds.length - skipped.length;
-          }
-          loom.refused += skipped.length;
-        } catch (e) {
-          loom.failed += g.colorwayIds.length;
-          toast.error(`Loom (${g.seasonCode}): ${(e as Error).message}`);
-        }
-      }
-
-      const summaryOut: ChannelSendSummary = { ...r.summary, loom };
-      setBusy("Recording…");
-      const done = await post({ finish: { eventIds: r.eventIds, summary: summaryOut } });
-      setResult(summaryOut);
+      setResult(r.summary);
       setPreview(null);
-      if (done?.stillPending) {
-        toast.warning("Some channels failed — the rows stay pending and can be sent again.");
+      if (r.stillPending) {
+        toast.warning("Some writes failed — the rows stay pending and can be sent again.");
       } else {
         toast.success("Sent to every channel the garments are live in.");
       }
@@ -354,7 +313,6 @@ function ChannelSend({ summary }: { summary: InboundSummary }) {
   }
 
   const rows = preview?.report.rows ?? [];
-  const loomColorways = preview?.report.loomGroups.reduce((n, g) => n + g.colorwayIds.length, 0) ?? 0;
 
   return (
     <div className="border">
@@ -391,13 +349,10 @@ function ChannelSend({ summary }: { summary: InboundSummary }) {
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             <span>Shopify <b className="tabular-nums">{result.shopify.written}</b> written</span>
             <span>Sitoo <b className="tabular-nums">{result.sitoo.written}</b> written</span>
-            <span>Loom <b className="tabular-nums">{result.loom.written}</b> colourways</span>
-            {result.shopify.failed + result.sitoo.failed + result.loom.failed > 0 ? (
+            {result.shopify.failed + result.sitoo.failed > 0 ? (
               <span className="text-amber-700 dark:text-amber-400">
-                <b className="tabular-nums">
-                  {result.shopify.failed + result.sitoo.failed + result.loom.failed}
-                </b>{" "}
-                failed — still pending
+                <b className="tabular-nums">{result.shopify.failed + result.sitoo.failed}</b> failed —
+                still pending
               </span>
             ) : null}
           </div>
@@ -409,29 +364,25 @@ function ChannelSend({ summary }: { summary: InboundSummary }) {
           <p className="mb-2 max-w-3xl text-fine text-muted-foreground">
             Nothing has been sent yet. A size that is not linked to a channel has nothing to
             correct there and carries the barcode when it is first published; one that already
-            agrees is left alone. Loom goes last and takes{" "}
-            <b className="tabular-nums">{loomColorways}</b> colourway
-            {loomColorways === 1 ? "" : "s"}, one push per season.
+            agrees is left alone. Loom is not a target — the barcode came from there.
           </p>
           <div className="overflow-x-auto border bg-background">
             <div className="min-w-[44rem] divide-y">
-              <div className="grid grid-cols-[minmax(12rem,1.6fr)_8rem_repeat(3,minmax(6rem,1fr))] gap-3 bg-muted/40 px-3 py-1.5 text-fine text-muted-foreground">
+              <div className="grid grid-cols-[minmax(12rem,1.6fr)_8rem_repeat(2,minmax(6rem,1fr))] gap-3 bg-muted/40 px-3 py-1.5 text-fine text-muted-foreground">
                 <div>Size</div>
                 <div>Barcode</div>
                 <div>Shopify</div>
                 <div>Sitoo</div>
-                <div>Loom</div>
               </div>
               {rows.map((r) => (
                 <div
                   key={r.variantSku}
-                  className="grid grid-cols-[minmax(12rem,1.6fr)_8rem_repeat(3,minmax(6rem,1fr))] items-center gap-3 px-3 py-1.5 text-body"
+                  className="grid grid-cols-[minmax(12rem,1.6fr)_8rem_repeat(2,minmax(6rem,1fr))] items-center gap-3 px-3 py-1.5 text-body"
                 >
                   <span className="truncate">{r.variantSku}</span>
                   <span className="tabular-nums text-muted-foreground">{r.to ?? "—"}</span>
                   <Outcome o={r.shopify} />
                   <Outcome o={r.sitoo} />
-                  <Outcome o={r.loom} />
                 </div>
               ))}
             </div>

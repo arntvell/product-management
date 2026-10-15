@@ -1,59 +1,40 @@
 import { NextResponse } from "next/server";
-import {
-  recordChannelSend,
-  summariseSend,
-  syncWarehouseBarcodes,
-  type ChannelSendSummary,
-} from "@/lib/loom/warehouse-barcode-sync";
+import { syncWarehouseBarcodes } from "@/lib/loom/warehouse-barcode-sync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-// POST /api/loom/warehouse-barcodes/sync
-//   { dryRun?: boolean, eventId?: string }          preview or send
-//   { finish: { eventIds, summary } }               record the outcome
+// POST /api/loom/warehouse-barcodes/sync   { dryRun?: boolean, eventId?: string }
 //
-// Carries barcodes the warehouse scanned out to the channels the garment is
-// already live in. Not the receiver — that files the master and stops, because
-// the channel writes do not fit in Loom's 15 s budget and a Loom push needs a
-// person. See src/lib/loom/warehouse-barcode-sync.ts.
+// Writes barcodes the warehouse scanned to the channels the garment is already
+// live in. Normally nobody calls this: the receiver runs the same work itself
+// once it has answered Loom. It exists for the rows a run could not finish — a
+// Sitoo outage, a Shopify timeout — which stay pending until a person sends them
+// from /catalog/warehouse-barcodes.
 //
-// Loom is not pushed here, exactly as in the variant editor: the response
-// carries `loomGroups`, the caller sends them to /api/catalog/push/loom with
-// mode "data", and then calls back with `finish` so the events can be marked.
-// A Loom job can outlast one request, which is why it is not inlined.
+// `dryRun` defaults to TRUE. A caller that forgets the flag gets a preview, not a
+// write to two live channels.
+//
+// Loom is not a target. The barcode came from there; see the note at the top of
+// warehouse-barcode-sync.ts.
 //
 // Unlike the receiver this route is NOT public — it writes to live channels, so
 // it stays behind the proxy like every other push.
 export async function POST(req: Request) {
-  let body: {
-    dryRun?: boolean;
-    eventId?: string;
-    finish?: { eventIds?: string[]; summary?: ChannelSendSummary };
-  };
+  let body: { dryRun?: boolean; eventId?: string } = {};
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    // No body is a preview of everything pending, which is the safe reading.
   }
 
   try {
-    // The second leg: the client has pushed Loom and is reporting what happened.
-    if (body.finish) {
-      const { eventIds, summary } = body.finish;
-      if (!Array.isArray(eventIds) || !eventIds.length || !summary) {
-        return NextResponse.json({ error: "finish needs eventIds and summary" }, { status: 400 });
-      }
-      const { marked, pending } = await recordChannelSend(eventIds, summary);
-      // `stillPending`, not `pending`: the preview branch uses `pending` for a
-      // row COUNT, and one field meaning a number in one answer and a boolean in
-      // the other is how a truthiness check quietly reads the wrong thing.
-      return NextResponse.json({ ok: true, marked, stillPending: pending });
-    }
-
     const dryRun = body.dryRun !== false;
-    const { scope, report } = await syncWarehouseBarcodes({ dryRun, eventId: body.eventId });
+    const { scope, report, summary, stillPending } = await syncWarehouseBarcodes({
+      dryRun,
+      eventId: body.eventId,
+    });
     return NextResponse.json({
       ok: true,
       dryRun,
@@ -61,7 +42,8 @@ export async function POST(req: Request) {
       colorwayIds: scope.colorwayIds,
       pending: scope.rows.length,
       report,
-      summary: summariseSend(report),
+      summary,
+      stillPending,
     });
   } catch (err) {
     return NextResponse.json(

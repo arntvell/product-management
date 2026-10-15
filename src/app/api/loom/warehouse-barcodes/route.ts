@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { syncWarehouseBarcodes } from "@/lib/loom/warehouse-barcode-sync";
 import {
   BARCODES_READY,
   LoomPayloadError,
@@ -32,6 +33,9 @@ export const runtime = "nodejs";
 // a format the master refuses must not throw away the other forty sizes of the
 // delivery and need a human to press "Notify Origio again". Those rows come back
 // in `unfiled`, and the delivery is a 2xx.
+//
+// After the answer, the filed barcodes go out to Shopify and Sitoo — see the
+// `after()` call below. Not to Loom: the barcode came from Loom.
 export async function POST(req: Request) {
   // The RAW bytes. A parse and re-serialise is a different byte string for the
   // same document, and the signature is over what Loom actually sent.
@@ -64,6 +68,33 @@ export async function POST(req: Request) {
 
   try {
     const result = await processBarcodesReady(payload);
+
+    // Shopify and Sitoo, once Loom has its answer. `after()` runs when the
+    // response has been sent, which is the only way to both stay inside Loom's
+    // 15 s budget and not leave the master holding barcodes the channels do not
+    // — a delivery arriving is not a decision anybody needs to take.
+    //
+    // Loom is deliberately not among the targets: the barcode came from there.
+    //
+    // Failure here cannot be reported to Loom, which has already had its 2xx —
+    // and must not be, since the barcodes ARE filed and the delivery did
+    // succeed. Whatever does not get written stays pending and is offered again
+    // on /catalog/warehouse-barcodes.
+    if (result.status === "processed" && result.counts.filled + result.counts.changed > 0) {
+      after(async () => {
+        try {
+          const sent = await syncWarehouseBarcodes({ dryRun: false });
+          console.log(
+            `[loom:warehouse-barcodes] ${result.eventId}: channels`,
+            JSON.stringify(sent.summary),
+            sent.stillPending ? "— rows left pending" : ""
+          );
+        } catch (e) {
+          console.error(`[loom:warehouse-barcodes] ${result.eventId}: channel send failed`, e);
+        }
+      });
+    }
+
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     // A real failure — the database is down, a transaction lost a race. 500 puts

@@ -16,7 +16,9 @@ export default async function WarehouseBarcodesPage() {
             Barcodes the warehouse typed into Loom while receiving a delivery. An external
             product&rsquo;s barcode is the supplier&rsquo;s, printed on the garment, so it is not
             known when the product is created here — the sizes go to Pio without one so the
-            goods can land, and the codes come back when the inbound is received.
+            goods can land, and the codes come back when the inbound is received. Shopify and
+            Sitoo are written automatically as each delivery is filed; Loom is not, because
+            Loom is where the barcode came from.
           </p>
         </div>
         <Link

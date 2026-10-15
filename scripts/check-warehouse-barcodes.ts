@@ -12,13 +12,13 @@
 //   3. a lower revision arriving after a higher one for a batch is ignored
 //   4. a previous_barcode row REPLACES the barcode instead of adding a second
 //   5. a barcode Origio cannot file leaves the rest of the delivery filed
-//   6. the filed barcodes are offered to the channels, and sending them does
-//      not take the warehouse's name off the FieldOwner row
+//   6. the filed barcodes go to Shopify and Sitoo but NOT back to Loom, and
+//      sending them does not take the warehouse's name off the FieldOwner row
 //
 // Checklist item 5 on Loom's list — "each filed barcode reaches Shopify and
-// Sitoo" — is deliberately not here. The receiver does not push; it names the
-// colorways and a person pushes. That this script asserts `affectedColorwayIds`
-// instead is the point, not a gap.
+// Sitoo" — is exercised as far as fixtures allow: these garments are linked to
+// no channel, so the assertion is that each reports `not-live` rather than
+// failing. The real channel writes are only provable against real products.
 //
 // Creates a throwaway brand, style, colorway and variants, and deletes
 // everything it made at the end, including on failure.
@@ -289,7 +289,7 @@ async function main() {
 
   const scope = await pendingChannelScope(syncEventId);
   check("the pending scope finds the filed sizes", scope.rows.length === 3, `${scope.rows.length} rows`);
-  check("...grouped to one colourway, which is Loom's unit", scope.colorwayIds.length === 1);
+  check("...grouped to one colourway", scope.colorwayIds.length === 1);
   check(
     "...carrying the master's spelling, not Loom's",
     scope.rows.every((r) => held.some((h) => h.variantSku === r.variantSku && h.barcode === r.barcode))
@@ -314,6 +314,16 @@ async function main() {
     "an unlinked size reports not-live rather than failing",
     sync.report.rows.every((r) => r.shopify.state === "not-live" && r.sitoo.state === "not-live")
   );
+  // Loom is not a target: the barcode came from there, and the handover only
+  // asks that the normal feed carry the same value next time it runs.
+  check(
+    "Loom is not pushed, and the rows say why",
+    sync.report.loomGroups.length === 0 &&
+      sync.report.rows.every(
+        (r) => r.loom.state === "n/a" && /came from/.test(r.loom.note ?? "")
+      ),
+    sync.report.rows[0]?.loom.note ?? "no note"
+  );
 
   const applied = await syncWarehouseBarcodes({ eventId: syncEventId, dryRun: false });
   const ownerAfter = await prisma.fieldOwner.findFirst({
@@ -326,18 +336,16 @@ async function main() {
   );
   check("the send wrote nothing to the master", applied.report.master.applied === 0);
 
-  // Only a clean run marks the event sent; anything failed leaves it pending so
-  // the rows come back next time.
-  const okSummary = summariseSend(applied.report);
-  const marked = await recordChannelSend([syncEventId], okSummary);
+  // An apply records itself, so a clean run leaves nothing pending.
   const syncedEvent = await prisma.loomInboundEvent.findUniqueOrThrow({ where: { eventId: syncEventId } });
-  check("a clean send marks the event", marked.marked === 1 && !!syncedEvent.channelsPushedAt);
+  check("a clean send marks the event itself", !applied.stillPending && !!syncedEvent.channelsPushedAt);
   check("...and is then no longer pending", (await pendingChannelScope(syncEventId)).rows.length === 0);
 
   await prisma.loomInboundEvent.update({
     where: { eventId: syncEventId },
     data: { channelsPushedAt: null },
   });
+  const okSummary = summariseSend(applied.report);
   const failedSummary = { ...okSummary, sitoo: { ...okSummary.sitoo, failed: 1 } };
   const notMarked = await recordChannelSend([syncEventId], failedSummary);
   const afterFail = await prisma.loomInboundEvent.findUniqueOrThrow({ where: { eventId: syncEventId } });
