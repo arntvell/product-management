@@ -1,7 +1,8 @@
 // Apply a plan from scripts/nested-split/plan.mjs — the only step that writes.
 //
 //   npx dotenv -e .env.local -- npx tsx scripts/nested-split/apply.ts --plan=snapshots/…json --parent=EXT-BP
-//   …same, with --apply                       to actually send it
+//   …--all                                    every parent in the plan with moves
+//   …--apply                                  actually send it
 //
 // Dry by default. Without `--apply` nothing leaves the process.
 //
@@ -47,8 +48,8 @@ interface Plan {
 async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes("--apply");
+  const everyParent = args.includes("--all");
   const planPath = args.find((a) => a.startsWith("--plan="))?.slice("--plan=".length);
-  const parentSku = args.find((a) => a.startsWith("--parent="))?.slice("--parent=".length) ?? "EXT-BP";
   if (!planPath) {
     console.error("Pass --plan=<the json written by plan.mjs>");
     process.exit(2);
@@ -56,23 +57,54 @@ async function main() {
 
   const { readFileSync } = await import("node:fs");
   const file = JSON.parse(readFileSync(planPath, "utf8")) as { generatedAt: string; plans: Plan[] };
+
+  if (everyParent) {
+    // One parent at a time, in order, stopping at the first failure. A push that
+    // goes wrong must not be followed by eight more against a Loom nobody has
+    // looked at since.
+    const todo = file.plans.filter((p) => p.moves?.length);
+    console.log(`${todo.length} parent(s) with moves in ${planPath}\n`);
+    for (const [i, p] of todo.entries()) {
+      console.log(`─── ${i + 1}/${todo.length} ───`);
+      const code = await runOne(file, p, apply);
+      if (code !== 0) {
+        console.error(`\nStopped at ${p.parentSku}. ${todo.length - i - 1} parent(s) not attempted.`);
+        process.exit(code);
+      }
+      console.log("");
+    }
+    console.log(apply ? "All parents done." : "Dry run complete — add --apply to send.");
+    return;
+  }
+
+  const parentSku = args.find((a) => a.startsWith("--parent="))?.slice("--parent=".length) ?? "EXT-BP";
   const plan = file.plans.find((p) => p.parentSku === parentSku);
   if (!plan) {
     console.error(`No plan for ${parentSku} in ${planPath}`);
     process.exit(2);
   }
+  process.exit(await runOne(file, plan, apply));
+}
+
+/** Verify one parent against Loom and, with `apply`, send it. 0 = ok. */
+async function runOne(
+  file: { generatedAt: string },
+  plan: Plan,
+  apply: boolean
+): Promise<number> {
+  const parentSku = plan.parentSku;
   if (plan.refusals.length) {
     console.error(`${parentSku}: the plan has ${plan.refusals.length} refusal(s). Resolve them before applying.`);
     for (const r of plan.refusals) console.error(`  ${r.variantSku}: ${r.reason}`);
-    process.exit(1);
+    return 1;
   }
   if (!plan.moves.length) {
     console.log(`${parentSku}: nothing to move. Already correct.`);
-    process.exit(0);
+    return 0;
   }
   if (plan.push.seasons.length !== 1) {
     console.error(`${parentSku}: expected exactly one season, the plan has ${JSON.stringify(plan.push.seasons)}.`);
-    process.exit(1);
+    return 1;
   }
 
   // --- re-verify against Loom, now ------------------------------------------
@@ -86,16 +118,16 @@ async function main() {
   );
   if (!res.ok) {
     console.error(`Loom answered HTTP ${res.status} when re-reading ${parentSku}.`);
-    process.exit(1);
+    return 1;
   }
   const live = (await res.json()).rows?.find((r: { colorway_sku: string }) => r.colorway_sku === parentSku);
   if (!live) {
     console.error(`${parentSku}: Loom no longer holds this colourway. Re-plan.`);
-    process.exit(1);
+    return 1;
   }
   if (live.colorway_id !== plan.loomColorwayId) {
     console.error(`${parentSku}: Loom's colourway id has changed since the plan. Re-plan.`);
-    process.exit(1);
+    return 1;
   }
   const liveSkus = new Set((live.variants ?? []).map((v: { variant_sku: string }) => v.variant_sku));
   const missing = plan.moves.filter((m) => !liveSkus.has(m.variantSku));
@@ -106,7 +138,7 @@ async function main() {
     console.error(`${parentSku}: Loom no longer matches the plan. Re-plan before applying.`);
     for (const m of missing) console.error(`  planned to move ${m.variantSku}, Loom no longer nests it`);
     for (const s of extra) console.error(`  Loom nests ${s}, which the plan does not know`);
-    process.exit(1);
+    return 1;
   }
 
   const season = plan.push.seasons[0];
@@ -119,7 +151,7 @@ async function main() {
 
   if (!apply) {
     console.log(`\n  DRY RUN — nothing sent. Add --apply to send it.`);
-    process.exit(0);
+    return 0;
   }
 
   const { pushColorwaysToLoom } = await import("../../src/lib/loom/push.ts");
@@ -173,9 +205,10 @@ async function main() {
   }
   if (!result.ok) {
     console.log(`\n  The push did not succeed. Nothing was recorded as published.`);
-    process.exit(1);
+    return 1;
   }
   console.log(`\n  Done. Re-read Loom to confirm, then retire the empty parent.`);
+  return 0;
 }
 
 main().catch((e) => {

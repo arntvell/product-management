@@ -55,10 +55,19 @@ config({ path: ".env.local" });
  * split — and the id refuses a plan built against a different row than the one
  * surveyed. `expectNested` is what should MOVE, so it excludes the parent's own
  * product; EXT-SP is 0 because its single nested-looking variant turned out to
- * be its own, and it needs no repair.
+ * be its own, and EXT-BP is 0 because it was split on 2026-10-15.
+ *
+ * A full sweep of all 5,541 Loom products against the master on 2026-10-15 found
+ * 62 wrongly-nested variants across 11 parents. Nine of them are here. The other
+ * two — `LIV-W-KR-JPN-BLCK` (21) and `LIV-Needle-W` (6) — are NOT this defect
+ * and must not be run through it: their variants are a genuine size run, and all
+ * of each parent's variants belong to ONE master colourway under a different
+ * name (`LIV-KR-JPN-BLCK`, and a `--merged-into-` tombstone). That is Loom
+ * holding an old spelling of a whole colourway, which is a rename, not a product
+ * nested inside another product.
  */
 const PHANTOMS = {
-  "EXT-BP": { id: "bb5ff342-fbb4-494b-bb4c-94696bf7b136", brand: "Bon Parfumeur", ownVariants: 0, expectNested: 15 },
+  "EXT-BP": { id: "bb5ff342-fbb4-494b-bb4c-94696bf7b136", brand: "Bon Parfumeur", ownVariants: 0, expectNested: 0 },
   CHIMI: { id: "4eefbeb6-ef2a-483b-90ac-a5f646345672", brand: "Chimi", ownVariants: 0, expectNested: 5 },
   "EXT-KNT-TBL-350": { id: "8fd1f74d-5b47-464d-ae1e-28f44cb34c63", brand: "Kinto", ownVariants: 0, expectNested: 3 },
   "EXT-KNT-WB-500": { id: "110ec02e-a6bc-4caf-a2df-720a79699f4d", brand: "Kinto", ownVariants: 0, expectNested: 3 },
