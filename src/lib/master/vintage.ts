@@ -119,6 +119,34 @@ export function vintageInventory(action: "create" | "update"): VintageVariantInv
   };
 }
 
+/** Norwegian standard VAT, which the retail prices include. */
+const VAT_RATE = 0.25;
+/** What a store-vintage garment is reckoned to have cost, as a share of net. */
+const STORE_VINTAGE_COST_SHARE = 0.3;
+
+/**
+ * The cost price of a store-vintage garment, derived from its retail price.
+ *
+ * Second-hand stock is not bought in at a known unit cost — a rail is bought by
+ * weight or by lot — so there is no invoice line to copy. The house rule is 30%
+ * of the net retail price, and net means after the 25% VAT the shelf price
+ * includes:
+ *
+ *   499 incl. VAT  ->  499 / 1.25 = 399.20 net  ->  x 0.30 = 119.76
+ *
+ * It exists because the till wants one. Sitoo's variants endpoint refuses a
+ * write with no `moneypricein` at all, and a product created without a cost got
+ * "0.00" — which reads as a 100% margin in every report that touches it.
+ *
+ * Derived, not guessed at per product: a real invoice price typed into the
+ * master always wins, because this returns a default for callers that find none.
+ */
+export function storeVintageCostNok(msrpInclVat: number | string | null | undefined): number | null {
+  const n = Number(msrpInclVat);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round((n / (1 + VAT_RATE)) * STORE_VINTAGE_COST_SHARE * 100) / 100;
+}
+
 /**
  * `inventoryItem.cost` — what the garment cost us, for margin reporting.
  *

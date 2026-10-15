@@ -27,6 +27,7 @@ import { Prisma } from "@/generated/prisma/client";
 import type { Prisma as PrismaTypes } from "@/generated/prisma/client";
 import { parseDraftPayload, type DraftPayloadV1 } from "./draft-payload";
 import { normalizeSku, findNearDuplicates, isOneOfOne, type SkuMatch } from "./sku";
+import { isVintageBrand, storeVintageCostNok } from "./vintage";
 import { loadSkuCorpus, findExactSkuHolders } from "./sku-corpus";
 import { barcodeKey, barcodeSpellings, rejectionReason, storedForm } from "./barcode";
 import { recordDecisions } from "./provenance";
@@ -460,8 +461,18 @@ async function writeProduct(
       linkRows.push({ seasonEntryId: ids.entryId, variantId });
     }
 
+    // A store-vintage garment with no cost typed in gets the house rule: 30% of
+    // the net retail price. Second-hand stock has no invoice line to copy — a
+    // rail is bought by weight — so there is nothing for anyone to type, and
+    // leaving it empty wrote "0.00" into the till, which reads as a 100% margin
+    // in every report that touches it. A cost somebody DID type always wins.
+    const derivedCost =
+      !cw.prices.COST?.trim() && isVintageBrand(p.brand.name)
+        ? storeVintageCostNok(cw.prices.MSRP)
+        : null;
+
     for (const [priceType, amount] of [
-      ["COST", cw.prices.COST],
+      ["COST", cw.prices.COST?.trim() ? cw.prices.COST : derivedCost?.toString()],
       ["MSRP", cw.prices.MSRP],
     ] as const) {
       if (!amount?.trim()) continue;
