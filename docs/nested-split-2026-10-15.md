@@ -1,6 +1,8 @@
 # Products Loom holds as "sizes" — the un-nesting
 
-2026-10-15. Planned, not applied. `node scripts/nested-split/plan.mjs --all`.
+2026-10-15. **Done.** 50 variants moved across 10 parents, 0 refused, all stock
+preserved. Plan: `node scripts/nested-split/plan.mjs --all`; apply:
+`scripts/nested-split/apply.ts --all --apply`.
 
 ## What happened to a customer
 
@@ -43,6 +45,15 @@ right shape now. Only Loom, and through it Pio, still holds the old one.
 That makes this a **reparent**, not a master repair — unlike Red Wing, where 14
 colourways had to be created first.
 
+## What was found, and by what method
+
+The first pass used a SKU-prefix scan and produced 11 candidates. That method
+cannot tell this defect from an ordinary hierarchy — `LIV` is a prefix of 1,594
+colourway SKUs — so before applying the rest, every Loom product was swept
+against the master: **5,541 products, 15,745 variants**. That found 62
+wrongly-nested variants across 11 parents, two of which the first pass had
+missed and two of which turned out not to be this defect at all (below).
+
 ## Scope: 11 parents, 50 variants, 387 units
 
 | Parent | Pio | move | stock moving | What it really is |
@@ -71,6 +82,52 @@ all — it is in the table to record that it was checked.
 product whose physical bottle is in another bin, which is the same mis-pick this
 defect causes. Worth a physical count before anything moves.
 
+## Two that are NOT this defect
+
+`LIV-W-KR-JPN-BLCK` (21 variants) and `LIV-Needle-W` (6) came up in the sweep and
+must never be run through this repair. Their variants are a genuine size run —
+W24/L32 jeans, S–3XL knits — and **all** of each parent's variants belong to ONE
+master colourway under a different name: `LIV-KR-JPN-BLCK` with the `-W-`
+dropped, and a `--merged-into-` tombstone. That is Loom holding an old spelling
+of a whole colourway. A rename, not a product nested inside another product, and
+it needs its own fix.
+
+## Result
+
+| | perfumes | the other nine |
+|---|---|---|
+| jobs | `cmv9roybd0dc5gq0h7upvt0xa` | 9 jobs, `cmv9sfa46…` – `cmv9sh7cb…` |
+| variantsMoved | 15 | 35 |
+| variantsMoveRefused | 0 | 0 |
+| variantsCreated | 0 | 0 |
+| itemErrors | 0 | 0 |
+
+Verified afterwards, not taken from the job summary:
+
+- **Re-sweep**: 0 parents still wrongly nested, except the two renames above.
+- **Stock**: checked per variant against the plan — 22/22 for the perfumes,
+  365/365 for the rest, 0 mismatches. Nothing stranded, nothing duplicated.
+- **Identity read-back**: 35/35 SKU keys resolve to their own colourway, variant
+  `OS`, 0 unresolved. `EXT-STM-1802` now reads "Tumble Dryer Balls" rather than
+  size `W18/L02` of a fabric shaver; `EXT-BP-BP602EDP30` reads
+  "602 Eau de Parfum".
+
+## Pio — corrected
+
+An earlier draft of this doc said Pio was wrong until the reparent propagated,
+and that the mis-ship could recur. **That was wrong.** Loom's warning on every
+one of these jobs reads:
+
+> moved size(s) got their Pio name and size corrected but Pio would not move the
+> grouping id (ext_product_id). Picking is right; the grouping is retried on the
+> next product sync.
+
+Pio already holds the corrected name and size for every moved size, and the name
+is the half that decides what a picker takes off the shelf. Only the grouping id
+lags, and it is retried rather than stuck. This is the documented outcome across
+the vintage split (89 garments), Red Wing (14) and Saphir (16). A genuine Pio
+failure lands in `itemErrors`; every job here had none.
+
 ## The plan script
 
 `node scripts/nested-split/plan.mjs [--parent=EXT-BP] [--all]`
@@ -92,7 +149,7 @@ The eleven parents are **pinned, not discovered**. A prefix test cannot tell thi
 defect from an ordinary SKU hierarchy — `LIV` is a prefix of 1,594 colourway SKUs
 and is not a bug.
 
-## Applying — not done
+## How it was applied
 
 Per colourway group, with the destinations from the plan's `push` block:
 
@@ -110,16 +167,21 @@ would otherwise relocate all of it silently. Expect `variantsMoved: 50`,
 `variantsMoveRefused > 0` is not a success — Loom skips that colourway in
 preflight.
 
-Then, in order:
+## Left to do
 
-1. **Pio** follows on Loom's side (`pioReparentPending`). Until it does, Pio
-   still holds the wrong shape and the mis-ship can recur.
-2. **Retire the phantom colourways in Origio.** Eight hold zero variants and are
-   pure residue; `EXT-FRM`, `EXT-SP` and `EXT-STM` keep their one real product
-   and must not be retired, only renamed to what they actually are.
-3. **`EXT-BP`'s style.** The real 301 (`EXT-BP-BP301EDP30`) sits under style
-   `EXT-BP`, the bare brand token, while every other perfume has its own style.
-   Cosmetic, but it is the residue that made `EXT-BP` a plausible parent.
+1. **Seven empty phantoms to archive**: `CHIMI`, `EXT-KNT-TBL-350`,
+   `EXT-KNT-WB-500`, `EXT-PF-11`, `EXT-PF-RDFS`, `EXT-PR-LCT-X10-MC`,
+   `EXT-STM-CRS` — all 0 variants, none archived. (`EXT-BP` was archived by
+   hand on the day.)
+2. **`EXT-FRM` and `EXT-STM` keep one real product each** and must NOT be
+   archived — only renamed to what they actually are, since each still carries
+   the name it took from a swallowed sibling.
+3. **`EXT-BP`'s style.** The real 301 sits under style `EXT-BP`, the bare brand
+   token, while every other perfume has its own. Cosmetic, but it is the residue
+   that made `EXT-BP` a plausible parent.
+4. **`EXT-BP-901EDP` still reads −1** at Livid Bergen. The move carried the
+   negative faithfully rather than hiding it; it wants a physical count.
+5. **The two renames** above, which are a separate job.
 
 ## Before it runs
 
