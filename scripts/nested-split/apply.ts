@@ -149,7 +149,18 @@ async function main() {
     );
     console.log(`    created=${j.created ?? 0}  updated=${j.updated ?? 0}`);
     if (j.pioReparentPending?.length) {
-      console.log(`    pioReparentPending: ${j.pioReparentPending.length} — Pio has NOT caught up yet`);
+      // NOT a failure, and the earlier wording here said it was. Loom's own
+      // warning for this case reads "picking is right; the grouping is retried
+      // on the next product sync": Pio takes each moved size's name and size and
+      // declines only to move the grouping id (ext_product_id). The name is the
+      // half that decides what a picker takes off the shelf. Documented across
+      // the vintage split (89 garments), Red Wing (14) and Saphir (16) as the
+      // known success shape. A genuine Pio failure lands in `itemErrors`, which
+      // is what to branch on.
+      console.log(
+        `    pioReparentPending: ${j.pioReparentPending.length} — Pio took the names and sizes;` +
+          ` only the grouping id lags, retried on the next product sync. Read summary.warnings.`
+      );
     }
     if (j.itemErrors?.length) {
       console.log(`    itemErrors: ${JSON.stringify(j.itemErrors).slice(0, 600)}`);
