@@ -14,6 +14,7 @@ import {
   Layers,
   LayoutGrid,
   Package,
+  PackageCheck,
   Rows3,
   Ruler,
   ScanSearch,
@@ -107,6 +108,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/catalog/style-splits", label: "Style splits", icon: Split },
       { href: "/catalog/cutover", label: "Cutover", icon: ArrowRightLeft },
       { href: "/catalog/identity", label: "Identity", icon: BadgeCheck },
+      { href: "/catalog/warehouse-barcodes", label: "Warehouse barcodes", icon: PackageCheck },
     ],
   },
   {

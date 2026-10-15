@@ -14,6 +14,7 @@ import {
   barcodeSpellings,
   channelNeedsBarcode,
   cleanBarcode,
+  gtinCheckDigit,
   isInternalRange,
   rejectionReason,
   storedForm,
@@ -127,6 +128,64 @@ eq("a fill is stored in 12 digits", fill.fill, [{ variantSku: "A", to: UPC }]);
 
 const junk = plan([{ variantSku: "A", barcode: UPC }], [{ variantSku: "A", barcode: "******mangler" }]);
 eq("a held non-barcode counts as blank: filled without overwrite", junk.fill, [{ variantSku: "A", to: UPC }]);
+
+// ---------------------------------------------------------------------------
+// EAN-8 and GTIN-14 (2026-10-15)
+//
+// An external product's barcode is the supplier's, printed on the garment, and
+// the lengths were widened from 12/13 so that receiving a delivery does not stop
+// on a code the warehouse is physically holding.
+//
+// The expected check digits below are worked out by hand against the GS1 rule
+// (weights 3,1 alternating leftwards from the last data digit), not read back
+// out of `gtinCheckDigit` — otherwise these would assert only that the function
+// agrees with itself.
+// ---------------------------------------------------------------------------
+
+const EAN8 = "96385074"; // the GS1 specimen; data 9638507, check 4
+eq("an EAN-8 is accepted", rejectionReason(EAN8), null);
+eq("an EAN-8 keys as itself", barcodeKey(EAN8), EAN8);
+eq("an EAN-8 has one spelling", barcodeSpellings(EAN8), [EAN8]);
+eq("gtinCheckDigit agrees on the EAN-8", gtinCheckDigit("9638507"), "4");
+
+// The zero a UPC-A drops is NOT the zero an EAN-8 starts with.
+const EAN8_ZERO = "01234565"; // data 0123456 -> 45 -> check 5
+eq("an EAN-8 beginning with zero is accepted", rejectionReason(EAN8_ZERO), null);
+eq("...and keeps all eight digits in its stored form", storedForm(EAN8_ZERO), EAN8_ZERO);
+eq("...and is not re-spelled to seven", barcodeSpellings(EAN8_ZERO), [EAN8_ZERO]);
+
+// A GTIN is invariant under left-padding with zeros, so a 14-wide spelling of a
+// UPC-A is the SAME barcode and has to compare equal to it.
+const UPC_14 = "00" + UPC; // 00884597234150
+eq("a zero-padded GTIN-14 is accepted", rejectionReason(UPC_14), null);
+eq("...and collapses to the 13-digit key", barcodeKey(UPC_14), UPC0);
+eq("...so it stores as the UPC-A the master already holds", storedForm(UPC_14), UPC);
+eq("...and is found under both spellings", barcodeSpellings(UPC_14), [UPC0, UPC]);
+eq("...and does not read as a change", channelNeedsBarcode(UPC, UPC_14), false);
+
+// A 14 with a non-zero indicator digit is an outer carton, not this garment. It
+// is kept rather than refused, but it keeps its own identity.
+const CARTON = "10884597234157"; // data 1088459723415 -> 123 -> check 7
+eq("a true GTIN-14 is accepted", rejectionReason(CARTON), null);
+eq("...and keeps its own key", barcodeKey(CARTON), CARTON);
+eq("...which is not the garment's", barcodeKey(CARTON) === barcodeKey(UPC), false);
+
+// What widening the lengths must NOT readmit. This is the value the digitsOf
+// comment used to cite as the reason every 14 was refused.
+eq(
+  "the production 14-digit junk is still refused",
+  rejectionReason("70903847293742"),
+  "fails its GTIN-14 check digit (expected 3, got 2)"
+);
+eq("...and keys as nothing", barcodeKey("70903847293742"), null);
+eq("a 9-digit code is still refused", barcodeKey("123456789"), null);
+eq(
+  "...with a message naming the lengths that work",
+  rejectionReason("123456789"),
+  "is 9 digits — a barcode is 8 (EAN-8), 12 (UPC-A), 13 (EAN-13) or 14 (GTIN-14) digits"
+);
+eq("a single digit is still refused", barcodeKey("7"), null);
+eq("a bad EAN-8 check digit is refused", rejectionReason("96385075"), "fails its EAN-8 check digit (expected 4, got 5)");
 
 console.log(failed ? `\n${failed} FAILED` : "\nall passed");
 process.exit(failed ? 1 : 0);

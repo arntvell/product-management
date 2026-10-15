@@ -28,16 +28,44 @@ export type BarcodeRange = (typeof KNOWN_RANGES)[number];
  * Weights alternate 1,3 starting at 1 for the leftmost digit.
  */
 export function checkDigit(first12: string): string {
-  let sum = 0;
-  for (let i = 0; i < 12; i++) {
-    sum += Number(first12[i]) * (i % 2 === 0 ? 1 : 3);
-  }
-  return String((10 - (sum % 10)) % 10);
+  return gtinCheckDigit(first12);
 }
 
 export function isValidEan13(value: string): boolean {
   if (!/^\d{13}$/.test(value)) return false;
   return checkDigit(value.slice(0, 12)) === value[12];
+}
+
+/** The GTIN lengths a barcode may have: EAN-8, UPC-A, EAN-13, GTIN-14. */
+export const GTIN_LENGTHS = [8, 12, 13, 14] as const;
+
+/**
+ * GS1 modulo-10 check digit over a GTIN's data digits, any length.
+ *
+ * The weights are anchored at the RIGHT — the last data digit is always 3, then
+ * 1, alternating leftwards — which is what makes a GTIN invariant under
+ * left-padding with zeros: `884597234150`, `0884597234150` and
+ * `00884597234150` are one barcode with one check digit, and the collapsing
+ * `barcodeKey` does is arithmetic rather than a convention.
+ *
+ * For 12 data digits this is exactly the EAN-13 rule `checkDigit` has always
+ * applied (position 0 is 12 from the right, so it weights 1), which is why that
+ * function now delegates here instead of carrying its own loop.
+ */
+export function gtinCheckDigit(data: string): string {
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    const fromRight = data.length - 1 - i;
+    sum += Number(data[i]) * (fromRight % 2 === 0 ? 3 : 1);
+  }
+  return String((10 - (sum % 10)) % 10);
+}
+
+/** True for a well-formed GTIN of any accepted length, check digit included. */
+export function isValidGtin(value: string): boolean {
+  if (!/^\d+$/.test(value)) return false;
+  if (!(GTIN_LENGTHS as readonly number[]).includes(value.length)) return false;
+  return gtinCheckDigit(value.slice(0, -1)) === value.slice(-1);
 }
 
 // Two questions, two answers.
@@ -81,9 +109,18 @@ function digitsOf(raw: string | null | undefined): string | null {
   if (/^0+$/.test(stripped)) return null;
   if (stripped.length === 12) return isValidEan13("0" + stripped) ? stripped : null;
   if (stripped.length === 13) return isValidEan13(stripped) ? stripped : null;
-  // 9-digit codes (~60 of them, consistent across three systems), the 14-digit
-  // 70903847293742, single digits 1-7. All real values in production data, none
-  // of them EANs. They belong in a different field, not this one.
+  // EAN-8 and GTIN-14, both check-digit verified. An external product's barcode
+  // is the supplier's, printed on the garment, and a supplier is under no
+  // obligation to use the thirteen digits Livid's own ranges do — refusing a
+  // code the warehouse is physically holding only moves the problem to whoever
+  // has to receive the delivery.
+  if (stripped.length === 8 || stripped.length === 14)
+    return isValidGtin(stripped) ? stripped : null;
+  // The 9-digit codes (~60 of them, consistent across three systems) and the
+  // single digits 1-7 are still refused: no GTIN has those lengths. So is the
+  // 14-digit 70903847293742 that this comment used to cite as a reason to refuse
+  // every 14 — its check digit should be 3 and it is 2, so widening the lengths
+  // does not readmit it. All real values in production data, none of them GTINs.
   return null;
 }
 
@@ -107,7 +144,18 @@ function digitsOf(raw: string | null | undefined): string | null {
 export function barcodeKey(raw: string | null | undefined): string | null {
   const d = digitsOf(raw);
   if (!d) return null;
-  return d.length === 12 ? "0" + d : d;
+  if (d.length === 12) return "0" + d;
+  if (d.length === 14) {
+    // A GTIN-14 whose leading digits are zeros is a padded EAN-13 or UPC-A, not
+    // a case pack — the same code in a 14-wide field. It collapses to the
+    // 13-digit key so it compares equal to the spelling the master already
+    // holds. A 14 with a non-zero indicator digit really is a different thing
+    // (an outer carton) and keeps its own key; it should not be on a garment,
+    // but refusing it here would lose it silently rather than visibly.
+    const trimmed = d.replace(/^0+/, "");
+    return trimmed.length <= 13 ? trimmed.padStart(13, "0") : d;
+  }
+  return d;
 }
 
 /**
@@ -117,7 +165,10 @@ export function barcodeKey(raw: string | null | undefined): string | null {
 export function storedForm(raw: string | null | undefined): string | null {
   const key = barcodeKey(raw);
   if (!key) return null;
-  return key.startsWith("0") ? key.slice(1) : key;
+  // Dropping a leading zero is the UPC-A rule and applies to a 13-digit key
+  // ONLY. An EAN-8 may legitimately begin with a zero — `01234565` — and
+  // stripping it would store seven digits, which is not a barcode at all.
+  return key.length === 13 && key.startsWith("0") ? key.slice(1) : key;
 }
 
 /**
@@ -136,7 +187,9 @@ export function cleanBarcode(raw: string | null | undefined): string | null {
 export function barcodeSpellings(raw: string | null | undefined): string[] {
   const key = barcodeKey(raw);
   if (!key) return [];
-  return key.startsWith("0") ? [key, key.slice(1)] : [key];
+  // Only a 13-digit key has two spellings — see `storedForm`. An EAN-8 and a
+  // true GTIN-14 each have exactly one.
+  return key.length === 13 && key.startsWith("0") ? [key, key.slice(1)] : [key];
 }
 
 /**
@@ -166,12 +219,22 @@ export function rejectionReason(raw: string | null | undefined): string | null {
   if (!stripped) return "contains only invisible formatting characters";
   if (!/^\d+$/.test(stripped)) return "contains non-digit characters";
   if (/^0+$/.test(stripped)) return "is a zero placeholder, not a barcode";
-  if (stripped.length !== 12 && stripped.length !== 13) {
-    return `is ${stripped.length} digits — an EAN-13 is 13 (or a 12-digit UPC-A)`;
+  if (!(GTIN_LENGTHS as readonly number[]).includes(stripped.length)) {
+    return `is ${stripped.length} digits — a barcode is 8 (EAN-8), 12 (UPC-A), 13 (EAN-13) or 14 (GTIN-14) digits`;
   }
-  const candidate = stripped.length === 12 ? "0" + stripped : stripped;
-  if (!isValidEan13(candidate)) {
-    return `fails its EAN-13 check digit (expected ${checkDigit(candidate.slice(0, 12))}, got ${candidate[12]})`;
+  // 12 and 13 keep the EAN-13 wording they have always had: a UPC-A is an
+  // EAN-13 with a leading zero, so one message covers both and the existing
+  // user-facing text does not change under anyone.
+  if (stripped.length === 12 || stripped.length === 13) {
+    const candidate = stripped.length === 12 ? "0" + stripped : stripped;
+    if (!isValidEan13(candidate)) {
+      return `fails its EAN-13 check digit (expected ${checkDigit(candidate.slice(0, 12))}, got ${candidate[12]})`;
+    }
+    return null;
+  }
+  if (!isValidGtin(stripped)) {
+    const name = stripped.length === 8 ? "EAN-8" : "GTIN-14";
+    return `fails its ${name} check digit (expected ${gtinCheckDigit(stripped.slice(0, -1))}, got ${stripped.slice(-1)})`;
   }
   return null;
 }
