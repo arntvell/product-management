@@ -925,6 +925,18 @@ model LoomInboundEvent {
   affectedColorwayIds Json?
   receivedAt DateTime @default(now())
   processedAt DateTime?
+  /// When every channel the filed barcodes belong on confirmed them. Null means
+  /// the master holds barcodes that Shopify, Sitoo and Loom do not — which is
+  /// the normal state between a delivery arriving and somebody sending it, and
+  /// what the "pending" list on /catalog/warehouse-barcodes is counting.
+  ///
+  /// Set only when Shopify, Sitoo AND Loom have all reported, so a Sitoo outage
+  /// leaves the event pending with its report attached rather than marking it
+  /// done and losing the rows.
+  channelsPushedAt DateTime?
+  /// Per-channel outcome of that send, for the log. Not authoritative — the
+  /// channel link rows are — just what happened when it ran.
+  channelReport Json?
 
   @@index([batchId, revision])
 }

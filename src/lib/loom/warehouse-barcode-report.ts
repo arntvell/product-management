@@ -5,13 +5,15 @@
 // inbounds arrived, which barcodes were filed, and — the part that matters —
 // which rows were NOT filed and why.
 //
-// Read-only. Every fix leads back to the variant editor, which already writes
-// the master and carries the change to Shopify, Sitoo and Loom with its own
-// guards. A second write path here would be a second set of guards to keep
-// right.
+// This file only reads. The screen it feeds has one action — sending the filed
+// barcodes on to the channels — and that goes through warehouse-barcode-sync.ts,
+// which hands the work to the same plan/apply pair the variant editor uses.
+// Fixing a row that did NOT file still leads back to the editor itself: there is
+// one write path to these channels and it keeps one set of guards.
 
 import { prisma } from "@/lib/db";
 import type { UnfiledRow } from "./warehouse-barcodes";
+import { pendingChannelScope, type ChannelSendSummary } from "./warehouse-barcode-sync";
 
 export interface InboundCounts {
   rows: number;
@@ -44,6 +46,9 @@ export interface InboundEventRow {
   affected: AffectedColorway[];
   receivedAt: Date;
   processedAt: Date | null;
+  /** Null while the master holds barcodes the channels do not. */
+  channelsPushedAt: Date | null;
+  channelReport: ChannelSendSummary | null;
 }
 
 export interface InboundSummary {
@@ -52,6 +57,10 @@ export interface InboundSummary {
   /** Unfiled rows on the newest revision of each batch — the real backlog. */
   unfiledNow: number;
   filedAllTime: number;
+  /** Sizes whose barcode is in the master but not yet out to the channels. */
+  pendingChannels: number;
+  /** Colorways those sizes belong to — the unit Loom is pushed in. */
+  pendingColorways: number;
 }
 
 const ZERO: InboundCounts = { rows: 0, filled: 0, changed: 0, unchanged: 0, unfiled: 0 };
@@ -108,6 +117,8 @@ export async function listInboundEvents(take = 50): Promise<InboundEventRow[]> {
         .filter(Boolean) as AffectedColorway[]),
       receivedAt: r.receivedAt,
       processedAt: r.processedAt,
+      channelsPushedAt: r.channelsPushedAt,
+      channelReport: (r.channelReport as ChannelSendSummary | null) ?? null,
     };
   });
 }
@@ -134,10 +145,16 @@ export async function inboundSummary(): Promise<InboundSummary> {
     if (!top.has(r.batchId)) top.set(r.batchId, c); // ordered by revision desc
   }
 
+  // Derived against the master as it is now, not a stored list — see
+  // pendingChannelScope for why.
+  const pending = await pendingChannelScope();
+
   return {
     events: await prisma.loomInboundEvent.count(),
     inbounds: top.size,
     unfiledNow: [...top.values()].reduce((a, c) => a + c.unfiled, 0),
     filedAllTime,
+    pendingChannels: pending.rows.length,
+    pendingColorways: pending.colorwayIds.length,
   };
 }

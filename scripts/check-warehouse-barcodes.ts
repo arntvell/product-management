@@ -12,6 +12,8 @@
 //   3. a lower revision arriving after a higher one for a batch is ignored
 //   4. a previous_barcode row REPLACES the barcode instead of adding a second
 //   5. a barcode Origio cannot file leaves the rest of the delivery filed
+//   6. the filed barcodes are offered to the channels, and sending them does
+//      not take the warehouse's name off the FieldOwner row
 //
 // Checklist item 5 on Loom's list — "each filed barcode reaches Shopify and
 // Sitoo" — is deliberately not here. The receiver does not push; it names the
@@ -249,6 +251,105 @@ async function main() {
     (await prisma.variant.findUniqueOrThrow({ where: { id: vS.id } })).barcode === corrected
   );
 
+  // --- 5. carrying the filed barcodes out to the channels ------------------
+  //
+  // Its own batch. A real correction re-sends the WHOLE batch at a higher
+  // revision, which is why pendingChannelScope only looks at the newest
+  // revision per batch — but the single-row corrections above are a fixture
+  // shortcut, so reusing their batch would leave the scope empty for a reason
+  // that says nothing about the sync.
+  const { pendingChannelScope, syncWarehouseBarcodes, recordChannelSend, summariseSend } =
+    await import("../src/lib/loom/warehouse-barcode-sync.ts");
+
+  const held = await prisma.variant.findMany({
+    where: { id: { in: [vS.id, vM.id, vXL.id] } },
+    select: { id: true, variantSku: true, barcode: true },
+  });
+  const syncEventId = `loom_evt_${TAG}_SYNC`;
+  await processBarcodesReady(
+    parseBarcodesReady({
+      event: "barcodes.ready",
+      event_id: syncEventId,
+      created_at: new Date().toISOString(),
+      data: {
+        batch_id: `batch_${TAG}_SYNC`,
+        inbound_ref: "143",
+        po_number: `PO-${TAG}-SYNC`,
+        revision: 1,
+        is_correction: false,
+        barcodes: held.map((v) => ({
+          sku: v.variantSku,
+          origio_variant_id: v.id,
+          barcode: v.barcode!,
+          previous_barcode: null,
+        })),
+      },
+    })
+  );
+
+  const scope = await pendingChannelScope(syncEventId);
+  check("the pending scope finds the filed sizes", scope.rows.length === 3, `${scope.rows.length} rows`);
+  check("...grouped to one colourway, which is Loom's unit", scope.colorwayIds.length === 1);
+  check(
+    "...carrying the master's spelling, not Loom's",
+    scope.rows.every((r) => held.some((h) => h.variantSku === r.variantSku && h.barcode === r.barcode))
+  );
+  check(
+    "a size whose master barcode disagrees is NOT pending",
+    !scope.rows.some((r) => r.variantSku === vL.variantSku)
+  );
+
+  // The authority is the regression this guards. applyVariantBarcodeEdits runs
+  // under the editor's authority, and it is only safe because every row plans as
+  // `unchanged` and apply-barcodes records a decision for written rows only. If
+  // that ever changes, the warehouse silently becomes "manual:variant-editor".
+  const sync = await syncWarehouseBarcodes({ eventId: syncEventId, dryRun: true });
+  check("the preview plans every size", sync.report.rows.length === 3, `${sync.report.rows.length} rows`);
+  check(
+    "the master is left alone — every row is unchanged",
+    sync.report.rows.every((r) => r.master === "unchanged"),
+    sync.report.rows.map((r) => r.master).join(",")
+  );
+  check(
+    "an unlinked size reports not-live rather than failing",
+    sync.report.rows.every((r) => r.shopify.state === "not-live" && r.sitoo.state === "not-live")
+  );
+
+  const applied = await syncWarehouseBarcodes({ eventId: syncEventId, dryRun: false });
+  const ownerAfter = await prisma.fieldOwner.findFirst({
+    where: { entityType: "variant", entityId: vS.id, field: "barcode" },
+  });
+  check(
+    "the warehouse is STILL the authority after a send",
+    ownerAfter?.authority === WAREHOUSE_AUTHORITY,
+    ownerAfter?.authority ?? "none"
+  );
+  check("the send wrote nothing to the master", applied.report.master.applied === 0);
+
+  // Only a clean run marks the event sent; anything failed leaves it pending so
+  // the rows come back next time.
+  const okSummary = summariseSend(applied.report);
+  const marked = await recordChannelSend([syncEventId], okSummary);
+  const syncedEvent = await prisma.loomInboundEvent.findUniqueOrThrow({ where: { eventId: syncEventId } });
+  check("a clean send marks the event", marked.marked === 1 && !!syncedEvent.channelsPushedAt);
+  check("...and is then no longer pending", (await pendingChannelScope(syncEventId)).rows.length === 0);
+
+  await prisma.loomInboundEvent.update({
+    where: { eventId: syncEventId },
+    data: { channelsPushedAt: null },
+  });
+  const failedSummary = { ...okSummary, sitoo: { ...okSummary.sitoo, failed: 1 } };
+  const notMarked = await recordChannelSend([syncEventId], failedSummary);
+  const afterFail = await prisma.loomInboundEvent.findUniqueOrThrow({ where: { eventId: syncEventId } });
+  check(
+    "a failed channel leaves the event pending, with its report",
+    notMarked.pending && !afterFail.channelsPushedAt && !!afterFail.channelReport
+  );
+  check(
+    "...so the rows are offered again",
+    (await pendingChannelScope(syncEventId)).rows.length === 3
+  );
+
   console.log(fail ? `\n${fail} FAILURES` : "\nall assertions passed");
 }
 
@@ -273,7 +374,11 @@ async function cleanup() {
     }
   };
 
-  await step("events", () => prisma.loomInboundEvent.deleteMany({ where: { batchId: `batch_${TAG}` } }));
+  await step("events", () =>
+    prisma.loomInboundEvent.deleteMany({
+      where: { batchId: { in: [`batch_${TAG}`, `batch_${TAG}_SYNC`] } },
+    })
+  );
   if (ids.variantIds.length) {
     await step("variant field owners", () =>
       prisma.fieldOwner.deleteMany({ where: { entityType: "variant", entityId: { in: ids.variantIds } } })
