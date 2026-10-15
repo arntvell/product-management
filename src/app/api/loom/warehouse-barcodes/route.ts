@@ -11,6 +11,12 @@ import {
 export const dynamic = "force-dynamic";
 // Node, not edge: the signature check is node:crypto.
 export const runtime = "nodejs";
+// For the `after()` work, not the reply. Loom is answered in milliseconds, but
+// the Shopify and Sitoo writes that follow run inside the same invocation, and
+// on the default budget a delivery of any size would be cut off part-written.
+// Nothing is lost when that happens — the rows stay pending — but the automatic
+// send would stop being automatic for exactly the deliveries that need it.
+export const maxDuration = 300;
 
 // POST /api/loom/warehouse-barcodes — Loom's `barcodes.ready`.
 //
