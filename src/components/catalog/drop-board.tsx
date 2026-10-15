@@ -42,8 +42,6 @@ const GAP_LABEL: Record<string, string> = {
   image: "image",
   tags: "tags",
   swatch: "swatch",
-  "care page": "care page",
-  "fit guide": "fit guide",
   variants: "sizes",
   price: "price",
 };
@@ -154,8 +152,9 @@ export function DropBoard({
       fullDescription: "description",
       swatchHex: "swatch",
       tags: "tags",
-      carePageId: "care page",
-      fitguidePageId: "fit guide",
+      // No carePageId/fitguidePageId: filling those closes no gap, because the
+      // gate stopped judging them (readiness.ts, 2026-10-15). They are still
+      // edited here — they are just not what blocks a publish.
     };
     setRows((prev) =>
       prev.map((r) => {

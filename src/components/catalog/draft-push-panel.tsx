@@ -77,10 +77,10 @@ export function DraftPushPanel({
   // button below would turn a deliberate dry run into a live push.
   const [lastDryRun, setLastDryRun] = useState(false);
 
-  // The only gaps an operator may waive. A candle has no care page and no fit
-  // guide and never will, so without this the push is dead on arrival for most
-  // external product — but "no variants" and "no price" are not on this list and
-  // no button reaches them.
+  // The only gaps an operator may waive — the merchandising ones. "No variants"
+  // and "no price" are not on this list and no button reaches them. Shorter than
+  // it was: the care page and fit guide are no longer gate conditions at all, and
+  // a bought-in product is not judged on its swatch (readiness.ts, 2026-10-15).
   const waivable = blocked.filter((b) => b.waivable);
 
   // Publish without being asked to. React runs effects twice in development and

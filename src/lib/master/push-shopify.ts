@@ -220,7 +220,7 @@ export async function pushColorwayToShopify(
   // shop last agreed — see shopify-update.ts. Vintage keeps the full push: its
   // body, stock and status are the master's to generate. `clearEmptied` has no
   // meaning here; a field emptied since the baseline IS a clear.
-  if (action === "update" && readinessProfileFor(cw.brand?.name) !== "vintage") {
+  if (action === "update" && readinessProfileFor(cw.brand) !== "vintage") {
     const plan = await planShopifyUpdate(id, seasonCode);
     const r = await applyShopifyUpdate(plan, { resolveModelText, resolveProductGids });
     if (adopted)
@@ -260,7 +260,7 @@ export async function pushColorwayToShopify(
     cw.shortDescription;
   // A one-of-one vintage garment has no swatch, care page or fit guide and is
   // judged without them; everything else about the gate is unchanged.
-  const profile = readinessProfileFor(cw.brand?.name);
+  const profile = readinessProfileFor(cw.brand);
   const isVintage = profile === "vintage";
   const readinessInput = {
     hasVariants,

@@ -142,15 +142,14 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
             hasImage: cw.media.length > 0 || cw.seasonImages.length > 0,
             hasTags: cw.tags.length > 0,
             swatchHex: cw.swatchHex,
-            carePageId: cw.carePageId,
-            fitguidePageId: cw.fitguidePageId,
-            profile: readinessProfileFor(cw.brand?.name),
+            profile: readinessProfileFor(cw.brand),
           });
           if (soft.length) {
-            // NOT waived silently. A candle has no care page or fit guide, and
-            // publishing a product page without a description or photograph
-            // should take a decision — so the batch reports it and offers a
-            // button, rather than deciding on the operator's behalf.
+            // NOT waived silently. Publishing a product page with no
+            // description or photograph should take a decision — so the batch
+            // reports it and offers a button, rather than deciding on the
+            // operator's behalf. (The care page and fit guide stopped being gate
+            // conditions on 2026-10-15; see readiness.ts.)
             state = "BLOCKED";
             error = `missing ${soft.join(", ")}`;
             waivable = true;

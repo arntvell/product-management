@@ -132,9 +132,7 @@ export async function listColorwaysForPublishing(
       hasImage: cw._count.media > 0 || cw.seasonImages.length > 0,
       hasTags: cw.tags.length > 0,
       swatchHex: cw.swatchHex,
-      carePageId: cw.carePageId,
-      fitguidePageId: cw.fitguidePageId,
-      profile: readinessProfileFor(cw.brand?.name),
+      profile: readinessProfileFor(cw.brand),
     };
     const shopifyMiss = shopifyMissing(shopifyReadinessInput);
     const loomMiss = loomMissing({

@@ -124,7 +124,7 @@ export async function POST(req: Request) {
     // is the list the confirm shows. Vintage still pushes whole.
     const shopifyChanges: Array<{ colorwaySku: string; send: string[]; notSent: string[]; note?: string }> = [];
     for (const c of toShopify) {
-      if (readinessProfileFor(c.brand?.name) === "vintage") continue;
+      if (readinessProfileFor(c.brand) === "vintage") continue;
       try {
         const plan = await planShopifyUpdate(c.id, seasonOf(c));
         shopifyChanges.push({

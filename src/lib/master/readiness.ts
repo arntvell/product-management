@@ -85,7 +85,7 @@ export function purposeForMode(mode: "full" | "data" | undefined): LoomPurpose {
  *             production data behind it. Judged against the mainline profile it
  *             fails 100% of the time.
  */
-export type ShopifyReadinessProfile = "mainline" | "vintage";
+export type ShopifyReadinessProfile = "mainline" | "external" | "vintage";
 
 export interface ShopifyReadinessInput {
   hasVariants: boolean;
@@ -96,8 +96,6 @@ export interface ShopifyReadinessInput {
   hasImage?: boolean;
   hasTags?: boolean;
   swatchHex?: string | null;
-  carePageId?: string | null;
-  fitguidePageId?: string | null;
   /** Defaults to "mainline" so every existing caller is unchanged. */
   profile?: ShopifyReadinessProfile;
 }
@@ -111,12 +109,25 @@ export interface ShopifyReadinessInput {
  * fields meant the app reported 226 FW26 products ready when none had either.
  * The merchandising fields are part of the gate for that reason.
  *
- * Vintage waives exactly three references it can never hold, and nothing else:
- * variants, price, description, image and tags stay required. The alternative —
- * pushing vintage with `allowIncomplete` — waives the image check too, and a
- * product going live with no photograph is the failure this gate exists to
- * prevent. The exception lives here rather than at the call site because this
- * module is the single source of truth: the badge and the push must not drift.
+ * The care page and the fit guide are NOT part of this (2026-10-15). They were,
+ * and they blocked 1,505 of Livid's 1,682 non-vintage colorways and 1,097 of the
+ * 1,258 externals — 88% of everything judged against them. A condition that
+ * nearly nothing satisfies is not a standard being enforced, it is a gate that
+ * has to be waived to get any work done, and `allowIncomplete` waives the image
+ * check with it. They are still edited and still pushed; they just no longer
+ * decide whether a product may go live.
+ *
+ * The swatch survives for Livid's own production and is waived for externals and
+ * vintage. A Livid colourway IS a colour decision and the hex is the master's to
+ * hold; a bought-in Paraboot or a one-of-one garment is not, which 1,253 of 1,258
+ * externals holding no swatch says plainly enough.
+ *
+ * What is left — variants, price, description, image, tags — is the part that
+ * decides whether a customer should see the page at all. The alternative, pushing
+ * with `allowIncomplete`, waives the image check too, and a product going live
+ * with no photograph is the failure this gate exists to prevent. The exceptions
+ * live here rather than at the call site because this module is the single source
+ * of truth: the badge and the push must not drift.
  */
 export function shopifyMissing(i: ShopifyReadinessInput): string[] {
   const missing: string[] = [];
@@ -125,24 +136,35 @@ export function shopifyMissing(i: ShopifyReadinessInput): string[] {
   if (!has(i.description)) missing.push("description");
   if (i.hasImage === false) missing.push("image");
   if (i.hasTags === false) missing.push("tags");
-  if (i.profile !== "vintage") {
-    if (!has(i.swatchHex)) missing.push("swatch");
-    if (!has(i.carePageId)) missing.push("care page");
-    if (!has(i.fitguidePageId)) missing.push("fit guide");
-  }
+  if ((i.profile ?? "mainline") === "mainline" && !has(i.swatchHex)) missing.push("swatch");
   return missing;
 }
 
 /**
  * The readiness profile a colorway is judged against.
  *
- * Keyed off the brand, like `isLoomEligible` — it is a fact about what the
- * product IS, not a per-product intent someone can tick wrong. Deliberately not
- * keyed off `Source`: the 2,086 online-vintage rows arrived as CIN7_IMPORT and
- * `Source` becomes pure history once Cin7 retires.
+ * Keyed off the brand, like `isLoomEligible` and `BrandScope` — it is a fact
+ * about what the product IS, not a per-product intent someone can tick wrong.
+ * Deliberately not keyed off `Source`: the 2,086 online-vintage rows arrived as
+ * CIN7_IMPORT and `Source` becomes pure history once Cin7 retires.
+ *
+ * Takes the brand rather than its name because "external" is `isLivid === false`,
+ * the same discriminator `/catalog/external` uses. The whole object, and
+ * `isLivid` is REQUIRED on it rather than optional: a query that selected only
+ * the name would otherwise compile and quietly judge every Livid product as an
+ * external, which is the exact drift this module exists to prevent.
+ *
+ * Note that "external" and "vintage" currently differ in nothing the gate reads.
+ * They stay separate because callers outside the gate branch on "vintage" for an
+ * unrelated reason — vintage keeps the full declarative Shopify push, everything
+ * else sends only what changed — and collapsing the two would quietly put every
+ * external on that path.
  */
-export function readinessProfileFor(brandName: string | null | undefined): ShopifyReadinessProfile {
-  return brandName?.trim().toLowerCase() === "vintage" ? "vintage" : "mainline";
+export function readinessProfileFor(
+  brand: { name?: string | null; isLivid: boolean | null } | null | undefined
+): ShopifyReadinessProfile {
+  if (brand?.name?.trim().toLowerCase() === "vintage") return "vintage";
+  return brand?.isLivid === true ? "mainline" : "external";
 }
 
 /** The subset that stops a product being orderable at all. */
