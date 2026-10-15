@@ -883,6 +883,52 @@ model BarcodeAllocation {
   @@index([sku])
 }
 
+// An event Loom delivered to Origio, and what Origio did with it.
+//
+// Exists for idempotency, not for history. Loom retries on a ladder of eight
+// attempts over about ten hours, and `X-Loom-Event-Id` is stable across every
+// one of them, so the only way to answer a retry correctly — 2xx, having
+// changed nothing a second time — is to remember the ids already processed.
+//
+// `revision` is the second guard. The warehouse can correct a barcode until the
+// inbound closes, and a correction re-sends the WHOLE batch with a higher
+// revision. Loom says events can arrive out of order after a retry, so a batch
+// is processed only when its revision beats the highest already seen for that
+// `batchId`; a lower one is stored and ignored.
+//
+// `payload` keeps the body as delivered. A row Origio refused is answerable
+// later only if the thing it refused is still readable.
+model LoomInboundEvent {
+  id         String   @id @default(cuid())
+  /// `X-Loom-Event-Id`. The dedupe key — NOT `X-Loom-Delivery`, which changes
+  /// on every attempt.
+  eventId    String   @unique
+  event      String // "barcodes.ready"
+  batchId    String
+  inboundRef String?
+  poNumber   String?
+  revision   Int
+  isCorrection Boolean @default(false)
+  /// "processed" | "superseded" (a lower revision arrived late) | "failed"
+  status     String
+  payload    Json
+  /// Per-outcome tallies: filled, changed, unchanged, unfiled.
+  counts     Json?
+  /// Rows Origio did not file, each with the reason. A per-row refusal is never
+  /// an HTTP error: any 4xx but 401/408/429 tells Loom to stop retrying and
+  /// treat the whole delivery as permanently refused, so a single bad barcode
+  /// must not take the inbound down with it.
+  unfiled    Json?
+  /// Colorways whose barcodes changed, for the channel push that follows. The
+  /// receiver does not push: Shopify and Sitoo writes do not fit in Loom's 15 s
+  /// budget, and a Loom push needs a person to confirm it.
+  affectedColorwayIds Json?
+  receivedAt DateTime @default(now())
+  processedAt DateTime?
+
+  @@index([batchId, revision])
+}
+
 // Per-variant channel identity. ChannelPublication is colorway-level with a
 // single externalId, which is right for a Shopify product but not for Sitoo
 // (one record per SKU) or for the Loom stock registry (movements are per

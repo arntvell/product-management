@@ -32,6 +32,25 @@ import {
  */
 const ORIGO_HEADERS = [USER_ID_HEADER, USER_ROLE_HEADER, USER_EMAIL_HEADER];
 
+/**
+ * Routes a partner signs for itself, which this gate must let past untouched.
+ *
+ * Loom's warehouse-barcode webhook authenticates with an HMAC over the raw
+ * request body (`X-Loom-Signature`), not with anything Origio issued — it has no
+ * Bearer to send, so `serviceCall` cannot recognise it and both gates would
+ * answer 401. The route verifies the signature itself and is useless to a caller
+ * who cannot compute one.
+ *
+ * Listed in ONE place because the two gates are separate code paths: exempting
+ * it in Clerk mode alone would work in production and 401 in local dev, and the
+ * reverse would be worse.
+ */
+const WEBHOOK_PATHS = [/^\/api\/loom\/warehouse-barcodes$/];
+
+function isWebhook(path: string): boolean {
+  return WEBHOOK_PATHS.some((r) => r.test(path));
+}
+
 /** Headers a client may NOT set: only this file asserts who someone is. */
 function cleanHeaders(request: NextRequest): Headers {
   const h = new Headers(request.headers);
@@ -68,6 +87,7 @@ function passwordGate(request: NextRequest): NextResponse {
   const password = process.env.APP_PASSWORD;
   const path = request.nextUrl.pathname;
   if (path === "/login" || path.startsWith("/login/")) return NextResponse.next();
+  if (isWebhook(path)) return NextResponse.next({ request: { headers: cleanHeaders(request) } });
 
   if (!password) {
     if (process.env.NODE_ENV !== "production") return NextResponse.next();
@@ -105,7 +125,7 @@ const PUBLIC_PATHS = [/^\/sign-in(\/|$)/, /^\/sign-up(\/|$)/, /^\/no-access$/];
 
 const clerkGate = clerkMiddleware(async (auth, request) => {
   const path = request.nextUrl.pathname;
-  if (PUBLIC_PATHS.some((r) => r.test(path)))
+  if (PUBLIC_PATHS.some((r) => r.test(path)) || isWebhook(path))
     return NextResponse.next({ request: { headers: cleanHeaders(request) } });
   if (serviceCall(request, "clerk")) return asService(request);
 
