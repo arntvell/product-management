@@ -766,7 +766,16 @@ function shopifyInput(
     ),
     siblingSkus: siblings.map((v) => v.variantSku),
     masterPriceNok: masterPriceNok(r.cw),
-    size: { variantId, sku: s.sku, barcode: s.barcode, sizeLabel: s.entry.sizeLabel },
+    // dim1/dim2 as well as the label: a Waist × Length product needs the pair,
+    // and the label is a display form that is not an option value in Shopify.
+    size: {
+      variantId,
+      sku: s.sku,
+      barcode: s.barcode,
+      sizeLabel: s.entry.sizeLabel,
+      dim1: s.entry.dim1,
+      dim2: s.entry.dim2,
+    },
   };
 }
 

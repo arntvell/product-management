@@ -192,9 +192,12 @@ async function main() {
   console.log(`  in neither Sitoo nor Loom -> never made, no stock: ${neverMade}`);
   console.log(`  carrying Loom stock right now:                    ${stocked.length} (${stocked.reduce((a, m) => a + m.loomStock, 0)} units)`);
 
-  console.log(`\nCan add-size carry them today?`);
-  console.log(`  1-D (one size option)  -> yes: ${oneD}`);
-  console.log(`  2-D (Waist x Length)   -> no, add-variant refuses a 2-option product: ${twoD}`);
+  // Both shapes are addable since add-variant learned Waist × Length
+  // (2026-10-16). Kept as a split because the two take different Shopify
+  // mutations and a regression would show up on one shape and not the other.
+  console.log(`\nShape (add-variant handles both):`);
+  console.log(`  1-D, one size option : ${oneD}`);
+  console.log(`  2-D, Waist x Length  : ${twoD}`);
 
   // Which sizes go missing, across the whole set. The answer is the extremes,
   // and seeing it as a ranking is what makes that obvious.
@@ -253,8 +256,8 @@ async function main() {
             m.barcode ? "yes" : "no — no barcode",
             r.have === 0
               ? "none of this colourway's sizes matched in Shopify — check for a SKU alias first"
-              : m.dim2
-                ? "add-variant refuses a 2-option product (Waist, Length)"
+              : !m.sitoo && !m.loom
+                ? "never made — nothing to publish"
                 : "",
           ]
             .map(esc)

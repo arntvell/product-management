@@ -123,7 +123,20 @@ export interface ShopifyAddSizeInput {
   siblingSkus: string[];
   /** The master's NOK MSRP, used only when the live siblings disagree on price. */
   masterPriceNok: string | null;
-  size: { variantId: string; sku: string; barcode: string | null; sizeLabel: string };
+  /**
+   * `dim1`/`dim2` mirror the master's variant. A product with two options
+   * (Waist × Length) needs both to say which variant is being created —
+   * `sizeLabel` is the joined display form ("W30/L34") and is not an option
+   * value in Shopify, where the values are the bare numbers.
+   */
+  size: {
+    variantId: string;
+    sku: string;
+    barcode: string | null;
+    sizeLabel: string;
+    dim1?: string;
+    dim2?: string | null;
+  };
 }
 
 export interface ShopifyAddSizePlan {
@@ -132,7 +145,10 @@ export interface ShopifyAddSizePlan {
   productGid?: string;
   productTitle?: string;
   productStatus?: string;
+  /** Single-option products only; null for a two-option one. */
   optionName?: string;
+  /** What each option value would be — one entry per product option. */
+  optionValues?: { optionName: string; name: string }[];
   price?: string;
   compareAtPrice?: string | null;
   priceSource?: "siblings" | "master";
@@ -143,7 +159,14 @@ export interface ShopifyAddSizePlan {
   copiedFrom?: string | null;
   /** The whole planned mutation input, for the report. */
   input?: Record<string, unknown>;
-  /** Whether the option values would be put back into size order. */
+  /**
+   * Option pickers to put back into size order, one entry per option that needs
+   * it. Shopify appends a new value at the end, so a 30 added to 28 29 32 reads
+   * 28 29 32 30. An option whose values do not sort naturally is left alone
+   * rather than shuffled on a guess.
+   */
+  reorders?: { optionName: string; values: string[] }[] | null;
+  /** Single-option convenience, kept so the existing report line still reads. */
   reorder?: string[] | null;
   /** When the SKU is already on the product: the node, so it can be linked. */
   existingNode?: { id: string; sku: string | null; barcode: string | null; inventoryItem: { id: string } | null };
@@ -210,23 +233,58 @@ export async function planShopifyAddSize(input: ShopifyAddSizeInput): Promise<Sh
       },
     };
 
-  // One option only. A two-option product (Colour × Size) cannot take a size
-  // without also choosing its colour, and "Default Title" is a product that was
-  // never sized: adding a size to it is a restructure, not an addition.
-  if (product.options.length !== 1)
+  // One or two options. Two is a Waist × Length product, where a size is a PAIR
+  // of values and the master's dim1/dim2 say which — `sizeLabel` ("W30/L34") is
+  // a display form and is not an option value in Shopify, where the values are
+  // the bare numbers. Three or more is a shape this cannot reason about (a
+  // Colour × Size product needs a colour chosen, which is a restructure), and
+  // "Default Title" is a product that was never sized at all.
+  const opts = product.options.slice().sort((a, b) => a.position - b.position);
+  if (opts.length < 1 || opts.length > 2)
     return {
       state: "refused",
       productGid,
-      note: `the Shopify product has ${product.options.length} options (${product.options.map((o) => o.name).join(", ")}) — only a single size option can take a new size`,
+      note: `the Shopify product has ${product.options.length} options (${product.options.map((o) => o.name).join(", ")}) — only one or two (Waist × Length) can take a new size`,
     };
-  const option = product.options[0];
-  if (option.optionValues.length === 1 && /^default title$/i.test(option.optionValues[0].name))
+  if (opts.length === 1 && opts[0].optionValues.length === 1 && /^default title$/i.test(opts[0].optionValues[0].name))
     return { state: "refused", productGid, note: "the Shopify product has no size option (Default Title)" };
-  if (option.optionValues.some((v) => v.name.toUpperCase() === input.size.sizeLabel.toUpperCase()))
+
+  // What this size is, per option. Positional: Shopify's first option carries
+  // dim1, the second dim2 — the same order push-shopify.ts uses when it CREATES
+  // a Waist × Length product, so the two paths cannot disagree.
+  const dim1 = input.size.dim1?.trim() || null;
+  const dim2 = input.size.dim2?.trim() || null;
+  let optionValues: { optionName: string; name: string }[];
+  if (opts.length === 2) {
+    if (!dim1 || !dim2)
+      return {
+        state: "refused",
+        productGid,
+        note: `the Shopify product has two options (${opts.map((o) => o.name).join(" × ")}) but the master size "${input.size.sizeLabel}" has only one dimension — there is no second value to send`,
+      };
+    optionValues = [
+      { optionName: opts[0].name, name: dim1 },
+      { optionName: opts[1].name, name: dim2 },
+    ];
+  } else {
+    optionValues = [{ optionName: opts[0].name, name: input.size.sizeLabel }];
+  }
+
+  // Already on the product under another SKU. For two options that is the PAIR,
+  // not either value: Waist=30 almost certainly exists already on another
+  // length, and asking only about the label would refuse every size on a
+  // Waist × Length product for a reason that is not true.
+  const wanted = optionValues.map((o) => `${o.optionName}=${o.name}`.toUpperCase()).sort().join("|");
+  const clash = live.find(
+    (v) =>
+      v.selectedOptions.length === optionValues.length &&
+      v.selectedOptions.map((o) => `${o.name}=${o.value}`.toUpperCase()).sort().join("|") === wanted
+  );
+  if (clash)
     return {
       state: "refused",
       productGid,
-      note: `Shopify already has a "${input.size.sizeLabel}" on this product under another SKU`,
+      note: `Shopify already has ${optionValues.map((o) => `${o.optionName} ${o.name}`).join(" / ")} on this product under another SKU (${clash.sku ?? clash.id})`,
     };
 
   // The SKU or barcode must not be live anywhere else in the shop.
@@ -262,7 +320,7 @@ export async function planShopifyAddSize(input: ShopifyAddSizeInput): Promise<Sh
 
   const inv = model.inventoryItem;
   const mutationInput: Record<string, unknown> = {
-    optionValues: [{ optionName: option.name, name: input.size.sizeLabel }],
+    optionValues,
     price,
     ...(agreedPrice !== undefined && agreedCompare ? { compareAtPrice: agreedCompare } : {}),
     ...(input.size.barcode ? { barcode: input.size.barcode } : {}),
@@ -279,17 +337,27 @@ export async function planShopifyAddSize(input: ShopifyAddSizeInput): Promise<Sh
 
   // Shopify appends a new value at the end of the picker, so a 40 added to
   // 39 41 42 would read 39 41 42 40. Put it in its place — but only when every
-  // value sorts naturally, so a picker we cannot read is never shuffled on a guess.
-  const values = [...option.optionValues.map((v) => v.name), input.size.sizeLabel];
-  const sorted = sortSizes(values);
-  const reorder = sorted && sorted.join("|") !== values.join("|") ? sorted : null;
+  // value sorts naturally, so a picker we cannot read is never shuffled on a
+  // guess. Per option, because on a Waist × Length product a new waist leaves
+  // the length picker untouched, and reordering an option that did not change
+  // is a write for nothing.
+  const reorders: { optionName: string; values: string[] }[] = [];
+  for (const [i, o] of opts.entries()) {
+    const adding = optionValues[i].name;
+    const current = o.optionValues.map((v) => v.name);
+    if (current.some((v) => v.toUpperCase() === adding.toUpperCase())) continue; // value already there
+    const next = [...current, adding];
+    const sorted = sortSizes(next);
+    if (sorted && sorted.join("|") !== next.join("|")) reorders.push({ optionName: o.name, values: sorted });
+  }
 
   return {
     state: "write",
     productGid,
     productTitle: product.title,
     productStatus: product.status,
-    optionName: option.name,
+    optionName: opts.length === 1 ? opts[0].name : undefined,
+    optionValues,
     price,
     compareAtPrice: agreedPrice !== undefined ? agreedCompare ?? null : null,
     priceSource: agreedPrice !== undefined ? "siblings" : "master",
@@ -297,7 +365,9 @@ export async function planShopifyAddSize(input: ShopifyAddSizeInput): Promise<Sh
     tracked: Boolean(inv?.tracked),
     copiedFrom: model.sku,
     input: mutationInput,
-    reorder,
+    reorders: reorders.length ? reorders : null,
+    // Kept for the single-option report line in add-size.ts.
+    reorder: opts.length === 1 ? reorders[0]?.values ?? null : null,
     ...(agreedPrice === undefined
       ? { note: "the live sizes disagree on price, so the master's NOK MSRP is used" }
       : {}),
@@ -331,13 +401,17 @@ export async function applyShopifyAddSize(input: ShopifyAddSizeInput): Promise<S
   // the Loom send that follows this is what carries it.
   const refs = await recordShopifyVariantRefs(input.colorwayId, [node]);
 
-  if (plan.reorder) {
+  // One call for every option that needs reordering. The size IS added at this
+  // point, so a failure here is a warning and never an error — a picker in the
+  // wrong order is cosmetic, and throwing would make a successful add read as a
+  // failure and invite a retry that would then refuse as "already there".
+  if (plan.reorders?.length) {
     try {
       const r = await shopifyGraphQL<{ productOptionsReorder: { userErrors: { message: string }[] } }>(
         OPTIONS_REORDER_MUTATION,
         {
           productId: plan.productGid,
-          options: [{ name: plan.optionName, values: plan.reorder.map((name) => ({ name })) }],
+          options: plan.reorders.map((o) => ({ name: o.optionName, values: o.values.map((name) => ({ name })) })),
         }
       );
       const e = r.productOptionsReorder.userErrors;
