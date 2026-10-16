@@ -18,8 +18,17 @@
 //   LINKABLE          the master has no Shopify ref, but a LIVE Shopify variant
 //                     matches on SKU or barcode. Running the linker fixes it.
 //                     This is the Pantherella Tabitha Winter White case.
-//   STALE_IN_LOOM     the master HAS the inventory id and Loom does not. A Loom
-//                     push carries it; nothing needs discovering.
+//   BARCODE_GAP       the master has the inventory id, Loom does not, and a push
+//                     will never carry it: `buildRegistryColorway` drops a
+//                     barcode-less variant of a LIVID colourway from the registry
+//                     payload, because the registry falls back to barcode where
+//                     there is no inventory link and a blank would have every
+//                     such variant sharing one key. So the id cannot travel until
+//                     the size has a barcode. Found the hard way — 15 Livid sizes
+//                     survived a push that reported `variantsUpdated` for all of
+//                     them and still read null in Loom afterwards.
+//   STALE_IN_LOOM     the master HAS the inventory id and Loom does not, and the
+//                     variant IS in the payload. A Loom push carries it.
 //   NEEDS_BACKFILL    the master has a Shopify variant ref but no inventory id
 //                     on it. The linker backfills these.
 //   SHOPIFY_ARCHIVED  the only Shopify variant matching is on an archived
@@ -39,6 +48,7 @@ config({ path: ".env.local", quiet: true });
 
 type Bucket =
   | "LINKABLE"
+  | "BARCODE_GAP"
   | "STALE_IN_LOOM"
   | "NEEDS_BACKFILL"
   | "SHOPIFY_ARCHIVED"
@@ -148,8 +158,20 @@ async function main() {
         bucket = "BY_POLICY";
         note = m.colorway.kind !== "MERCHANDISE" ? `kind ${m.colorway.kind}` : "store vintage — Sitoo only";
       } else if (ref?.externalInventoryId) {
-        bucket = "STALE_IN_LOOM";
-        note = "master holds it; a Loom push carries it";
+        // The registry payload's own filter decides whether a push can carry it.
+        const droppedFromPayload =
+          !!m &&
+          !m.barcode?.trim() &&
+          m.colorway.kind !== "CONSUMABLE" &&
+          m.colorway.kind !== "MATERIAL" &&
+          m.colorway.brand?.isLivid === true;
+        if (droppedFromPayload) {
+          bucket = "BARCODE_GAP";
+          note = "no barcode — the registry payload drops it, so no push can carry the id";
+        } else {
+          bucket = "STALE_IN_LOOM";
+          note = "master holds it; a Loom push carries it";
+        }
       } else if (ref?.externalId) {
         bucket = "NEEDS_BACKFILL";
         note = "variant linked, inventory id missing";
@@ -180,6 +202,7 @@ async function main() {
   const ORDER: Bucket[] = [
     "LINKABLE",
     "STALE_IN_LOOM",
+    "BARCODE_GAP",
     "NEEDS_BACKFILL",
     "SHOPIFY_ARCHIVED",
     "NOT_IN_SHOPIFY",
@@ -191,6 +214,8 @@ async function main() {
   console.log(`  with an inventory id: ${withInventoryId}`);
   console.log(`  WITHOUT one         : ${missing}\n`);
 
+  // BARCODE_GAP is deliberately not "fixable now": it needs a barcode allocated
+  // first, which is a decision about Livid's own labelling, not a sweep.
   const ACTIONABLE: Bucket[] = ["LINKABLE", "STALE_IN_LOOM", "NEEDS_BACKFILL"];
   for (const b of ORDER) {
     const n = counts.get(b) ?? 0;
@@ -217,7 +242,7 @@ async function main() {
   // without knowing whether that is vintage (largely expected) or live externals
   // (a real gap).
   console.log(`\nThe large buckets, by brand:`);
-  for (const b of ["SHOPIFY_ARCHIVED", "NOT_IN_SHOPIFY", "BY_POLICY"] as Bucket[]) {
+  for (const b of ["BARCODE_GAP", "SHOPIFY_ARCHIVED", "NOT_IN_SHOPIFY", "BY_POLICY"] as Bucket[]) {
     const top = [...byBrand.entries()]
       .map(([brand, m]) => ({ brand, n: m.get(b) ?? 0 }))
       .filter((r) => r.n > 0)
