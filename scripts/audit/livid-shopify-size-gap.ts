@@ -44,11 +44,49 @@ async function main() {
     all.filter((r) => r.archived).map((r) => (r.sku ? normalizeSku(r.sku) : "")).filter(Boolean)
   );
 
+  // What Loom actually holds, so "never made" can be asserted rather than
+  // inferred from the master alone.
+  const loomSkus = new Set<string>();
+  const loomStock = new Map<string, number>();
+  const token = process.env.LOOM_LOCAL_TOKEN ?? process.env.LOOM_TOKEN;
+  if (token) {
+    let cursor: string | null = null;
+    do {
+      const u = new URL("https://loom.livid.no/api/origio/v1/products");
+      u.searchParams.set("limit", "200");
+      if (cursor) u.searchParams.set("cursor", cursor);
+      const res = await fetch(u, { headers: { authorization: `Bearer ${token}`, accept: "application/json" } });
+      if (!res.ok) {
+        console.log(`Loom read failed (HTTP ${res.status}) — the never-made column will be blank.`);
+        break;
+      }
+      const j: any = await res.json();
+      for (const r of j.rows ?? [])
+        for (const v of r.variants ?? []) {
+          loomSkus.add(v.variant_sku);
+          loomStock.set(
+            v.variant_sku,
+            (v.stock ?? []).reduce((a: number, st: any) => a + (st.on_hand ?? 0), 0)
+          );
+        }
+      cursor = j.nextCursor ?? null;
+    } while (cursor);
+  } else {
+    console.log("No Loom token — the never-made column will be blank.");
+  }
+
   const cws = await prisma.colorway.findMany({
     where: {
       brand: { isLivid: true },
       kind: "MERCHANDISE",
       publications: { some: { channel: "SHOPIFY", externalId: { not: null } } },
+      // An archived colourway is not "missing sizes" — it is archived, and
+      // adding sizes to it in Shopify is the write add-variant's own guard
+      // refuses. And a merge tombstone (`--merged-into-…`) is a redirect, not a
+      // product: its variants are the pre-merge spelling of rows that live
+      // under the surviving colourway. Both polluted the first list.
+      status: { not: "ARCHIVED" },
+      NOT: { colorwaySku: { contains: "--merged" } },
     },
     select: {
       colorwaySku: true,
@@ -56,7 +94,17 @@ async function main() {
       status: true,
       entries: { select: { season: { select: { code: true } } } },
       variants: {
-        select: { variantSku: true, sizeLabel: true, barcode: true, dim1: true, dim2: true },
+        select: {
+          variantSku: true,
+          sizeLabel: true,
+          barcode: true,
+          dim1: true,
+          dim2: true,
+          // Arnt's discriminator: a size in neither Sitoo nor Loom was never
+          // made, so there is no stock and nothing to publish. Sitoo presence is
+          // read from the link row; Loom is asked directly below.
+          channelRefs: { select: { channel: true } },
+        },
         orderBy: { sizeLabel: "asc" },
       },
     },
@@ -78,6 +126,9 @@ async function main() {
       dim2: string | null;
       barcode: string | null;
       archivedInShopify: boolean;
+      sitoo: boolean;
+      loom: boolean;
+      loomStock: number;
     }[];
   }
 
@@ -93,6 +144,9 @@ async function main() {
         dim2: v.dim2,
         barcode: v.barcode,
         archivedInShopify: archivedSku.has(normalizeSku(v.variantSku)),
+        sitoo: v.channelRefs.some((r) => r.channel === "SITOO"),
+        loom: loomSkus.has(v.variantSku),
+        loomStock: loomStock.get(v.variantSku) ?? 0,
       }));
     if (!missing.length) {
       complete++;
@@ -131,6 +185,13 @@ async function main() {
     `\nACTIVE colourways selling an incomplete run: ${activePartial.length}, ` +
       `${activePartial.reduce((a, r) => a + r.missing.length, 0)} size(s) a customer cannot buy`
   );
+  const everMade = rows.flatMap((r) => r.missing);
+  const neverMade = everMade.filter((m) => !m.sitoo && !m.loom).length;
+  const stocked = everMade.filter((m) => m.loomStock > 0);
+  console.log(`\nWas the size ever actually made?`);
+  console.log(`  in neither Sitoo nor Loom -> never made, no stock: ${neverMade}`);
+  console.log(`  carrying Loom stock right now:                    ${stocked.length} (${stocked.reduce((a, m) => a + m.loomStock, 0)} units)`);
+
   console.log(`\nCan add-size carry them today?`);
   console.log(`  1-D (one size option)  -> yes: ${oneD}`);
   console.log(`  2-D (Waist x Length)   -> no, add-variant refuses a 2-option product: ${twoD}`);
@@ -166,7 +227,7 @@ async function main() {
     mkdirSync(dirname(csvPath), { recursive: true });
     const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""')}"`;
     const out = [
-      "colorway_sku,name,status,seasons,sizes_live,sizes_total,variant_sku,size,dim1,dim2,barcode,loom_will_carry,blocker",
+      "colorway_sku,name,status,seasons,sizes_live,sizes_total,variant_sku,size,dim1,dim2,barcode,in_sitoo,in_loom,loom_stock,ever_made,loom_will_carry,blocker",
       ...rows.flatMap((r) =>
         r.missing.map((m) =>
           [
@@ -181,6 +242,12 @@ async function main() {
             m.dim1,
             m.dim2 ?? "",
             m.barcode ?? "",
+            m.sitoo ? "yes" : "no",
+            m.loom ? "yes" : "no",
+            m.loomStock,
+            // Arnt's rule: absent from both means the variant was never
+            // produced, so there is nothing to publish.
+            !m.sitoo && !m.loom ? "NO — never made" : "yes",
             // Loom's registry drops a barcode-less Livid variant, so Shopify
             // would have the size and Loom would not.
             m.barcode ? "yes" : "no — no barcode",
