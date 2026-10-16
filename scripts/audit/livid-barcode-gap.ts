@@ -27,10 +27,18 @@
 //                re-run the Threadflow sync.
 //   TF_NULL      Threadflow knows the size and has assigned no barcode. Theirs
 //                to fill; nothing to do here.
-//   TF_UNKNOWN   Threadflow does not have the size at all. Nobody upstream will
-//                ever barcode it, because nobody upstream knows it exists —
-//                these are sizes that entered through Origio (add-size, a Cin7
-//                import) and never went back. The real decision.
+//   TF_UNKNOWN   Threadflow does not have the size at all — but that only means
+//                something where Threadflow was ever expected to. It is new
+//                software and only carries the seasons it was built for, so a
+//                colourway outside them is NOT a defect. Split three ways:
+//
+//                  PRE_TF      the colourway is in no Threadflow season.
+//                              Expected; Threadflow never knew it.
+//                  TF_NO_CW    the colourway is in a Threadflow season and
+//                              Threadflow does not have the colourway either.
+//                  TF_NO_SIZE  Threadflow HAS the colourway and not this size.
+//                              The sharp one: a size that exists here and
+//                              nowhere upstream, so no barcode is ever coming.
 
 import { config } from "dotenv";
 config({ path: ".env.local", quiet: true });
@@ -50,6 +58,7 @@ async function main() {
     select: {
       colorwaySku: true,
       status: true,
+      entries: { select: { season: { select: { code: true } } } },
       variants: {
         select: {
           variantSku: true,
@@ -62,7 +71,7 @@ async function main() {
   });
   await prisma.$disconnect();
 
-  type Gap = { sku: string; size: string; cw: string; status: string; shopifyInv: boolean; shape: "WHOLE" | "PARTIAL" };
+  type Gap = { sku: string; size: string; cw: string; status: string; shopifyInv: boolean; shape: "WHOLE" | "PARTIAL"; seasons: string[] };
   const gaps: Gap[] = [];
   for (const c of cws) {
     const shape = c.variants.some((v) => v.barcode) ? "PARTIAL" : "WHOLE";
@@ -75,6 +84,7 @@ async function main() {
         status: c.status,
         shopifyInv: !!v.channelRefs[0]?.externalInventoryId,
         shape,
+        seasons: c.entries.map((e) => e.season.code),
       });
     }
   }
@@ -82,6 +92,7 @@ async function main() {
   // --- what Threadflow holds --------------------------------------------------
   const { getSeasonProducts } = await import("../../src/lib/threadflow/client.ts");
   const tf = new Map<string, string | null>();
+  const tfColorways = new Set<string>();
   for (const season of SEASONS) {
     try {
       const { styles } = await getSeasonProducts(season, {
@@ -90,32 +101,39 @@ async function main() {
       } as never);
       let n = 0;
       for (const st of styles as any[])
-        for (const c of st.colorways ?? [])
+        for (const c of st.colorways ?? []) {
+          tfColorways.add(c.colorway_sku);
           for (const v of c.variants ?? []) {
             tf.set(v.sku, v.barcode);
             n++;
           }
+        }
       console.log(`Threadflow ${season}: ${styles.length} styles, ${n} variants`);
     } catch (e) {
       console.log(`Threadflow ${season}: COULD NOT READ — ${(e as Error).message}`);
     }
   }
 
-  const verdict = (sku: string) => {
-    if (!tf.has(sku)) return "TF_UNKNOWN" as const;
-    const bc = tf.get(sku);
-    return bc && String(bc).trim() ? ("TF_HAS_IT" as const) : ("TF_NULL" as const);
+  const verdict = (g: Gap) => {
+    if (tf.has(g.sku)) {
+      const bc = tf.get(g.sku);
+      return bc && String(bc).trim() ? ("TF_HAS_IT" as const) : ("TF_NULL" as const);
+    }
+    // Threadflow only carries the seasons it was built for. Absence outside them
+    // says nothing.
+    if (!g.seasons.some((s) => SEASONS.includes(s))) return "PRE_TF" as const;
+    return tfColorways.has(g.cw) ? ("TF_NO_SIZE" as const) : ("TF_NO_CW" as const);
   };
 
   const table = new Map<string, number>();
   const syncable: string[] = [];
   const orphanLive: Gap[] = [];
   for (const g of gaps) {
-    const v = verdict(g.sku);
+    const v = verdict(g);
     const key = `${g.shape}/${v}`;
     table.set(key, (table.get(key) ?? 0) + 1);
     if (v === "TF_HAS_IT") syncable.push(g.sku);
-    if (v === "TF_UNKNOWN" && (g.status === "ACTIVE" || g.shopifyInv)) orphanLive.push(g);
+    if (v === "TF_NO_SIZE" && (g.status === "ACTIVE" || g.shopifyInv)) orphanLive.push(g);
   }
 
   console.log(`\nLivid variants with no barcode: ${gaps.length}`);
@@ -124,15 +142,16 @@ async function main() {
 
   for (const shape of ["WHOLE", "PARTIAL"] as const) {
     console.log(`${shape}-run:`);
-    for (const v of ["TF_HAS_IT", "TF_NULL", "TF_UNKNOWN"] as const) {
+    for (const v of ["TF_HAS_IT", "TF_NULL", "TF_NO_SIZE", "TF_NO_CW", "PRE_TF"] as const) {
       const n = table.get(`${shape}/${v}`) ?? 0;
       if (!n) continue;
-      const gloss =
-        v === "TF_HAS_IT"
-          ? "Threadflow has it — OUR sync gap, re-run the sync"
-          : v === "TF_NULL"
-            ? "Threadflow knows the size, no barcode yet — upstream, nothing to do"
-            : "Threadflow does not have the size — nobody upstream will barcode it";
+      const gloss = {
+        TF_HAS_IT: "Threadflow has it — OUR sync gap, re-run the sync",
+        TF_NULL: "Threadflow knows the size, no barcode yet — upstream, nothing to do",
+        TF_NO_SIZE: "Threadflow has the colourway, NOT this size — no barcode is coming",
+        TF_NO_CW: "Threadflow lacks the whole colourway, in a season it covers",
+        PRE_TF: "colourway predates Threadflow's seasons — expected, not a defect",
+      }[v];
       console.log(`   ${v.padEnd(11)} ${String(n).padStart(5)}   ${gloss}`);
     }
   }
@@ -144,7 +163,7 @@ async function main() {
 
   if (orphanLive.length) {
     console.log(
-      `\n${orphanLive.length} size(s) are LIVE or Shopify-linked and unknown to Threadflow —`
+      `\n${orphanLive.length} size(s) are LIVE or Shopify-linked, in a Threadflow season, with the colourway present upstream but NOT the size —`
     );
     console.log(`these cannot sync stock and no upstream fix is coming:`);
     for (const g of orphanLive.slice(0, 15))
