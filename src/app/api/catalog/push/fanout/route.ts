@@ -80,6 +80,18 @@ export async function POST(req: Request) {
   const toSitoo = cws.filter((c) => c.variants.some((v) => v.channelRefs.length));
   const toLoom = cws.filter((c) => c.publications.some((p) => p.channel === "LOOM"));
 
+  // Selected products a channel will NOT receive. Reported explicitly, because
+  // the alternative is silence: the per-channel report is only added when
+  // `attempted` is non-zero, and `noChannel` below only catches a product on NO
+  // channel at all. So selecting a product that is on Loom but not Shopify used
+  // to push to Loom and say nothing whatever about Shopify — which reads, quite
+  // reasonably, as "I tried to push to Shopify and it did not work".
+  const notOn = {
+    shopify: cws.length - toShopify.length,
+    sitoo: cws.length - toSitoo.length,
+    loom: cws.length - toLoom.length,
+  };
+
   const seasonOf = (c: (typeof cws)[number]) => c.entries[0]?.season.code;
   const noSeason = cws.filter((c) => !seasonOf(c)).map((c) => c.colorwaySku);
   const noChannel = cws
@@ -153,6 +165,7 @@ export async function POST(req: Request) {
       loomSendsWholeRow: toLoom.length > 0,
       products: cws.length,
       shopify: toShopify.length,
+      notOn,
       sitoo: toSitoo.length,
       sitooRowsChanging: sitooChanges,
       loom: toLoom.length,
@@ -263,6 +276,7 @@ export async function POST(req: Request) {
     ok: reports.every((r) => r.issues.length === 0),
     products: cws.length,
     reports,
+    notOn,
     noChannel,
   });
 }

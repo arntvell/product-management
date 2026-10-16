@@ -1401,14 +1401,31 @@ export function CatalogGrid({
         // the silence to be read as "nothing changes".
         plan.loom ? `Loom: ${plan.loom} — full registry row each time (no per-field diff)` : null,
       ].filter(Boolean);
+      // Every channel the selection will NOT reach, named. Without this the
+      // dialog simply omits the line and the omission has to be inferred — which
+      // is how "push to Shopify" became "nothing happened and nobody said why".
+      const notOn = (plan.notOn ?? {}) as { shopify?: number; sitoo?: number; loom?: number };
+      const notOnLines = [
+        notOn.shopify
+          ? `Shopify: ${notOn.shopify} not on Shopify yet — first publication happens in Publishing`
+          : null,
+        notOn.sitoo ? `Sitoo: ${notOn.sitoo} not linked to the till` : null,
+        notOn.loom ? `Loom: ${notOn.loom} not on Loom` : null,
+      ].filter(Boolean);
+
       if (!lines.length) {
-        toast.error("None of these are on a channel yet.");
+        toast.error(
+          notOnLines.length
+            ? `Nothing to push. ${notOnLines.join(". ")}.`
+            : "None of these are on a channel yet."
+        );
         return;
       }
       if (
         !confirm(
           `Push ${plan.products} product(s) to the channels they are on?\n\n` +
             lines.join("\n") +
+            (notOnLines.length ? `\n\nNot sent:\n  ${notOnLines.join("\n  ")}` : "") +
             (plan.noChannel?.length
               ? `\n\n${plan.noChannel.length} on no channel — skipped.`
               : "") +
@@ -1446,11 +1463,18 @@ export function CatalogGrid({
         .map((r) => `${r.channel} ${r.ok}/${r.attempted}${r.detail ? ` (${r.detail})` : ""}`)
         .join(" · ");
       const issues = reports.flatMap((r) => r.issues);
+      const after = (d.notOn ?? {}) as { shopify?: number; sitoo?: number; loom?: number };
+      const skipped = [
+        after.shopify ? `${after.shopify} not on Shopify` : null,
+        after.sitoo ? `${after.sitoo} not on Sitoo` : null,
+        after.loom ? `${after.loom} not on Loom` : null,
+      ].filter(Boolean);
+      const tail = skipped.length ? ` · ${skipped.join(", ")}` : "";
       if (issues.length)
-        toast.warning(`${summary} — ${issues.length} issue(s): ${issues[0]}`, {
+        toast.warning(`${summary}${tail} — ${issues.length} issue(s): ${issues[0]}`, {
           duration: 12000,
         });
-      else toast.success(`Pushed — ${summary}`);
+      else toast.success(`Pushed — ${summary}${tail}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Push failed");
     } finally {
