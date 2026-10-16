@@ -56,7 +56,7 @@ async function main() {
       status: true,
       entries: { select: { season: { select: { code: true } } } },
       variants: {
-        select: { variantSku: true, sizeLabel: true, barcode: true },
+        select: { variantSku: true, sizeLabel: true, barcode: true, dim1: true, dim2: true },
         orderBy: { sizeLabel: "asc" },
       },
     },
@@ -71,7 +71,14 @@ async function main() {
     seasons: string;
     have: number;
     total: number;
-    missing: { sku: string; size: string; barcode: string | null; archivedInShopify: boolean }[];
+    missing: {
+      sku: string;
+      size: string;
+      dim1: string;
+      dim2: string | null;
+      barcode: string | null;
+      archivedInShopify: boolean;
+    }[];
   }
 
   const rows: Row[] = [];
@@ -82,6 +89,8 @@ async function main() {
       .map((v) => ({
         sku: v.variantSku,
         size: v.sizeLabel,
+        dim1: v.dim1,
+        dim2: v.dim2,
         barcode: v.barcode,
         archivedInShopify: archivedSku.has(normalizeSku(v.variantSku)),
       }));
@@ -105,6 +114,10 @@ async function main() {
   const partial = rows.filter((r) => r.have > 0);
   const activePartial = partial.filter((r) => r.status === "ACTIVE");
   const archivedThere = rows.flatMap((r) => r.missing).filter((m) => m.archivedInShopify).length;
+  // What stops each one being added today. `shopify/add-variant.ts` refuses a
+  // product with more than one option, and a 2-D size needs two (Waist, Length).
+  const twoD = rows.flatMap((r) => r.missing).filter((m) => m.dim2).length;
+  const oneD = rows.flatMap((r) => r.missing).filter((m) => !m.dim2).length;
   const withBarcode = rows.flatMap((r) => r.missing).filter((m) => m.barcode).length;
 
   console.log(`Livid merchandise colourways with a Shopify product: ${cws.length}`);
@@ -118,6 +131,9 @@ async function main() {
     `\nACTIVE colourways selling an incomplete run: ${activePartial.length}, ` +
       `${activePartial.reduce((a, r) => a + r.missing.length, 0)} size(s) a customer cannot buy`
   );
+  console.log(`\nCan add-size carry them today?`);
+  console.log(`  1-D (one size option)  -> yes: ${oneD}`);
+  console.log(`  2-D (Waist x Length)   -> no, add-variant refuses a 2-option product: ${twoD}`);
 
   // Which sizes go missing, across the whole set. The answer is the extremes,
   // and seeing it as a ranking is what makes that obvious.
@@ -150,10 +166,30 @@ async function main() {
     mkdirSync(dirname(csvPath), { recursive: true });
     const esc = (s: unknown) => `"${String(s ?? "").replace(/"/g, '""')}"`;
     const out = [
-      "colorway_sku,name,status,seasons,variant_sku,size,barcode,archived_in_shopify",
+      "colorway_sku,name,status,seasons,sizes_live,sizes_total,variant_sku,size,dim1,dim2,barcode,loom_will_carry,blocker",
       ...rows.flatMap((r) =>
         r.missing.map((m) =>
-          [r.colorwaySku, r.name, r.status, r.seasons, m.sku, m.size, m.barcode, m.archivedInShopify]
+          [
+            r.colorwaySku,
+            r.name,
+            r.status,
+            r.seasons,
+            r.have,
+            r.total,
+            m.sku,
+            m.size,
+            m.dim1,
+            m.dim2 ?? "",
+            m.barcode ?? "",
+            // Loom's registry drops a barcode-less Livid variant, so Shopify
+            // would have the size and Loom would not.
+            m.barcode ? "yes" : "no — no barcode",
+            r.have === 0
+              ? "none of this colourway's sizes matched in Shopify — check for a SKU alias first"
+              : m.dim2
+                ? "add-variant refuses a 2-option product (Waist, Length)"
+                : "",
+          ]
             .map(esc)
             .join(",")
         )
