@@ -177,6 +177,28 @@ export interface AddSizeSystem {
   /** The stem new SKUs hang off. Null when the existing sizes do not agree on one. */
   skuStem: string | null;
   skuNote: string | null;
+  /**
+   * Sizes the colourway ALREADY has that a channel is missing — the complement
+   * of `options`, which deliberately excludes anything already held.
+   *
+   * These are not sizes to create; they are sizes to carry to a channel that
+   * never got them. Carrying the `entryId` means a caller can request one
+   * through the same `sizes: [{ entryId }]` shape, so nothing about the request
+   * changes.
+   */
+  held: AddSizeHeldOption[];
+}
+
+export interface AddSizeHeldOption {
+  entryId: string;
+  sizeLabel: string;
+  sku: string;
+  variantId: string;
+  /** Already linked there. False is the reason this row is listed. */
+  shopify: boolean;
+  sitoo: boolean;
+  /** Shopify will take it; Loom drops a barcode-less Livid variant from the registry. */
+  barcode: string | null;
 }
 
 export interface AddSizeContext {
@@ -201,6 +223,13 @@ export interface AddSizeContext {
   systems: AddSizeSystem[];
   /** Set when no size system can be the product's. */
   refusal: string | null;
+  /**
+   * True when `refusal` is the Threadflow one, which a propagate-only request
+   * may waive: sizes that already exist in the master and are missing from a
+   * channel. Every other refusal is absolute. Additive on purpose — `refusal`
+   * keeps its old meaning for every existing consumer.
+   */
+  refusalWaivable: boolean;
 }
 
 async function loadColorway(colorwayId: string) {
@@ -219,11 +248,35 @@ async function loadColorway(colorwayId: string) {
 }
 type LoadedColorway = NonNullable<Awaited<ReturnType<typeof loadColorway>>>;
 
-function refusalFor(cw: LoadedColorway): string | null {
+/**
+ * Why this colourway cannot take sizes — and whether that can be waived.
+ *
+ * ORDER MATTERS. The hard refusals come first, because an archived Livid
+ * colourway must read as archived and not as the waivable Threadflow case.
+ * Propagating sizes to Shopify for something archived is exactly the write this
+ * guard exists to stop.
+ *
+ * The Threadflow refusal is the only waivable one, and it is waivable for one
+ * narrow thing: a size that ALREADY EXISTS in the master and is missing only
+ * from a channel. That is not inventing a size — Threadflow already said it
+ * exists, and the master already holds it — it is carrying one the rest of the
+ * way. Measured 2026-10-16: 124 Livid sizes sit in the master and in Threadflow
+ * and not in Shopify, 47 of them on ACTIVE colourways, so they are sizes a
+ * customer cannot buy. Nothing else could move them: `shopify-update.ts` writes
+ * price and barcode on variants Shopify already has and never creates one.
+ *
+ * `resolveRequest` enforces the narrowness, not this function — the waiver only
+ * holds if EVERY requested size resolves to an existing variant.
+ */
+function refusalFor(cw: LoadedColorway): { message: string; waivable: boolean } | null {
+  if (cw.status === "ARCHIVED") return { message: "This colourway is archived.", waivable: false };
+  if (cw.kind !== "MERCHANDISE")
+    return { message: `This is a ${cw.kind.toLowerCase()} record, not merchandise.`, waivable: false };
   if (cw.source === "THREADFLOW" || cw.brand?.isLivid)
-    return "Livid product arrives through the Threadflow feed — add the size in Threadflow.";
-  if (cw.status === "ARCHIVED") return "This colourway is archived.";
-  if (cw.kind !== "MERCHANDISE") return `This is a ${cw.kind.toLowerCase()} record, not merchandise.`;
+    return {
+      message: "Livid product arrives through the Threadflow feed — add the size in Threadflow.",
+      waivable: true,
+    };
   return null;
 }
 
@@ -350,6 +403,28 @@ export async function getAddSizeContext(colorwayId: string): Promise<AddSizeCont
         .join(" ") || null;
     const have = new Set(labels);
     const offered = s.entries.filter((e) => !e.archived && !have.has(e.sizeLabel.toUpperCase()));
+    // The complement: sizes the colourway already holds. Listed only where a
+    // channel is missing them, because that is the only reason to act on one.
+    const variantByLabel = new Map(cw.variants.map((v) => [v.sizeLabel.toUpperCase(), v]));
+    const held = s.entries
+      .filter((e) => !e.archived && have.has(e.sizeLabel.toUpperCase()))
+      .map((e) => {
+        const v = variantByLabel.get(e.sizeLabel.toUpperCase());
+        if (!v) return null;
+        const onShopify = v.channelRefs.some((r) => r.channel === "SHOPIFY");
+        const onSitoo = v.channelRefs.some((r) => r.channel === "SITOO");
+        if (onShopify && onSitoo) return null;
+        return {
+          entryId: e.id,
+          sizeLabel: e.sizeLabel,
+          sku: v.variantSku,
+          variantId: v.id,
+          shopify: onShopify,
+          sitoo: onSitoo,
+          barcode: v.barcode,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
     const skus = stem ? offered.map((e) => buildVariantSku(stem, e.skuToken)) : [];
     const taken = skus.length
       ? await prisma.variant.findMany({
@@ -365,6 +440,7 @@ export async function getAddSizeContext(colorwayId: string): Promise<AddSizeCont
       reason,
       skuStem: stem,
       skuNote: note,
+      held,
       options: displaySizes(offered, (e) => e.sizeLabel).map((e) => {
         const sku = stem ? buildVariantSku(stem, e.skuToken) : "";
         return {
@@ -411,8 +487,9 @@ export async function getAddSizeContext(colorwayId: string): Promise<AddSizeCont
       loomSeasons,
     },
     systems: out,
+    refusalWaivable: refused?.waivable === true,
     refusal:
-      refused ??
+      refused?.message ??
       (out.length
         ? null
         : `No size system holds all of this colourway's sizes (${cw.variants.map((v) => v.sizeLabel).join(", ") || "none"}). ` +
@@ -426,8 +503,21 @@ export async function getAddSizeContext(colorwayId: string): Promise<AddSizeCont
 
 export interface AddSizeRequest {
   colorwayId: string;
-  sizeSystemId: string;
-  sizes: Array<{ entryId: string; barcode?: string | null }>;
+  /**
+   * The size system new sizes are drawn from. Not needed — and not checked —
+   * when every requested size is a `variantId`, because propagating a size that
+   * already exists derives nothing: its label, dimensions and SKU are already on
+   * the variant. That matters in practice, not just in principle: only 4 of the
+   * 37 Livid colourways with a Shopify size gap resolve a size system at all,
+   * so an entry-only request would reach 4 of the 124 sizes.
+   */
+  sizeSystemId?: string;
+  /**
+   * `entryId` CREATES a size from the size system. `variantId` CARRIES a size
+   * the colourway already has to a channel that is missing it — no master write,
+   * and the only form a Threadflow-fed colourway accepts.
+   */
+  sizes: Array<{ entryId?: string; variantId?: string; barcode?: string | null }>;
 }
 
 export type StepState =
@@ -486,25 +576,70 @@ interface Resolved {
 async function resolveRequest(req: AddSizeRequest): Promise<Resolved | { fatal: string }> {
   const ctx = await getAddSizeContext(req.colorwayId);
   if (!ctx) return { fatal: "Colourway not found." };
-  if (ctx.refusal) return { fatal: ctx.refusal };
-  const system = ctx.systems.find((s) => s.id === req.sizeSystemId);
-  if (!system) return { fatal: "That size system is not one this product can take sizes from." };
-  if (!system.skuStem) return { fatal: system.skuNote ?? "No SKU stem for this product." };
+  // A waivable refusal is held open until the sizes are resolved: the waiver
+  // depends on every one of them already existing, which is not knowable yet.
+  // Everything else refuses here, as it always did.
+  if (ctx.refusal && !ctx.refusalWaivable) return { fatal: ctx.refusal };
   if (!req.sizes.length) return { fatal: "Pick at least one size." };
 
+  // A request naming only existing variants needs no size system: nothing is
+  // being derived. Mixed requests still need one, for the half that creates.
+  const propagateOnly = req.sizes.every((s) => s.variantId && !s.entryId);
+  const system = propagateOnly ? null : ctx.systems.find((s) => s.id === req.sizeSystemId);
+  if (!propagateOnly) {
+    if (!system) return { fatal: "That size system is not one this product can take sizes from." };
+    if (!system.skuStem) return { fatal: system.skuNote ?? "No SKU stem for this product." };
+  }
+
   const cw = (await loadColorway(req.colorwayId))!;
-  const entries = await prisma.sizeSystemEntry.findMany({ where: { sizeSystemId: system.id } });
+  const entries = system
+    ? await prisma.sizeSystemEntry.findMany({ where: { sizeSystemId: system.id } })
+    : [];
   const byId = new Map(entries.map((e) => [e.id, e]));
+  const variantById = new Map(cw.variants.map((v) => [v.id, v]));
 
   const errors: string[] = [];
   const warnings: string[] = [];
-  if (system.skuNote) warnings.push(system.skuNote);
+  if (system?.skuNote) warnings.push(system.skuNote);
   const sizes: Resolved["sizes"] = [];
   const seenLabels = new Set<string>();
   const seenCodes = new Map<string, string>();
 
   for (const s of req.sizes) {
-    const entry = byId.get(s.entryId);
+    // A propagate names the variant. Its label, dimensions and SKU are already
+    // on the row, so there is nothing to derive and no size system to consult —
+    // a synthesised entry carries them into the same shape the rest of the
+    // function reads. `entry.id` is marked so nothing mistakes it for a real
+    // SizeSystemEntry, and the master-create branch never runs for these
+    // because `existing` is always set.
+    if (s.variantId && !s.entryId) {
+      const v = variantById.get(s.variantId);
+      if (!v) {
+        errors.push("A picked size is not a variant of this colourway.");
+        continue;
+      }
+      const label = v.sizeLabel.toUpperCase();
+      if (seenLabels.has(label)) {
+        errors.push(`${v.sizeLabel} is picked twice.`);
+        continue;
+      }
+      seenLabels.add(label);
+      sizes.push({
+        entry: {
+          id: `variant:${v.id}`,
+          sizeLabel: v.sizeLabel,
+          dim1: v.dim1,
+          dim2: v.dim2,
+          skuToken: sizeSkuToken(v).toUpperCase(),
+        },
+        sku: v.variantSku,
+        barcode: v.barcode,
+        existing: v,
+      });
+      continue;
+    }
+
+    const entry = s.entryId ? byId.get(s.entryId) : undefined;
     if (!entry || entry.archived) {
       errors.push("A picked size is not in the size system (or has been retired from it).");
       continue;
@@ -516,7 +651,7 @@ async function resolveRequest(req: AddSizeRequest): Promise<Resolved | { fatal: 
     }
     seenLabels.add(label);
 
-    const sku = buildVariantSku(system.skuStem, entry.skuToken);
+    const sku = buildVariantSku(system!.skuStem!, entry.skuToken);
     const existing =
       cw.variants.find((v) => normalizeSku(v.variantSku) === normalizeSku(sku)) ?? null;
     if (!existing && cw.variants.some((v) => v.sizeLabel.toUpperCase() === label)) {
@@ -548,6 +683,38 @@ async function resolveRequest(req: AddSizeRequest): Promise<Resolved | { fatal: 
         `${sku} already exists with barcode ${existing.barcode}. Change it in the variant editor, not here.`
       );
     sizes.push({ entry, sku, barcode: existing?.barcode ?? barcode, existing });
+  }
+
+  // THE WAIVER, enforced here rather than in `refusalFor`.
+  //
+  // A Threadflow-fed colourway may take a size only if EVERY requested size
+  // already exists in the master — the request then creates nothing and merely
+  // carries existing sizes to a channel that never got them. One new size among
+  // ten propagations refuses the whole request, which is this module's posture
+  // everywhere else: nothing is written while anything is wrong.
+  if (ctx.refusal && ctx.refusalWaivable) {
+    const wouldCreate = sizes.filter((s) => !s.existing);
+    if (wouldCreate.length)
+      return {
+        fatal:
+          `${ctx.refusal} ` +
+          `${wouldCreate.length} of these would be a NEW size (${wouldCreate
+            .map((s) => s.entry.sizeLabel)
+            .join(", ")}). ` +
+          "Sizes that already exist here and are missing only from a channel can be sent; new ones cannot.",
+      };
+    // Loom learns a new size from the colourway re-send, and
+    // `buildRegistryColorway` drops a barcode-less variant of a Livid colourway
+    // from the registry payload — so Shopify will have these and Loom will not
+    // until Threadflow issues a barcode. Said before the write, not after.
+    const noBarcode = sizes.filter((s) => !s.barcode?.trim());
+    if (noBarcode.length)
+      warnings.push(
+        `${noBarcode.length} of these have no barcode (${noBarcode
+          .map((s) => s.entry.sizeLabel)
+          .join(", ")}). Shopify and Sitoo will take them; Loom's registry will not, ` +
+          "because it drops a barcode-less Livid variant — Threadflow has to issue one."
+      );
   }
 
   // SKUs and barcodes held anywhere else in the master.
