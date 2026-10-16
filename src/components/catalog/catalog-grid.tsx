@@ -892,6 +892,30 @@ export function CatalogGrid({
    * that wiped everything else off them. Additive, dirty-aware, and it says how
    * many rows actually changed rather than claiming all of them did.
    */
+  /**
+   * Set Shopify status across the selection.
+   *
+   * Goes through `setCell` rather than writing `dirty` itself, so a value equal
+   * to the row's current one clears the pending edit instead of recording a
+   * no-op — the same thing typing it into one cell does.
+   *
+   * BASE explicitly. Status is `split: false`, so it is only editable on the
+   * base layer at all (`editableCols` drops non-split columns off a channel
+   * layer); naming the layer here means a future channel layer cannot silently
+   * start recording per-channel statuses that nothing reads.
+   */
+  function setStatusForSelected(status: string) {
+    if (!status || !targetRows.length) return;
+    let changed = 0;
+    for (const row of targetRows) {
+      if (originalValue(row, "BASE", "status") === status) continue;
+      setCell(row, "status", status, "BASE");
+      changed++;
+    }
+    if (changed) toast.success(`${status} on ${changed} row(s) — still needs Save`);
+    else toast.info(`Every selected row is already ${status}`);
+  }
+
   function addTagToSelected(raw: string) {
     const tag = raw.trim();
     if (!tag || !targetRows.length) return;
@@ -1760,6 +1784,12 @@ export function CatalogGrid({
             these rows. Shift-click a checkbox to select a range.
           </p>
           <AddTagToSelected count={selected.size} onAdd={addTagToSelected} />
+          {/* Base layer only, for the reason `editableCols` already enforces:
+              status is not a per-channel field. Hidden with the column, so the
+              toolbar never offers to set something the grid is not showing. */}
+          {isBase && canEdit && !hiddenCols.has("status") && (
+            <SetStatusForSelected count={selected.size} onSet={setStatusForSelected} />
+          )}
           {/* Both editors. Livid products go to all three channels as much as the
               external ones do, and sending a Livid price change used to mean
               leaving here for Publishing — which is the round trip this button
@@ -2493,6 +2523,56 @@ function SaveStatus({
 }
 
 /** Append a tag to the selection, leaving existing tags alone. */
+/**
+ * Apply one Shopify status to every selected row.
+ *
+ * Deliberately NOT part of "copy down / clear": that copies a value from one
+ * selected row to the rest, which for status means finding a row that already
+ * has the status you want. Setting it outright is what the job actually is.
+ *
+ * The label says Shopify status because that is what the column is, but the
+ * write lands in the master and goes nowhere until it is saved and pushed — and
+ * a push will not overwrite a product Shopify holds as live ACTIVE. The title
+ * says so, because the control cannot.
+ */
+function SetStatusForSelected({
+  count,
+  onSet,
+}: {
+  count: number;
+  onSet: (status: string) => void;
+}) {
+  const [status, setStatus] = useState<string>("");
+  return (
+    <span className="flex items-center gap-1">
+      <select
+        value={status}
+        onChange={(e) => setStatus(e.target.value)}
+        className="h-7 border bg-transparent px-2 text-fine"
+        title="Shopify's product status. Saved to the master; it reaches Shopify on the next push, and a push never overwrites a product Shopify holds as live ACTIVE."
+      >
+        <option value="">Set status…</option>
+        {PRODUCT_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+      <button
+        onClick={() => {
+          if (!status) return;
+          onSet(status);
+          setStatus("");
+        }}
+        disabled={!status}
+        className="h-7 border px-2 text-fine hover:bg-muted disabled:opacity-40"
+      >
+        Apply to {count}
+      </button>
+    </span>
+  );
+}
+
 function AddTagToSelected({
   count,
   onAdd,
