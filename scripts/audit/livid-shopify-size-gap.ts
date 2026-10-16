@@ -7,9 +7,24 @@
 //
 // Only colourways Shopify already has a product for are asked about: a colourway
 // not published there is not "missing sizes", it is unpublished, which is a
-// different decision. Within those, a master size with no live Shopify variant
-// of the same SKU is a size a customer cannot buy, however much stock sits
-// behind it.
+// different decision.
+//
+// WHETHER A SIZE IS ON SHOPIFY IS NOT A SKU COMPARISON. The first version of
+// this asked "is there a live Shopify variant with this SKU?" and reported 132
+// gaps, of which 67 were wrong: those sizes ARE on Shopify, under a different
+// spelling, with the alias recorded in `VariantChannelRef.externalSku` exactly
+// as that column exists to do — LIV-M-NTL-CLST-X-L is LIV-INTL-CLST-OX-L in the
+// shop. One garment, two names, which is a rename and not a gap.
+//
+// So the evidence is taken in order of authority:
+//
+//   1. a SHOPIFY link row pointing at a variant Shopify still has — decisive,
+//      whatever either side calls it
+//   2. the same SKU on a live variant
+//   3. the recorded alias spelling
+//   4. the same barcode on the SAME Shopify product
+//
+// Only a size with none of those is a size a customer cannot buy.
 //
 // This is NOT the barcode gap, though the same sizes keep appearing in both.
 // Measured 2026-10-16 across the Livid merchandise on Shopify: 124 sizes missing
@@ -37,9 +52,14 @@ async function main() {
     adapter: new PrismaPg({ connectionString: process.env.ORIGO_POSTGRES_PRISMA_URL }),
   });
 
+  const { barcodeKey } = await import("../../src/lib/master/barcode.ts");
   const all = await fetchShopifyVariants();
   const live = all.filter((r) => !r.archived);
   const liveSku = new Set(live.map((r) => (r.sku ? normalizeSku(r.sku) : "")).filter(Boolean));
+  const liveGid = new Set(live.map((r) => r.variantGid));
+  const byBarcodeAndProduct = new Set(
+    live.map((r) => `${barcodeKey(r.barcode) ?? ""}@${r.productGid ?? ""}`).filter((k) => !k.startsWith("@"))
+  );
   const archivedSku = new Set(
     all.filter((r) => r.archived).map((r) => (r.sku ? normalizeSku(r.sku) : "")).filter(Boolean)
   );
@@ -93,6 +113,7 @@ async function main() {
       name: true,
       status: true,
       entries: { select: { season: { select: { code: true } } } },
+      publications: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
       variants: {
         select: {
           variantSku: true,
@@ -103,7 +124,7 @@ async function main() {
           // Arnt's discriminator: a size in neither Sitoo nor Loom was never
           // made, so there is no stock and nothing to publish. Sitoo presence is
           // read from the link row; Loom is asked directly below.
-          channelRefs: { select: { channel: true } },
+          channelRefs: { select: { channel: true, externalId: true, externalSku: true } },
         },
         orderBy: { sizeLabel: "asc" },
       },
@@ -135,8 +156,18 @@ async function main() {
   const rows: Row[] = [];
   let complete = 0;
   for (const c of cws) {
+    const productGid = c.publications[0]?.externalId ?? null;
+    const onShopify = (v: (typeof c.variants)[number]) => {
+      const ref = v.channelRefs.find((r) => r.channel === "SHOPIFY");
+      if (ref?.externalId && liveGid.has(ref.externalId)) return true;
+      if (liveSku.has(normalizeSku(v.variantSku))) return true;
+      if (ref?.externalSku && liveSku.has(normalizeSku(ref.externalSku))) return true;
+      const bk = barcodeKey(v.barcode);
+      if (bk && productGid && byBarcodeAndProduct.has(`${bk}@${productGid}`)) return true;
+      return false;
+    };
     const missing = c.variants
-      .filter((v) => !liveSku.has(normalizeSku(v.variantSku)))
+      .filter((v) => !onShopify(v))
       .map((v) => ({
         sku: v.variantSku,
         size: v.sizeLabel,
