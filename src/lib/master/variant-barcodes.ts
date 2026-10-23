@@ -304,7 +304,9 @@ async function fetchSitooProductsFor(scoped: Scoped[]): Promise<SitooProduct[]> 
   // Past a few hundred, one paged read of the whole site is cheaper.
   if (ids.length > 300) return listProducts(SITOO_TARGET);
   const out: SitooProduct[] = [];
-  const CONCURRENCY = 4;
+  // Sitoo allows one request in flight; 4 failed with "Too many connections"
+  // on the 2026-10-15 Paraboot apply.
+  const CONCURRENCY = 1;
   for (let i = 0; i < ids.length; i += CONCURRENCY) {
     const got = await Promise.all(ids.slice(i, i + CONCURRENCY).map(getSitooProduct));
     for (const p of got) if (p) out.push(p);
