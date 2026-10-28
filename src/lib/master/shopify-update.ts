@@ -367,6 +367,88 @@ export async function planShopifyUpdate(
 }
 
 // ---------------------------------------------------------------------------
+// Stuck blanks
+// ---------------------------------------------------------------------------
+//
+// A baseline records the master "as of when master and shop agreed". Recorded
+// without looking at the shop, as the 2026-10-07 backfill and the no-baseline
+// branch above both do, it also records content the shop never had. The
+// master holds a description, Shopify's field is empty, and the baseline says
+// they agree. That key has not moved off the baseline, so no push ever sends
+// it. Sol Seok's two incense holders sat like this: description, details and
+// image in Origo, none of it in Shopify, every push "ok".
+//
+// Releasing a stuck blank sets that baseline key to what Shopify actually
+// holds (nothing), so the next ordinary push fills it. Only blanks: a field
+// Shopify has ANY value for is left frozen, which is what the baseline is for.
+
+/** Plain-text keys whose live value is comparable. References hold ids that differ by system. */
+const BLANK_CHECK_METAFIELDS = ["short_description", "full_description", "details", "style_tagline", "style_name", "color_hex"];
+
+export interface StuckBlanks {
+  colorwayId: string;
+  colorwaySku: string;
+  productGid: string;
+  seasonCode: string;
+  stuck: { key: string; label: string; master: string }[];
+  /** Said, never released: status is a publish decision, not a blank. */
+  status: { master: string; shopify: string; baseline: string };
+}
+
+export async function findStuckBlanks(colorwayId: string, seasonCode?: string): Promise<StuckBlanks | null> {
+  const pre = await prisma.channelPublication.findFirst({
+    where: { colorwayId, channel: "SHOPIFY" },
+    select: { baseline: true, externalId: true },
+  });
+  const stored = pre?.baseline as ShopifySnapshot | null;
+  if (!pre?.externalId || !stored) return null;
+  // Read the master under the season the baseline was recorded for, or the
+  // price key would differ for the wrong reason.
+  const season = seasonCode ?? (stored._priceSeason || undefined);
+  const cw = await getColorwayForPublish(colorwayId, season);
+  if (!cw) return null;
+  const current = shopifySnapshot(cw, buildShopifyPreview(cw), season);
+
+  const d = await shopifyGraphQL<{ product: (LiveProduct & { media: { nodes: { id: string }[] } }) | null }>(
+    LIVE_QUERY.replace("status\n", "status\n      media(first: 1) { nodes { id } }\n"),
+    { id: pre.externalId }
+  );
+  const live = d.product;
+  if (!live) throw new Error(`${cw.colorwaySku}: the Shopify product no longer exists.`);
+
+  const stuck: StuckBlanks["stuck"] = [];
+  const unmoved = (k: string) => norm(current[k]) !== "" && norm(stored[k]) === norm(current[k]);
+  for (const k of BLANK_CHECK_METAFIELDS) {
+    const key = `mf.${k}`;
+    if (unmoved(key) && liveValue(key, live) === "") stuck.push({ key, label: labelFor(key), master: current[key] });
+  }
+  if (unmoved("media.product") && live.media.nodes.length === 0)
+    stuck.push({ key: "media.product", label: labelFor("media.product"), master: current["media.product"] });
+
+  return {
+    colorwayId,
+    colorwaySku: cw.colorwaySku,
+    productGid: pre.externalId,
+    seasonCode: season ?? "",
+    stuck,
+    status: { master: current.status, shopify: live.status, baseline: stored.status ?? "" },
+  };
+}
+
+/** Set each stuck key's baseline to blank, so the next push sends the master's value. */
+export async function releaseStuckBlanks(found: StuckBlanks): Promise<number> {
+  if (!found.stuck.length) return 0;
+  const pub = await prisma.channelPublication.findFirst({
+    where: { colorwayId: found.colorwayId, channel: "SHOPIFY" },
+    select: { id: true, baseline: true },
+  });
+  const next = { ...(pub!.baseline as ShopifySnapshot) };
+  for (const s of found.stuck) next[s.key] = "";
+  await prisma.channelPublication.update({ where: { id: pub!.id }, data: { baseline: next } });
+  return found.stuck.length;
+}
+
+// ---------------------------------------------------------------------------
 // Apply
 // ---------------------------------------------------------------------------
 
