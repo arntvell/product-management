@@ -58,18 +58,8 @@ async function main() {
   const tombTag = tomb.colorwaySku.split("--merged-into-")[1];
   if (!live.id.startsWith(tombTag)) throw new Error(`${tomb.colorwaySku} does not point at ${live.id}`);
 
-  // Pair sizes: live `${ONLY}-<size>` with tombstone `${ONLY}-<size>--merged-<tag>`.
+  // Loom's archived record: which tombstone size ids it actually holds.
   const problems: string[] = [];
-  const pairs = live.variants.map((lv) => {
-    const tv = tomb.variants.find((t) => t.variantSku === `${lv.variantSku}--merged-${tombTag}`);
-    if (!tv) problems.push(`${lv.variantSku}: no tombstone twin`);
-    return { lv, tv };
-  });
-  for (const t of tomb.variants)
-    if (!pairs.some((p) => p.tv?.id === t.id)) problems.push(`${t.variantSku}: tombstone size with no live twin`);
-
-  // Shape check against Loom: its live record must carry the live ids and its
-  // archived one the tombstone ids. Otherwise the swap is not the fix.
   const loomGet = async (sku: string) =>
     ((await (await fetch(`${LOOM}/products?sku=${encodeURIComponent(sku)}`, {
       headers: { authorization: `Bearer ${token}` },
@@ -77,9 +67,32 @@ async function main() {
   const loomRows = [...(await loomGet(tomb.colorwaySku))];
   const loomTomb = loomRows.find((r: any) => r.colorway_id === tomb.id);
   if (!loomTomb) problems.push(`Loom holds no record with the tombstone's id ${tomb.id}`);
-  const loomTombVids = new Set((loomTomb?.variants ?? []).map((v: any) => v.variant_id));
-  const missingInLoom = pairs.filter((p) => p.tv && !loomTombVids.has(p.tv.id));
-  if (missingInLoom.length) problems.push(`${missingInLoom.length} tombstone size id(s) not on Loom's archived record`);
+  const loomTombVids = new Set<string>((loomTomb?.variants ?? []).map((v: any) => v.variant_id));
+
+  // Pair sizes: live `${ONLY}-<size>` with tombstone `${ONLY}-<size>--merged-<tag>`.
+  // A pair SWAPS only when Loom holds the tombstone size, since that is the
+  // identity carrying the stock. Otherwise the live size keeps its id and
+  // RIDES ALONG: it is in Loom under the shell and will MOVE in the push,
+  // which loom-push.ts allows only for named, zero-stock sizes. A live size
+  // with no twin passes only if it was never made (no barcode, no link).
+  const pairs: Array<{ lv: (typeof live.variants)[number]; tv: (typeof tomb.variants)[number] }> = [];
+  const ridesAlong: string[] = [];
+  const neverMade: string[] = [];
+  const parkedTomb: Array<{ id: string; sku: string }> = []; // tombstone sizes that stay put
+  for (const lv of live.variants) {
+    const tv = tomb.variants.find((t) => t.variantSku === `${lv.variantSku}--merged-${tombTag}`);
+    if (tv && loomTombVids.has(tv.id)) { pairs.push({ lv, tv }); continue; }
+    if (tv) { ridesAlong.push(`${lv.variantSku} ${lv.id}`); parkedTomb.push({ id: tv.id, sku: tv.variantSku }); continue; }
+    if (!lv.barcode && !lv.channelRefs.length) { neverMade.push(lv.variantSku); continue; }
+    problems.push(`${lv.variantSku}: no tombstone twin, and it has a barcode or a channel link`);
+  }
+  for (const t of tomb.variants) {
+    const paired = pairs.some((p) => p.tv.id === t.id) || parkedTomb.some((x) => x.id === t.id);
+    if (!paired) problems.push(`${t.variantSku}: tombstone size with no live twin`);
+  }
+  for (const vid of loomTombVids)
+    if (!pairs.some((p) => p.tv.id === vid)) problems.push(`Loom's archived record holds size ${vid}, which would not be swapped`);
+  if (!pairs.length) problems.push("no size pairs to swap");
   const onHand = (r: any) => (r?.variants ?? []).reduce((a: number, v: any) =>
     a + (v.stock ?? []).reduce((b: number, s: any) => b + (s.on_hand ?? 0), 0), 0);
 
@@ -88,7 +101,10 @@ async function main() {
   console.log(`  live      ${live.id}  ${live.colorwaySku}  ${live.variants.length} sizes`);
   console.log(`  tombstone ${tomb.id}  ${tomb.colorwaySku}  ${tomb.variants.length} sizes`);
   console.log(`  Loom: archived record ${loomTomb ? `found, archived=${loomTomb.archived}, ${onHand(loomTomb)} units` : "MISSING"}`);
-  console.log(`  after: live content takes id ${id8(tomb.id)}…, the tombstone takes ${id8(live.id)}…; ${pairs.length} size pairs swap ids`);
+  console.log(`  after: live content takes id ${id8(tomb.id)}…, the tombstone takes ${id8(live.id)}…`);
+  console.log(`  ${pairs.length} size pair(s) swap ids, ${ridesAlong.length} ride along (MOVE in Loom), ${neverMade.length} never made`);
+  for (const r of ridesAlong) console.log(`    rides along: ${r}`);
+  for (const n of neverMade) console.log(`    never made:  ${n}`);
   for (const p of problems) console.log(`  ! ${p}`);
   if (problems.length) { await prisma.$disconnect(); process.exit(1); }
 
@@ -105,7 +121,7 @@ async function main() {
   const A = live.id, B = tomb.id;
   const swaps: Array<[string, string, "Colorway" | "Variant"]> = [
     [A, B, "Colorway"],
-    ...pairs.map((p) => [p.lv.id, p.tv!.id, "Variant"] as [string, string, "Variant"]),
+    ...pairs.map((p) => [p.lv.id, p.tv.id, "Variant"] as [string, string, "Variant"]),
   ];
   const newTombTag = id8(B); // the tombstone will carry id A, pointing at the live B
   await prisma.$transaction(async (tx) => {
@@ -129,16 +145,24 @@ async function main() {
       // p.lv.id now holds the tombstone size's content.
       await tx.variant.update({ where: { id: p.lv.id }, data: { variantSku: `${p.lv.variantSku}--merged-${newTombTag}` } });
     }
+    // Tombstone sizes that were not swapped keep their ids; only the tag follows.
+    for (const t of parkedTomb) {
+      await tx.variant.update({ where: { id: t.id }, data: { variantSku: t.sku.replace(`--merged-${tombTag}`, `--merged-${newTombTag}`) } });
+    }
   }, { timeout: 120_000 });
 
   // Read back.
   const after = await prisma.colorway.findUnique({ where: { colorwaySku: ONLY }, select });
   const afterTomb = await prisma.colorway.findFirst({ where: { colorwaySku: { startsWith: `${ONLY}--merged-into-` } }, select });
   const liveIds = new Set(after?.variants.map((v) => v.id));
+  const count = (vs: { barcode: string | null; channelRefs: unknown[] }[] | undefined) =>
+    `${vs?.length}/${vs?.filter((v) => v.barcode).length}/${vs?.reduce((a, v) => a + v.channelRefs.length, 0)}`;
+  // Content did not move, so sizes/barcodes/refs per record must be unchanged.
   const ok = after?.id === B && afterTomb?.id === A &&
-    pairs.every((p) => liveIds.has(p.tv!.id)) &&
-    after.variants.every((v) => v.barcode) && afterTomb.variants.every((v) => !v.barcode) &&
-    after.variants.length === live.variants.length;
+    pairs.every((p) => liveIds.has(p.tv.id)) &&
+    ridesAlong.every((r) => liveIds.has(r.split(" ")[1])) &&
+    count(after.variants) === count(live.variants) &&
+    count(afterTomb.variants) === count(tomb.variants);
   console.log(`  read back: ${ok ? "ok" : "MISMATCH"}`);
   console.log(`    live      ${after?.id} ${after?.colorwaySku} ${after?.variants.length} sizes, ${after?.variants.filter((v) => v.barcode).length} barcodes, refs ${after?.variants.reduce((a, v) => a + v.channelRefs.length, 0)}, pubs ${after?.publications.map((p) => p.channel).join(",")}`);
   console.log(`    tombstone ${afterTomb?.id} ${afterTomb?.colorwaySku} ${afterTomb?.variants.length} sizes, archived=${afterTomb?.archived}`);
