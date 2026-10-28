@@ -537,6 +537,78 @@ async function planSkuReconciliation(
   return plan;
 }
 
+/** Where a SKU pin records the spelling Threadflow sends for that colorway. */
+export const THREADFLOW_SKU_EVIDENCE = "threadflow:";
+
+/**
+ * Hold a colorway on the SKU the business uses when Threadflow spells it
+ * differently.
+ *
+ * Pio joins central stock on SKU text, so the spelling Pio, Sitoo and Shopify
+ * hold is the one that has to win. Threadflow sometimes abbreviates
+ * differently: `LIV-W-SRN-JPN-BLCK-DSK` for what everything else calls
+ * `LIV-SRN-JPN-BLCK-DSK`. Left alone, every sync renames the master back to
+ * Threadflow's spelling. That is how the eleven twins reverted after
+ * 2026-09-15 (docs/twin-merge-reversal.md) and stranded their stock in Loom.
+ *
+ * A pin is a MANUAL FieldOwner on `colorwaySku` whose `evidence` reads
+ * `threadflow:<Threadflow's SKU>`. The incoming colorway is rewritten here,
+ * before anything is matched, so every later step sees the pinned spelling:
+ * the rename plan finds nothing to change, buildColorway writes the pinned SKU,
+ * and the sizes match their existing variants instead of being created again.
+ *
+ * It matches on Threadflow's spelling as well as its colorway id, because
+ * Threadflow issues a new colorway id per season. Matching on the id alone
+ * protects only the season the pin was made in. Next season the colorway
+ * would fall through to a SKU match on Threadflow's spelling, find nothing,
+ * and be created a second time.
+ */
+async function applySkuPins(styles: TFStyle[], warnings: string[]): Promise<void> {
+  const pins = await prisma.fieldOwner.findMany({
+    where: {
+      entityType: "colorway",
+      field: "colorwaySku",
+      owner: "MANUAL",
+      evidence: { startsWith: THREADFLOW_SKU_EVIDENCE },
+    },
+    select: { entityId: true, evidence: true },
+  });
+  if (!pins.length) return;
+
+  const rows = await prisma.colorway.findMany({
+    where: { id: { in: pins.map((p) => p.entityId) } },
+    select: { id: true, colorwaySku: true, threadflowId: true },
+  });
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+  const byTfSku = new Map<string, string>();
+  const byTfId = new Map<string, string>();
+  for (const p of pins) {
+    const row = rowById.get(p.entityId);
+    if (!row) continue;
+    byTfSku.set(p.evidence!.slice(THREADFLOW_SKU_EVIDENCE.length), row.colorwaySku);
+    if (row.threadflowId) byTfId.set(row.threadflowId, row.colorwaySku);
+  }
+
+  for (const s of styles) {
+    for (const c of s.colorways) {
+      const pinned = byTfId.get(c.colorway_id) ?? byTfSku.get(c.colorway_sku);
+      if (!pinned || pinned === c.colorway_sku) continue;
+      const from = c.colorway_sku;
+      for (const v of c.variants) {
+        if (v.sku.startsWith(`${from}-`)) {
+          v.sku = `${pinned}${v.sku.slice(from.length)}`;
+        } else {
+          warnings.push(
+            `${v.sku}: size SKU does not start with its colorway's ${from}; left as Threadflow has it.`
+          );
+        }
+      }
+      c.colorway_sku = pinned;
+      warnings.push(`${pinned}: kept (pinned); Threadflow has ${from}`);
+    }
+  }
+}
+
 async function describeLocal(id: string): Promise<ColorwaySide | null> {
   const row = (await prisma.colorway.findUnique({
     where: { id },
@@ -787,6 +859,9 @@ async function planSeason(
     }),
     getManufacturers(),
   ]);
+
+  // Before anything is matched — see applySkuPins.
+  await applySkuPins(styles, warnings);
 
   // Leftovers from a crash between the two rename phases. Invisible otherwise,
   // and one query to make loud.
