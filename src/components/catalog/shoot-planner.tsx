@@ -381,7 +381,7 @@ function TableRow({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => voi
         <StatusCell row={r} />
       </td>
       <td className="w-52 px-3 py-2">
-        <PlanControls row={r} onSave={onSave} />
+        <PlanControls key={r.note ?? ""} row={r} onSave={onSave} />
       </td>
     </tr>
   );
@@ -433,7 +433,7 @@ function CarryCard({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => vo
           <MediaCounts row={r} />
         </div>
       </div>
-      <PlanControls row={r} onSave={onSave} />
+      <PlanControls key={r.note ?? ""} row={r} onSave={onSave} />
     </div>
   );
 }
