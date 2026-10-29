@@ -1,6 +1,11 @@
 // Shoot planning: which products of a season still need photography, and
 // whether there is stock to shoot them from.
 //
+// Media is counted in BOTH places it can live, and on Shopify in both places a
+// product keeps it: the product gallery, and for unisex products the
+// custom.men_images / custom.women_images metafields (a unisex carry-over can
+// have an empty gallery and all its photography in those two lists).
+//
 // Media is counted in BOTH places it can live. Origo holds what was uploaded
 // for the season (all of FW26's new photography went in as Blob media), but 83
 // of FW26's 119 carry-overs have nothing in Origo and their images only exist
@@ -34,7 +39,12 @@ export interface ShootRow {
   shopify: {
     adminUrl: string | null;
     status: string | null;
+    /** Product gallery only. */
     mediaCount: number;
+    /** custom.men_images / custom.women_images (unisex). */
+    men: number;
+    women: number;
+    /** Gallery first, then men, then women images. */
     images: string[];
   } | null;
   /** Shopify's totalInventory; null when it could not be read. */
@@ -69,10 +79,37 @@ const PRODUCTS_QUERY = `
         media(first: 6) {
           nodes { preview { image { url(transform: { maxWidth: 400 }) } } }
         }
+        men: metafield(namespace: "custom", key: "men_images") { ...UnisexImages }
+        women: metafield(namespace: "custom", key: "women_images") { ...UnisexImages }
       }
     }
   }
+  fragment UnisexImages on Metafield {
+    value
+    references(first: 6) {
+      nodes { ... on MediaImage { image { url(transform: { maxWidth: 400 }) } } }
+    }
+  }
 `;
+
+interface UnisexMetafield {
+  /** JSON list of file GIDs; its length is the image count. */
+  value: string;
+  references: { nodes: { image?: { url: string } | null }[] } | null;
+}
+
+function unisexImages(m: UnisexMetafield | null | undefined): { count: number; images: string[] } {
+  if (!m) return { count: 0, images: [] };
+  let count = 0;
+  try {
+    const ids = JSON.parse(m.value);
+    count = Array.isArray(ids) ? ids.length : 0;
+  } catch {
+    count = 0;
+  }
+  const images = (m.references?.nodes ?? []).map((n) => n.image?.url).filter((u): u is string => !!u);
+  return { count: Math.max(count, images.length), images };
+}
 
 interface ShopifyProduct {
   id: string;
@@ -80,10 +117,13 @@ interface ShopifyProduct {
   totalInventory: number | null;
   mediaCount: { count: number } | null;
   media: { nodes: { preview: { image: { url: string } | null } | null }[] };
+  men: UnisexMetafield | null;
+  women: UnisexMetafield | null;
 }
 
-// 50 products × 6 media stays well under the 1,000-point query cost.
-const BATCH = 50;
+// 25 products × (6 media + 2 × 6 metafield references) stays well under the
+// 1,000-point query cost.
+const BATCH = 25;
 
 async function readShopify(gids: string[]): Promise<{ byId: Map<string, ShopifyProduct>; error: string | null }> {
   const byId = new Map<string, ShopifyProduct>();
@@ -170,18 +210,26 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
       men: cw.media.filter((m) => m.role === "MEN").length,
       women: cw.media.filter((m) => m.role === "WOMEN").length,
     };
+    const men = unisexImages(sp?.men);
+    const women = unisexImages(sp?.women);
     const shopify = gid
       ? {
           adminUrl: store ? `https://${store}/admin/products/${gid.split("/").pop()}` : null,
           status: sp?.status ?? null,
           mediaCount: sp?.mediaCount?.count ?? 0,
-          images: (sp?.media.nodes ?? []).map((n) => n.preview?.image?.url).filter((u): u is string => !!u),
+          men: men.count,
+          women: women.count,
+          images: [
+            ...(sp?.media.nodes ?? []).map((n) => n.preview?.image?.url).filter((u): u is string => !!u),
+            ...men.images,
+            ...women.images,
+          ].slice(0, 6),
         }
       : null;
     const stock = sp ? (sp.totalInventory ?? 0) : null;
     // The drop column carries cancellation in practice; the flag is never set.
     const cancelled = e.cancelled || e.drop === "CANCELED";
-    const hasMedia = origo.count > 0 || (shopify?.mediaCount ?? 0) > 0;
+    const hasMedia = origo.count > 0 || (shopify ? shopify.mediaCount + shopify.men + shopify.women : 0) > 0;
     const bucket = bucketFor(hasMedia, stock, cancelled);
     const reason = hasMedia
       ? null

@@ -39,3 +39,18 @@ export function isOnShotList(plan: ShootStatus | null, bucket: ShootBucket): boo
   if (plan === "SHOT" || plan === "SKIP") return false;
   return bucket === "shoot";
 }
+
+/**
+ * Shot and in stock, but customers cannot buy it: the Shopify product is DRAFT
+ * or ARCHIVED. Needs the Shopify read; a product whose status could not be read
+ * is left out rather than guessed.
+ */
+export function isReadyToGoLive(r: {
+  hasMedia: boolean;
+  stock: number | null;
+  cancelled: boolean;
+  shopify: { status: string | null } | null;
+}): boolean {
+  const status = r.shopify?.status;
+  return r.hasMedia && (r.stock ?? 0) > 0 && !r.cancelled && !!status && status !== "ACTIVE";
+}

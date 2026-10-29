@@ -10,18 +10,19 @@ import { tabItemClass, tabListClass } from "@/components/ui/tab-styles";
 import { catalogImageSrc } from "@/lib/catalog-image";
 import { downloadCsv } from "@/lib/csv-export";
 import { cn } from "@/lib/utils";
-import { BUCKET_LABELS, PLAN_LABELS, bucketFor, isOnShotList, type ShootBucket } from "@/lib/shoot-plan";
+import { BUCKET_LABELS, PLAN_LABELS, bucketFor, isOnShotList, isReadyToGoLive, type ShootBucket } from "@/lib/shoot-plan";
 import type { ShootRow } from "@/lib/master/shoot";
 import type { ShootStatus } from "@/generated/prisma/client";
 import { MediaPanel } from "./media-panel";
 
-type Tab = "new" | "carry" | "list";
+type Tab = "new" | "carry" | "list" | "live";
 type CarryFilter = "all" | "none" | "few" | "marked";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "new", label: "New" },
   { id: "carry", label: "Carry-overs" },
   { id: "list", label: "Shot list" },
+  { id: "live", label: "Ready to go live" },
 ];
 
 /** Under this many images a carry-over is worth a look for a reshoot. */
@@ -31,8 +32,14 @@ function imagesOf(r: ShootRow): string[] {
   return r.origo.images.length ? r.origo.images : (r.shopify?.images ?? []);
 }
 
+/** Every image Shopify holds: the gallery plus the unisex men/women lists. */
 function shopifyCount(r: ShootRow) {
-  return r.shopify?.mediaCount ?? 0;
+  return r.shopify ? r.shopify.mediaCount + r.shopify.men + r.shopify.women : 0;
+}
+
+function shopifyStatusLabel(r: ShootRow) {
+  const s = r.shopify?.status;
+  return s ? s.charAt(0) + s.slice(1).toLowerCase() : "";
 }
 
 function stockLabel(r: ShootRow) {
@@ -70,6 +77,8 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
   const newRows = scoped.filter((r) => r.origin === "NEW");
   const carryRows = scoped.filter((r) => r.origin === "CARRYOVER");
   const listRows = scoped.filter((r) => r.onShotList);
+  // New and carry-overs alike: shot, in stock, not active on Shopify.
+  const liveRows = scoped.filter(isReadyToGoLive);
 
   const counts = useMemo(() => {
     const c: Record<ShootBucket, number> = { shoot: 0, waiting: 0, early: 0, done: 0 };
@@ -88,7 +97,9 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
             if (carry === "marked") return r.plan === "SHOOT" || r.plan === "BOOKED";
             return true;
           })
-        : listRows;
+        : tab === "live"
+          ? liveRows
+          : listRows;
 
   function patch(entryId: string, change: Partial<ShootRow>) {
     setRows((prev) =>
@@ -124,11 +135,11 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
   }
 
   function exportCsv() {
-    const label = tab === "list" ? "shot-list" : tab === "new" ? "new" : "carry-overs";
+    const label = tab === "list" ? "shot-list" : tab === "new" ? "new" : tab === "live" ? "ready-to-go-live" : "carry-overs";
     downloadCsv(
       [
         "Season", "Drop", "Type", "Brand", "Style", "Colour", "SKU", "Category", "Gender",
-        "Origo images", "Shopify images", "Stock", "Status", "Why not shot", "Plan", "Note",
+        "Origo images", "Shopify images", "Stock", "Status", "Shopify status", "Why not shot", "Plan", "Note",
         "On shot list", "Shopify admin",
       ],
       shown.map((r) => [
@@ -145,6 +156,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
         r.shopify ? String(shopifyCount(r)) : "Not on Shopify",
         r.stock == null ? "" : String(r.stock),
         BUCKET_LABELS[r.bucket],
+        shopifyStatusLabel(r),
         r.reason ?? "",
         r.plan ? PLAN_LABELS[r.plan] : "",
         r.note ?? "",
@@ -168,7 +180,13 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
           >
             {t.label}
             <span className="tabular-nums text-muted-foreground">
-              {t.id === "new" ? newRows.length : t.id === "carry" ? carryRows.length : listRows.length}
+              {t.id === "new"
+                ? newRows.length
+                : t.id === "carry"
+                  ? carryRows.length
+                  : t.id === "live"
+                    ? liveRows.length
+                    : listRows.length}
             </span>
           </button>
         ))}
@@ -349,6 +367,9 @@ function StatusCell({ row }: { row: ShootRow }) {
         {BUCKET_LABELS[row.bucket]}
       </span>
       {row.reason && <span className="text-fine text-muted-foreground">{row.reason}</span>}
+      {row.shopify?.status && row.shopify.status !== "ACTIVE" && (
+        <span className="text-fine text-muted-foreground">Shopify: {shopifyStatusLabel(row)}</span>
+      )}
       {row.drop === "UNCERTAIN" && <span className="text-fine text-muted-foreground">Drop uncertain</span>}
     </div>
   );
@@ -404,6 +425,11 @@ function MediaCounts({ row: r }: { row: ShootRow }) {
           "Not on Shopify"
         )}
       </span>
+      {r.shopify && (r.shopify.men > 0 || r.shopify.women > 0) && (
+        <span className="text-muted-foreground">
+          Men {r.shopify.men} / Women {r.shopify.women}
+        </span>
+      )}
     </span>
   );
 }
