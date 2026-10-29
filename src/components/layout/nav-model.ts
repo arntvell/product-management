@@ -4,6 +4,7 @@ import {
   Images,
   ArrowRightLeft,
   BadgeCheck,
+  Camera,
   Barcode,
   Boxes,
   CalendarRange,
@@ -136,7 +137,10 @@ export const NAV_SECTIONS: NavSection[] = [
     id: "admin",
     label: "Admin",
     adminOnly: true,
-    items: [{ href: "/catalog/users", label: "Users", icon: UsersRound }],
+    items: [
+      { href: "/catalog/shoot", label: "Shoot planner", icon: Camera },
+      { href: "/catalog/users", label: "Users", icon: UsersRound },
+    ],
   },
 ];
 

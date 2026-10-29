@@ -48,6 +48,7 @@ const READ_ONLY_POSTS = [
 /** Admin-only writes: merges, splits, deletes and bulk repairs. */
 const ADMIN_ROUTES = [
   /^\/api\/users(\/|$)/,
+  /^\/api\/catalog\/shoot$/,
   /^\/api\/catalog\/brands\/merge$/,
   /^\/api\/catalog\/categories\/merge$/,
   /^\/api\/catalog\/colorways\/merge$/,
@@ -107,6 +108,7 @@ export function refusal(role: UserRole, permission: Permission): string {
 /** Pages that are purely for changing things — no use to a role that cannot. */
 const PAGE_RULES: Array<[RegExp, Permission]> = [
   [/^\/catalog\/users(\/|$)/, "admin"],
+  [/^\/catalog\/shoot(\/|$)/, "admin"],
   // Data repair: bulk tools over the whole master.
   [/^\/catalog\/(fix|import-gaps|skus|duplicates|style-splits|cutover|identity)(\/|$)/, "admin"],
   // Creating, importing, publishing, and the variant and season-drop editors.

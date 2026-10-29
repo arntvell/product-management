@@ -52,10 +52,19 @@ export function productsToCsv(products: Product[]): string {
 // Trigger a client-side download of the given products as a CSV file.
 // Returns the number of data rows written (one per variant).
 export function downloadProductsCsv(products: Product[], filename: string): number {
-  const csv = productsToCsv(products);
-  const rowCount = products.reduce((n, p) => n + Math.max(p.variants.length, 1), 0);
+  downloadCsvText(productsToCsv(products), filename);
+  return products.reduce((n, p) => n + Math.max(p.variants.length, 1), 0);
+}
+
+/** Any table as a CSV download: a header row, then one line per row. */
+export function downloadCsv(headers: string[], rows: string[][], filename: string): void {
+  const csv = [headers, ...rows].map((r) => r.map(csvField).join(",")).join("\r\n");
+  downloadCsvText(csv, filename);
+}
+
+function downloadCsvText(csv: string, filename: string): void {
   // BOM so Excel detects UTF-8 (correct æ/ø/å etc.).
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -64,5 +73,4 @@ export function downloadProductsCsv(products: Product[], filename: string): numb
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  return rowCount;
 }

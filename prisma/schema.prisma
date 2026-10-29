@@ -652,6 +652,13 @@ model SeasonEntry {
   // Free text so merchandising can name them without a migration.
   drop                  String?
   merchPosition         Int? // preserved across cancel/restore
+  // Shoot planning for THIS season. Null = let the planner decide from media
+  // and stock; set = a person's decision, which wins (a carry-over marked for
+  // reshoot, a new product skipped because the supplier's images will do).
+  shootStatus           ShootStatus?
+  shootNote             String?
+  shootUpdatedAt        DateTime?
+  shootUpdatedBy        String? // email of whoever set it
   variants              SeasonVariant[]
 
   @@unique([colorwayId, seasonId])
@@ -1002,6 +1009,14 @@ enum SeasonKind {
 enum EntryOrigin {
   NEW // this product's origin (first) season
   CARRYOVER // carried forward from an earlier season
+}
+
+/// A person's shoot decision for one season entry — see SeasonEntry.shootStatus.
+enum ShootStatus {
+  SHOOT // on the next shot list (a carry-over that needs reshooting)
+  BOOKED // scheduled for a shoot date
+  SHOT // shot, waiting for the images to be uploaded
+  SKIP // will not be shot this season
 }
 
 enum PriceType {
