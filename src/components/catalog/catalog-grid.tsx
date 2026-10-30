@@ -633,12 +633,21 @@ export function CatalogGrid({
   // The selected products that are not on Shopify yet, created on Shopify, Sitoo
   // and Loom through the same queue a draft publishes through: Shopify first, so
   // Loom receives the inventory ids, and the readiness gate reports what is
-  // missing before anything goes out. Vintage is left out — the drop sheet
-  // publishes it, and online vintage must never reach the till.
+  // missing before anything goes out.
+  //
+  // The Livid editor only. A batch puts every product on every channel it is
+  // given and declares all three to Loom, which is right for Livid's own
+  // production. An external product may be online-only or store-only, and
+  // creating it in the till, or telling Loom it is carried in store, would be
+  // wrong. Vintage is left out for the same reason, and the drop sheet
+  // publishes it anyway.
   const [createOpen, setCreateOpen] = useState(false);
-  const creatableRows = visibleRows.filter(
-    (r) => selected.has(r.id) && !r.onShopify && !r.isVintage && !r.dropped
-  );
+  // Set once a batch exists, so closing the dialog reloads the rows: the grid
+  // holds the rows it was given, and they still say "not on Shopify".
+  const createdBatch = useRef(false);
+  const creatableRows = seasonal
+    ? visibleRows.filter((r) => selected.has(r.id) && !r.onShopify && !r.isVintage && !r.dropped)
+    : [];
   // One batch, one season: Loom files the product under it and it decides which
   // price is sent. The season tab decides it here; without one, the selection
   // must share exactly one.
@@ -2420,7 +2429,14 @@ export function CatalogGrid({
         );
       })()}
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(o) => {
+          setCreateOpen(o);
+          // Nothing unsaved can be lost: the dialog only opens with no edits pending.
+          if (!o && createdBatch.current) window.location.reload();
+        }}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
@@ -2448,6 +2464,9 @@ export function CatalogGrid({
               kind="create"
               note="Bulk editor"
               title={`Create ${creatableRows.length} on channels`}
+              onBatchCreated={() => {
+                createdBatch.current = true;
+              }}
             />
           )}
         </DialogContent>
