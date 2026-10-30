@@ -72,6 +72,7 @@ const LABELS: Record<string, string> = {
   productType: "Product type",
   status: "Status",
   tags: "Tags",
+  body: "Description (body)",
   price: "Price",
   sizes: "Sizes",
   "mf.short_description": "Short description",
@@ -116,6 +117,7 @@ export function shopifySnapshot(cw: PublishColorway, preview: Preview, seasonCod
   s.productType = norm(preview.product.productType);
   s.status = preview.product.status;
   s.tags = [...preview.product.tags].map((t) => t.trim()).filter(Boolean).sort().join(", ");
+  s.body = norm(preview.product.descriptionHtml);
 
   const mf = new Map(preview.metafields.map((m) => [m.key, m.value]));
   for (const key of Object.keys(TEXT_METAFIELDS)) s[`mf.${key}`] = norm(mf.get(key));
@@ -163,6 +165,7 @@ const LIVE_QUERY = `
       productType
       status
       tags
+      descriptionHtml
       metafields(first: 50, namespace: "${METAFIELD_NAMESPACE}") { nodes { key value } }
       variants(first: 250) { nodes { id sku price barcode } }
     }
@@ -177,6 +180,7 @@ interface LiveProduct {
   productType: string;
   status: string;
   tags: string[];
+  descriptionHtml: string;
   metafields: { nodes: { key: string; value: string }[] };
   variants: { nodes: { id: string; sku: string | null; price: string; barcode: string | null }[] };
 }
@@ -223,6 +227,8 @@ function liveValue(key: string, live: LiveProduct): string | null {
       return norm(live.productType);
     case "status":
       return live.status;
+    case "body":
+      return norm(live.descriptionHtml);
     case "price": {
       const prices = [...new Set(live.variants.nodes.map((v) => Number(v.price)))];
       return prices.length === 1 ? String(prices[0]) : null;
@@ -283,7 +289,14 @@ export async function planShopifyUpdate(
   }
 
   const keys = Object.keys(current).filter((k) => !k.startsWith("_"));
-  const moved = keys.filter((k) => k in stored && norm(stored[k]) !== norm(current[k]));
+  // A key the baseline has never recorded is normally skipped: it was added to
+  // the snapshot later, and sending it would push every product at once. The
+  // body is the exception, by decision (2026-10-30): the full description goes
+  // to every product's body, so a baseline without one reads as blank and the
+  // next push sends it. Absent from the master, the body is "" and nothing moves.
+  const moved = keys.filter(
+    (k) => (k in stored || k === "body") && norm(stored[k]) !== norm(current[k])
+  );
 
   // A price read under another season is a different number, not an edit.
   const priceSeasonMoved = norm(stored._priceSeason) !== norm(current._priceSeason);
@@ -486,7 +499,7 @@ export async function applyShopifyUpdate(
     if (c.action === "not-sent") warnings.push(`${c.label} not sent: ${c.note}.`);
 
   // --- product fields ---
-  const productKeys = toWrite.filter((c) => ["title", "vendor", "productType", "status", "tags"].includes(c.key));
+  const productKeys = toWrite.filter((c) => ["title", "vendor", "productType", "status", "tags", "body"].includes(c.key));
   if (productKeys.length && live) {
     const input: Record<string, unknown> = { id: plan.productGid };
     for (const c of productKeys) {
@@ -494,7 +507,8 @@ export async function applyShopifyUpdate(
         // Additive, as before: a tag added in Shopify admin is never removed.
         const mine = current.tags ? current.tags.split(", ") : [];
         input.tags = [...new Set([...live.tags, ...mine])];
-      } else input[c.key] = current[c.key];
+      } else if (c.key === "body") input.descriptionHtml = current.body;
+      else input[c.key] = current[c.key];
     }
     try {
       const r = await shopifyGraphQL<{ productUpdate: { userErrors: { message: string }[] } }>(

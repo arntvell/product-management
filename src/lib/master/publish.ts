@@ -7,6 +7,7 @@ import { METAFIELD_NAMESPACE } from "@/lib/constants";
 import { channelProductTitle } from "./channel-title";
 import { isVintageBrand, vintageHandle, vintageOptionSize } from "./vintage";
 import { buildVintageBody } from "./vintage-body";
+import { toBodyHtml } from "./rich-text";
 
 // seasonCode scopes the price to the season the user is pushing FROM, so we
 // never send another season's price. Omitted -> all prices (legacy behaviour,
@@ -57,13 +58,17 @@ export interface ShopifyPreview {
     status: string;
     tags: string[];
     /**
-     * The product body. Only set for vintage, and deliberately so.
+     * The product body.
      *
-     * For mainline the storefront reads `custom.full_description` and the
-     * product's own body is merchandising's to edit in Shopify admin — sending
-     * it from here would overwrite their work on every push. A vintage garment
-     * has no merchandiser: its body is generated from measurements and is the
-     * master's to own.
+     * Vintage: generated from the measurements, which the master owns.
+     *
+     * Everything else: the full description, so the product's own description
+     * carries the copy for search engines and feeds. The storefront still reads
+     * `custom.full_description`, which keeps being sent. Since 2026-10-30 the
+     * master owns the body. It used to be left to merchandising in Shopify
+     * admin, but the body was empty or out of date while the copy lived in the
+     * metafield. Omitted when there is no full description, so an empty master
+     * never blanks a body.
      */
     descriptionHtml?: string;
   };
@@ -261,7 +266,9 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
               composition: cw.fiberCompositionOverride,
             }),
           }
-        : {}),
+        : toBodyHtml(resolveShopify(cw, "fullDescription", cw.fullDescription))
+          ? { descriptionHtml: toBodyHtml(resolveShopify(cw, "fullDescription", cw.fullDescription)) }
+          : {}),
     },
     metafields: mf,
     emptyMetafieldKeys,

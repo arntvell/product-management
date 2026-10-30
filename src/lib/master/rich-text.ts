@@ -66,3 +66,31 @@ export function toPlainText(value: string | null | undefined): string {
 export function hasMarkup(value: string | null | undefined): boolean {
   return !!value && /<\/?[a-z][^>]*>/i.test(value);
 }
+
+/**
+ * A full description as a Shopify product body (descriptionHtml).
+ *
+ * Markup is kept: it is the copy's real formatting (see the top of this file).
+ * Only what renders nothing goes — script/style blocks, the storefront's hidden
+ * "Description" heading and stray <meta> tags. Plain text becomes paragraphs:
+ * a blank line starts a new one, a single newline is a <br>.
+ */
+export function toBodyHtml(value: string | null | undefined): string {
+  if (!value?.trim()) return "";
+  if (hasMarkup(value)) {
+    return value
+      .replace(/\r\n?/g, "\n")
+      .replace(DROPPED_BLOCKS, "")
+      .replace(HIDDEN_HEADING, "")
+      .replace(/<meta\b[^>]*>/gi, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return value
+    .replace(/\r\n?/g, "\n")
+    .trim()
+    .split(/\n{2,}/)
+    .map((para) => `<p>${esc(para.trim()).replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+}

@@ -285,8 +285,8 @@ export async function pushColorwayToShopify(
   // time?". That is the right question for a CREATE and the wrong one for an
   // update: a product already live has whatever Shopify holds, and this push
   // does not overwrite the fields the master is empty on —
-  // `descriptionHtml` is sent for vintage only (the comment at the payload says
-  // why: omitting it leaves a merchandiser's Shopify-side body alone), `files`
+  // `descriptionHtml` is sent only when the master has a full description (or a
+  // vintage body) to fill it with, `files`
   // is sent only when the master actually has media, and metafields blank here
   // are left alone unless `clearEmptied` says otherwise.
   //
