@@ -37,10 +37,13 @@ export default async function ShootPage({
       <Page>
         <p className="max-w-3xl text-body text-muted-foreground">
           What still needs photography this season, and whether there is stock to shoot it from.
-          Images are counted in Origo and on Shopify; stock is Shopify&apos;s total across every
-          location, warehouse included. A product with no images and stock lands on the shot list
+          Images are counted in Origo and on Shopify; stock is what Loom has on hand in the
+          warehouse and every store, so a product not yet on Shopify still counts. A product with no images and stock lands on the shot list
           by itself; set a status to add or remove anything else.
         </p>
+        {board.loomError && (
+          <div className="border border-ink bg-paper px-4 py-3 text-body">{board.loomError}</div>
+        )}
         {board.shopifyError && (
           <div className="border border-ink bg-paper px-4 py-3 text-body">{board.shopifyError}</div>
         )}

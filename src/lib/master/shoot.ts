@@ -6,17 +6,20 @@
 // custom.men_images / custom.women_images metafields (a unisex carry-over can
 // have an empty gallery and all its photography in those two lists).
 //
-// Media is counted in BOTH places it can live. Origo holds what was uploaded
-// for the season (all of FW26's new photography went in as Blob media), but 83
-// of FW26's 119 carry-overs have nothing in Origo and their images only exist
-// on Shopify — counting Origo alone would put every one of them on the shot
-// list. Stock is Shopify's totalInventory, which sums every location, the
-// warehouse included.
+// Origo holds what was uploaded for the season (all of FW26's new photography
+// went in as Blob media), but 83 of FW26's 119 carry-overs have nothing in
+// Origo and their images only exist on Shopify — counting Origo alone would put
+// every one of them on the shot list.
 //
-// Read-only against Shopify. The only write is the person's own decision
+// Stock comes from Loom: on hand in the warehouse and every store. Shopify's
+// inventory only covers what is listed online, so it read a product that is not
+// on Shopify yet as having nothing — 7 of FW26's had stock all along.
+//
+// Read-only against Shopify and Loom. The only write is the person's own decision
 // (SeasonEntry.shootStatus / shootNote), which overrides what is derived here.
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
+import { loomStockFor, type LoomStock } from "@/lib/loom/stock";
 import type { ShootStatus } from "@/generated/prisma/client";
 import { bucketFor, isOnShotList, type ShootBucket } from "@/lib/shoot-plan";
 
@@ -47,8 +50,10 @@ export interface ShootRow {
     /** Gallery first, then men, then women images. */
     images: string[];
   } | null;
-  /** Shopify's totalInventory; null when it could not be read. */
+  /** On hand in Loom, warehouse and stores together; null when not in Loom or Loom could not be read. */
   stock: number | null;
+  /** The split behind `stock`; null with it. */
+  stockDetail: LoomStock | null;
   hasMedia: boolean;
   bucket: ShootBucket;
   /** Why a product without media is not being shot. Null when nothing blocks it. */
@@ -64,8 +69,10 @@ export interface ShootRow {
 export interface ShootBoard {
   season: string;
   rows: ShootRow[];
-  /** Set when Shopify could not be read in full; stock and Shopify media are then partial. */
+  /** Set when Shopify could not be read in full; Shopify media and status are then partial. */
   shopifyError: string | null;
+  /** Set when Loom could not be read; stock is then unknown throughout. */
+  loomError: string | null;
 }
 
 const PRODUCTS_QUERY = `
@@ -74,7 +81,6 @@ const PRODUCTS_QUERY = `
       ... on Product {
         id
         status
-        totalInventory
         mediaCount { count }
         media(first: 6) {
           nodes { preview { image { url(transform: { maxWidth: 400 }) } } }
@@ -114,7 +120,6 @@ function unisexImages(m: UnisexMetafield | null | undefined): { count: number; i
 interface ShopifyProduct {
   id: string;
   status: string;
-  totalInventory: number | null;
   mediaCount: { count: number } | null;
   media: { nodes: { preview: { image: { url: string } | null } | null }[] };
   men: UnisexMetafield | null;
@@ -138,7 +143,7 @@ async function readShopify(gids: string[]): Promise<{ byId: Map<string, ShopifyP
     }
   }
   const error = failures.length
-    ? `Shopify could not be read for ${failures.length} of ${Math.ceil(gids.length / BATCH)} batches (${failures[0]}). Stock and Shopify images are missing for those products.`
+    ? `Shopify could not be read for ${failures.length} of ${Math.ceil(gids.length / BATCH)} batches (${failures[0]}). Shopify images and status are missing for those products.`
     : null;
   return { byId, error };
 }
@@ -148,14 +153,14 @@ function blockReason(r: {
   origin: "NEW" | "CARRYOVER";
   cancelled: boolean;
   approved: boolean;
-  onShopify: boolean;
+  inLoom: boolean;
   stock: number | null;
 }): string | null {
   if (r.cancelled) return "Cancelled";
   // Carry-overs are not re-approved each season (101 of FW26's are unapproved),
   // so approval only means something for a new product.
   if (r.origin === "NEW" && !r.approved) return "Not approved for production";
-  if (!r.onShopify) return "Not on Shopify yet";
+  if (!r.inLoom) return "Not in Loom";
   if (r.stock == null) return "Stock unknown";
   if (r.stock <= 0) return "No stock yet";
   return null;
@@ -196,7 +201,19 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
   const gidOf = (e: (typeof entries)[number]) =>
     e.colorway.publications.find((p) => p.externalId)?.externalId ?? null;
   const gids = [...new Set(entries.map(gidOf).filter((g): g is string => !!g))];
-  const { byId, error } = gids.length ? await readShopify(gids) : { byId: new Map<string, ShopifyProduct>(), error: null };
+  const [{ byId, error }, loom] = await Promise.all([
+    gids.length ? readShopify(gids) : { byId: new Map<string, ShopifyProduct>(), error: null },
+    loomStockFor(
+      seasonCode,
+      entries.map((e) => ({ id: e.colorway.id, sku: e.colorway.colorwaySku }))
+    ).then(
+      (stock) => ({ stock, error: null as string | null }),
+      (err) => ({
+        stock: new Map<string, LoomStock>(),
+        error: `Loom could not be read (${err instanceof Error ? err.message : String(err)}). Stock is unknown for every product.`,
+      })
+    ),
+  ]);
 
   const store = (process.env.SHOPIFY_STORE_URL ?? "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 
@@ -226,14 +243,15 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
           ].slice(0, 6),
         }
       : null;
-    const stock = sp ? (sp.totalInventory ?? 0) : null;
+    const stockDetail = loom.stock.get(cw.id) ?? null;
+    const stock = stockDetail?.total ?? null;
     // The drop column carries cancellation in practice; the flag is never set.
     const cancelled = e.cancelled || e.drop === "CANCELED";
     const hasMedia = origo.count > 0 || (shopify ? shopify.mediaCount + shopify.men + shopify.women : 0) > 0;
     const bucket = bucketFor(hasMedia, stock, cancelled);
     const reason = hasMedia
       ? null
-      : blockReason({ origin: e.origin, cancelled, approved: e.approvedForProduction, onShopify: !!gid, stock });
+      : blockReason({ origin: e.origin, cancelled, approved: e.approvedForProduction, inLoom: !!stockDetail || !!loom.error, stock });
     const plan = e.shootStatus;
     const onShotList = isOnShotList(plan, bucket);
 
@@ -253,6 +271,7 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
       origo,
       shopify,
       stock,
+      stockDetail,
       hasMedia,
       bucket,
       reason,
@@ -271,7 +290,7 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
       a.colour.localeCompare(b.colour)
   );
 
-  return { season: seasonCode, rows, shopifyError: error };
+  return { season: seasonCode, rows, shopifyError: error, loomError: loom.error };
 }
 
 export const SHOOT_STATUSES: ShootStatus[] = ["SHOOT", "BOOKED", "SHOT", "SKIP"];

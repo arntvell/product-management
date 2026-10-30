@@ -46,6 +46,26 @@ function stockLabel(r: ShootRow) {
   return r.stock == null ? "—" : String(r.stock);
 }
 
+/** "Livid Oslo 2, Livid Bergen 1" — where the stock behind the total sits. */
+function locationsLabel(r: ShootRow) {
+  return (r.stockDetail?.byLocation ?? []).map((l) => `${l.location} ${l.onHand}`).join(", ");
+}
+
+/** Total, with the warehouse/store split underneath. */
+function StockCell({ row: r }: { row: ShootRow }) {
+  if (!r.stockDetail) return <span title="Not in Loom">—</span>;
+  return (
+    <span className="flex flex-col items-end" title={locationsLabel(r) || "None on hand"}>
+      <span>{r.stockDetail.total}</span>
+      {r.stockDetail.total > 0 && (
+        <span className="text-fine text-muted-foreground">
+          WH {r.stockDetail.warehouse} · Stores {r.stockDetail.stores}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function ShootPlanner({ season, rows: initial }: { season: string; rows: ShootRow[] }) {
   const [rows, setRows] = useState(initial);
   const [tab, setTab] = useState<Tab>("new");
@@ -139,7 +159,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
     downloadCsv(
       [
         "Season", "Drop", "Type", "Brand", "Style", "Colour", "SKU", "Category", "Gender",
-        "Origo images", "Shopify images", "Stock", "Status", "Shopify status", "Why not shot", "Plan", "Note",
+        "Origo images", "Shopify images", "Stock", "Warehouse", "Stores", "Stock by location", "Status", "Shopify status", "Why not shot", "Plan", "Note",
         "On shot list", "Shopify admin",
       ],
       shown.map((r) => [
@@ -155,6 +175,9 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
         String(r.origo.count),
         r.shopify ? String(shopifyCount(r)) : "Not on Shopify",
         r.stock == null ? "" : String(r.stock),
+        r.stockDetail ? String(r.stockDetail.warehouse) : "",
+        r.stockDetail ? String(r.stockDetail.stores) : "",
+        locationsLabel(r),
         BUCKET_LABELS[r.bucket],
         shopifyStatusLabel(r),
         r.reason ?? "",
@@ -367,6 +390,7 @@ function StatusCell({ row }: { row: ShootRow }) {
         {BUCKET_LABELS[row.bucket]}
       </span>
       {row.reason && <span className="text-fine text-muted-foreground">{row.reason}</span>}
+      {!row.shopify && <span className="text-fine text-muted-foreground">Not on Shopify</span>}
       {row.shopify?.status && row.shopify.status !== "ACTIVE" && (
         <span className="text-fine text-muted-foreground">Shopify: {shopifyStatusLabel(row)}</span>
       )}
@@ -397,7 +421,9 @@ function TableRow({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => voi
       <td className="px-3 py-2 text-right text-fine tabular-nums">
         <MediaCounts row={r} />
       </td>
-      <td className="px-3 py-2 text-right tabular-nums">{stockLabel(r)}</td>
+      <td className="px-3 py-2 text-right tabular-nums">
+        <StockCell row={r} />
+      </td>
       <td className="px-3 py-2">
         <StatusCell row={r} />
       </td>
@@ -451,7 +477,12 @@ function CarryCard({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => vo
             {r.drop ? ` · ${r.drop}` : ""}
           </div>
           <div className="text-fine text-muted-foreground">
-            Stock {stockLabel(r)}
+            <span title={locationsLabel(r) || undefined}>
+              Stock {stockLabel(r)}
+              {r.stockDetail && r.stockDetail.total > 0
+                ? ` (WH ${r.stockDetail.warehouse} · Stores ${r.stockDetail.stores})`
+                : ""}
+            </span>
             {r.origo.men || r.origo.women ? ` · Men ${r.origo.men} / Women ${r.origo.women}` : ""}
           </div>
         </div>

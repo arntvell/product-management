@@ -131,3 +131,15 @@ export async function loomUpsert<T = unknown>(body: unknown): Promise<{
   }
   return { ok: res.ok, status: res.status, data, raw };
 }
+
+/** A read from Loom's API — `path` is relative to the API root ("products"). */
+export async function loomGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+  const url = new URL(`${LOOM_API_BASE}/${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${loomToken()}`, Accept: "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`Loom answered HTTP ${res.status} for ${path}`);
+  return (await res.json()) as T;
+}
