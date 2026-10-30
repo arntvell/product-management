@@ -1,6 +1,7 @@
 // Read-model queries for the Catalog browse UI (Phase 1).
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
+import { isVintageBrand } from "./vintage";
 import {
   shopifyMissing,
   shopifyRefusing,
@@ -353,6 +354,10 @@ export interface GridRow {
    * in two or three, which is why the seasonal editor still asks.
    */
   priceSeasonId: string | null;
+  /** Every season this product is in. A bulk create needs exactly one. */
+  seasonCodes: string[];
+  /** Vintage is published from the drop sheet, never the bulk editor. */
+  isVintage: boolean;
   // Reference metafields (single = Shopify GID; multi = master colorway ids)
   refs: {
     carePageId: string;
@@ -447,6 +452,7 @@ export async function listColorwaysForEdit(
         },
       },
       channelContent: true,
+      brand: { select: { name: true } },
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
       entries: {
         select: {
@@ -529,6 +535,8 @@ export async function listColorwaysForEdit(
         new Set(cw.entries.map((e) => e.season.id)).size === 1
           ? cw.entries[0].season.id
           : null,
+      seasonCodes: [...new Set(cw.entries.map((e) => e.season.code))],
+      isVintage: isVintageBrand(cw.brand?.name),
       refs: {
         carePageId: cw.carePageId ?? "",
         fitguidePageId: cw.fitguidePageId ?? "",

@@ -53,6 +53,7 @@ import { MediaPanel } from "./media-panel";
 import { withFrom } from "@/lib/back-link";
 import { CopyFieldsDialog } from "./copy-fields-dialog";
 import { ProductMulti } from "./references-panel";
+import { DraftPushPanel } from "./draft-push-panel";
 import type { CopyableField } from "@/lib/master/copy-fields";
 import type { GridRow } from "@/lib/master/queries";
 import type { BulkChange, EditLayer } from "@/lib/master/edit";
@@ -626,6 +627,40 @@ export function CatalogGrid({
   const pushableSelected = visibleRows.filter(
     (r) => selected.has(r.id) && r.channels.length > 0
   ).length;
+
+  // ---- Create in bulk ----
+  //
+  // The selected products that are not on Shopify yet, created on Shopify, Sitoo
+  // and Loom through the same queue a draft publishes through: Shopify first, so
+  // Loom receives the inventory ids, and the readiness gate reports what is
+  // missing before anything goes out. Vintage is left out — the drop sheet
+  // publishes it, and online vintage must never reach the till.
+  const [createOpen, setCreateOpen] = useState(false);
+  const creatableRows = visibleRows.filter(
+    (r) => selected.has(r.id) && !r.onShopify && !r.isVintage && !r.dropped
+  );
+  // One batch, one season: Loom files the product under it and it decides which
+  // price is sent. The season tab decides it here; without one, the selection
+  // must share exactly one.
+  const createSeason: string | null = (() => {
+    if (season) return season;
+    const common = creatableRows.reduce<string[] | null>(
+      (acc, r) => (acc === null ? r.seasonCodes : acc.filter((c) => r.seasonCodes.includes(c))),
+      null
+    );
+    return common?.length === 1 ? common[0] : null;
+  })();
+  function openCreate() {
+    if (dirty.size > 0) {
+      toast.error("Save first — the products would be created with the values before your edits.");
+      return;
+    }
+    if (!createSeason) {
+      toast.error("These products are not in one shared season. Select products from one season to create them together.");
+      return;
+    }
+    setCreateOpen(true);
+  }
 
   // Bulk operations target the selection when one exists, else all filtered rows.
   const targetRows = useMemo(
@@ -1807,6 +1842,11 @@ export function CatalogGrid({
               {pushBusy ? "Pushing…" : `Push ${pushableSelected} to their channels`}
             </Button>
           )}
+          {creatableRows.length > 0 && canEdit && (
+            <Button size="sm" variant="outline" onClick={openCreate}>
+              Create {creatableRows.length} on channels…
+            </Button>
+          )}
           <FieldBulkPicker
             fields={copyDownFields}
             source={copySource}
@@ -2379,6 +2419,39 @@ export function CatalogGrid({
           </Dialog>
         );
       })()}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Create {creatableRows.length} product{creatableRows.length === 1 ? "" : "s"}
+            </DialogTitle>
+            <DialogDescription>
+              On Shopify, Sitoo and Loom, for {createSeason}. They keep their Origo status, so a Draft
+              product arrives on Shopify as Draft. Run a dry run first to see what the readiness gate
+              holds back.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-40 overflow-auto text-fine text-muted-foreground">
+            {creatableRows.map((r) => (
+              <li key={r.id}>
+                {r.styleName} · {r.name} <span className="font-mono">{r.colorwaySku}</span>
+              </li>
+            ))}
+          </ul>
+          {createOpen && createSeason && (
+            <DraftPushPanel
+              draftId={null}
+              colorwayIds={creatableRows.map((r) => r.id)}
+              channels={["SHOPIFY", "SITOO", "LOOM"]}
+              seasonCode={createSeason}
+              kind="create"
+              note="Bulk editor"
+              title={`Create ${creatableRows.length} on channels`}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <MediaPanel
         colorwayId={mediaFor}
