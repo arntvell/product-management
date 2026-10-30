@@ -134,7 +134,8 @@ function SingleRef({
   );
 }
 
-function ProductMulti({
+/** Linked products as removable chips, plus a search to add more. */
+export function ProductMulti({
   label,
   options,
   selected,

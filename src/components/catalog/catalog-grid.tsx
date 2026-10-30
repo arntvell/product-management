@@ -52,6 +52,7 @@ import { CellPanel, type CellPanelTarget } from "./cell-panel";
 import { MediaPanel } from "./media-panel";
 import { withFrom } from "@/lib/back-link";
 import { CopyFieldsDialog } from "./copy-fields-dialog";
+import { ProductMulti } from "./references-panel";
 import type { CopyableField } from "@/lib/master/copy-fields";
 import type { GridRow } from "@/lib/master/queries";
 import type { BulkChange, EditLayer } from "@/lib/master/edit";
@@ -283,6 +284,8 @@ export function CatalogGrid({
   useEffect(() => setHere(window.location.pathname + window.location.search), []);
   // The product whose images are open in the side panel.
   const [mediaFor, setMediaFor] = useState<string | null>(null);
+  // The product-reference cell open in the picker dialog.
+  const [refEdit, setRefEdit] = useState<{ rowId: string; key: string; label: string } | null>(null);
 
   // Every filter takes several values (OR within a filter, AND across them).
   const [filters, setFilters] = useState<GridFilters>(EMPTY_FILTERS);
@@ -2223,9 +2226,14 @@ export function CatalogGrid({
                               isDirty && dirtyCell
                             )}
                           >
-                            <span className={count ? "" : "text-muted-foreground/50"}>
+                            <button
+                              type="button"
+                              onClick={() => setRefEdit({ rowId: row.id, key: c.key as string, label: c.label })}
+                              title="Open to see and edit the linked products"
+                              className={cn("flex-1 truncate text-left hover:underline", !count && "text-muted-foreground/50")}
+                            >
                               {count} linked
-                            </span>
+                            </button>
                             {count > 0 && (
                               <button
                                 onClick={() => setCell(row, c.key as string, "[]", "BASE")}
@@ -2336,6 +2344,41 @@ export function CatalogGrid({
         targetCount={targetRows.length}
         onCopy={copyFieldsToTargets}
       />
+
+      {refEdit && (() => {
+        const row = rows.find((r) => r.id === refEdit.rowId);
+        if (!row) return null;
+        let ids: string[] = [];
+        try {
+          ids = JSON.parse(cellValue(row, "BASE", refEdit.key) || "[]");
+        } catch {
+          ids = [];
+        }
+        return (
+          <Dialog open onOpenChange={(o) => !o && setRefEdit(null)}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{refEdit.label}</DialogTitle>
+                <DialogDescription>
+                  {row.styleName} · {row.name}. Changes go into the grid like any other edit and save
+                  with it.
+                </DialogDescription>
+              </DialogHeader>
+              <ProductMulti
+                label={`${ids.length} linked`}
+                options={colorwayOptions.filter((o) => o.id !== row.id)}
+                selected={ids}
+                onChange={(next) => setCell(row, refEdit.key, JSON.stringify(next), "BASE")}
+              />
+              <DialogFooter>
+                <Button size="sm" onClick={() => setRefEdit(null)}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       <MediaPanel
         colorwayId={mediaFor}
