@@ -103,7 +103,7 @@ export async function listColorwaysForPublishing(
         take: 1,
       },
       seasonImages: { where: { slot: "MAIN" }, take: 1 },
-      entries: { select: { cancelled: true, season: { select: { code: true } } } },
+      entries: { select: { cancelled: true, drop: true, season: { select: { code: true } } } },
       channelContent: { select: { channel: true, field: true, value: true } },
       _count: { select: { variants: true, media: true } },
     },
@@ -368,15 +368,27 @@ export interface GridRow {
   overrides: { SHOPIFY: Record<string, string>; LOOM: Record<string, string> };
 }
 
-// Dropped is per-season (SeasonEntry.cancelled, from Threadflow "dropped").
-// With a season selected, use that season's flag; otherwise dropped-in-any.
+// Cancelled is per season. Threadflow's "dropped" lands in SeasonEntry.cancelled,
+// but in practice merchandising cancels a product by setting its drop to
+// CANCELED, and the flag stays false — all six of FW26's cancellations are
+// drops. Either counts.
+//
+// With a season selected, that season decides. Without one, only a product
+// cancelled in EVERY season it is in: one cancelled in FW26 but carried in SS27
+// is still a live product, and hiding it would hide work.
+function entryCancelled(e: { cancelled: boolean; drop?: string | null }): boolean {
+  return e.cancelled || e.drop?.toUpperCase() === "CANCELED";
+}
+
 function isDropped(
-  entries: { cancelled: boolean; season: { code: string } }[],
+  entries: { cancelled: boolean; drop?: string | null; season: { code: string } }[],
   seasonCode?: string
 ): boolean {
-  if (seasonCode)
-    return entries.find((e) => e.season.code === seasonCode)?.cancelled ?? false;
-  return entries.some((e) => e.cancelled);
+  if (seasonCode) {
+    const e = entries.find((x) => x.season.code === seasonCode);
+    return e ? entryCancelled(e) : false;
+  }
+  return entries.length > 0 && entries.every(entryCancelled);
 }
 
 /** The entry for the chosen season, or the only one if a product has just one. */

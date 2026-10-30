@@ -274,7 +274,9 @@ export function CatalogGrid({
   );
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-  const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("all");
+  // Cancelled products are hidden unless asked for: they are not work, and
+  // showing them made every list longer than the job.
+  const [droppedFilter, setDroppedFilter] = useState<"all" | "active" | "dropped">("active");
   // Where this grid is, with its query, so a product opened from it can come
   // back here. Read after mount — the server has no window.
   const [here, setHere] = useState<string | null>(null);
@@ -288,7 +290,9 @@ export function CatalogGrid({
   // Filters, search and the dropped toggle survive leaving the grid and coming
   // back — to a product and back, say — for the rest of the browser session.
   // Per grid: Livid and External keep their own.
-  const filterKey = `origo:catalog-grid:${scope}:filters`;
+  // v2: the cancelled toggle's default moved from "all" to "active"; a value
+  // saved under the old key would undo that for the rest of the session.
+  const filterKey = `origo:catalog-grid:${scope}:filters:v2`;
   const filtersLoaded = useRef(false);
   useEffect(() => {
     try {
@@ -1601,7 +1605,7 @@ export function CatalogGrid({
           frozen={frozenCols}
           onToggleFrozen={toggleFrozen}
         />
-        <div className="flex gap-1" title="Filter by Threadflow dropped status">
+        <div className="flex gap-1" title="Cancelled: the season entry is cancelled, or its drop is CANCELED">
           {(["all", "active", "dropped"] as const).map((f) => (
             <button
               key={f}
@@ -1613,7 +1617,7 @@ export function CatalogGrid({
                   : "text-muted-foreground hover:bg-muted"
               )}
             >
-              {f === "dropped" ? `Dropped (${droppedCount})` : f}
+              {f === "dropped" ? `Cancelled (${droppedCount})` : f}
             </button>
           ))}
         </div>
@@ -1961,10 +1965,10 @@ export function CatalogGrid({
                       >
                         {row.dropped && (
                           <span
-                            title="Dropped from Threadflow for this season"
+                            title="Cancelled for this season"
                             className="mr-1 border border-line px-1 text-fine uppercase text-muted-foreground"
                           >
-                            Dropped
+                            Cancelled
                           </span>
                         )}
                         {row.name}
