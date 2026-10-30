@@ -52,7 +52,7 @@ import { CellPanel, type CellPanelTarget } from "./cell-panel";
 import { MediaPanel } from "./media-panel";
 import { withFrom } from "@/lib/back-link";
 import { CopyFieldsDialog } from "./copy-fields-dialog";
-import { ProductMulti } from "./references-panel";
+import { OptionSearch, ProductMulti } from "./references-panel";
 import { DraftPushPanel } from "./draft-push-panel";
 import type { CopyableField } from "@/lib/master/copy-fields";
 import type { GridRow } from "@/lib/master/queries";
@@ -2915,7 +2915,6 @@ function BulkRefApply({
 }) {
   const [fieldKey, setFieldKey] = useState(REF_FIELDS[0].key);
   const field = REF_FIELDS.find((f) => f.key === fieldKey)!;
-  const [q, setQ] = useState("");
   const [single, setSingle] = useState<{ id: string; label: string } | null>(null);
   const [ids, setIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"add" | "replace">("add");
@@ -2925,17 +2924,8 @@ function BulkRefApply({
     () => new Map(options.map((o) => [o.id, o.label])),
     [options]
   );
-  const matches = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    if (!query) return [];
-    return options
-      .filter((o) => o.label.toLowerCase().includes(query) && !ids.includes(o.id))
-      .slice(0, 8);
-  }, [q, options, ids]);
-
   function changeField(key: string) {
     setFieldKey(key);
-    setQ("");
     setSingle(null);
     setIds([]);
   }
@@ -2956,35 +2946,21 @@ function BulkRefApply({
       </select>
 
       {/* value picker */}
-      <div className="relative">
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={field.kind === "single" ? "Search…" : "Search products…"}
-          className="h-8 w-64"
-        />
-        {matches.length > 0 && (
-          <div className="absolute z-20 mt-1 w-64 overflow-hidden border border-line bg-paper shadow-overlay">
-            {matches.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => {
-                  if (field.kind === "single") {
-                    setSingle(o);
-                    setQ(o.label);
-                  } else {
-                    setIds((prev) => [...prev, o.id]);
-                    setQ("");
-                  }
-                }}
-                className="block w-full truncate px-3 py-1.5 text-left text-fine hover:bg-muted"
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      <OptionSearch
+        // A new field is a new list; drop the old query with it.
+        key={fieldKey}
+        options={options}
+        exclude={field.kind === "multi" ? ids : []}
+        onPick={(o) => (field.kind === "single" ? setSingle(o) : setIds((prev) => [...prev, o.id]))}
+        placeholder={field.kind === "single" ? "Search…" : "Search products…"}
+        className="w-72"
+      />
+      {field.kind === "single" && single && (
+        <span className="flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-fine">
+          {single.label}
+          <button onClick={() => setSingle(null)} className="text-muted-foreground hover:text-destructive">✕</button>
+        </span>
+      )}
 
       {field.kind === "multi" && ids.length > 0 && (
         <div className="flex flex-wrap gap-1">

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { usePages } from "@/hooks/use-pages";
 import { useCollections } from "@/hooks/use-collections";
 import { useModels } from "@/hooks/use-models";
@@ -146,18 +147,10 @@ export function ProductMulti({
   selected: string[];
   onChange: (ids: string[]) => void;
 }) {
-  const [q, setQ] = useState("");
   const labelById = useMemo(
     () => new Map(options.map((o) => [o.id, o.label])),
     [options]
   );
-  const matches = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    if (!query) return [];
-    return options
-      .filter((o) => o.label.toLowerCase().includes(query) && !selected.includes(o.id))
-      .slice(0, 8);
-  }, [q, options, selected]);
 
   return (
     <div className="space-y-1.5">
@@ -178,30 +171,97 @@ export function ProductMulti({
           ))}
         </div>
       )}
-      <div className="relative">
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search products to link…"
-          className="h-8"
-        />
-        {matches.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full overflow-hidden border border-line bg-paper shadow-overlay">
-            {matches.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => {
-                  onChange([...selected, o.id]);
-                  setQ("");
-                }}
-                className="block w-full truncate px-3 py-1.5 text-left text-fine hover:bg-muted"
-              >
-                {o.label}
-              </button>
-            ))}
+      <OptionSearch
+        options={options}
+        exclude={selected}
+        onPick={(o) => onChange([...selected, o.id])}
+        placeholder="Search products to link…"
+      />
+    </div>
+  );
+}
+
+/** Every word of the query, in any order: "keri black" finds "Keri — Black Linen (…)". */
+function matchesQuery(label: string, words: string[]): boolean {
+  const l = label.toLowerCase();
+  return words.every((w) => l.includes(w));
+}
+
+/** Rendered at most; the rest is one keystroke away. Thousands of buttons stall the page. */
+const LIST_LIMIT = 300;
+
+/**
+ * A search box whose list opens on focus and scrolls. Typing narrows it word
+ * by word rather than requiring an exact match, so the alternatives stay in
+ * view while you look. Picking keeps the list open for the next one.
+ */
+export function OptionSearch({
+  options,
+  exclude = [],
+  onPick,
+  placeholder = "Search…",
+  className,
+}: {
+  options: { id: string; label: string }[];
+  exclude?: string[];
+  onPick: (option: { id: string; label: string }) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const matches = useMemo(() => {
+    const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const skip = new Set(exclude);
+    return options.filter((o) => !skip.has(o.id) && matchesQuery(o.label, words));
+  }, [q, options, exclude]);
+  const shown = matches.slice(0, LIST_LIMIT);
+
+  return (
+    <div className={cn("relative", className)}>
+      <Input
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+          if (e.key === "Enter" && shown.length === 1) {
+            e.preventDefault();
+            onPick(shown[0]);
+          }
+        }}
+        placeholder={placeholder}
+        className="h-8"
+      />
+      {open && (
+        <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto border border-line bg-paper shadow-overlay">
+          {shown.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              // mousedown, not click: the input's blur would close the list first.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onPick(o);
+              }}
+              className="block w-full truncate px-3 py-1.5 text-left text-fine hover:bg-muted"
+            >
+              {o.label}
+            </button>
+          ))}
+          <div className="border-t border-line px-3 py-1.5 text-fine text-muted-foreground">
+            {matches.length === 0
+              ? "No matches"
+              : matches.length > shown.length
+                ? `${shown.length} of ${matches.length} shown — type to narrow`
+                : `${matches.length} ${matches.length === 1 ? "match" : "matches"}`}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
