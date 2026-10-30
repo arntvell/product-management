@@ -34,6 +34,7 @@ export function DraftPushPanel({
   autoStart = false,
   onBatchCreated,
   title = "Publish",
+  skipExisting = false,
 }: {
   /** Null when the batch is not one draft's — an import publishes the colorways
    *  of many drafts as one batch, and `PushBatch.draftId` is single-valued. */
@@ -66,6 +67,8 @@ export function DraftPushPanel({
    *  somewhere a refresh survives. */
   onBatchCreated?: (batchId: string) => void;
   title?: string;
+  /** Skip a product on Shopify or Sitoo when it is already there (see CreatePushBatchInput). */
+  skipExisting?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -172,6 +175,7 @@ export function DraftPushPanel({
           note,
           seasonCode,
           allowIncomplete,
+          skipExisting,
         }),
       }).then((r) => r.json());
       if (created.error) throw new Error(created.error);

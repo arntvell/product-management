@@ -64,6 +64,16 @@ export interface CreatePushBatchInput {
   allowIncomplete?: boolean;
   note?: string;
   draftId?: string;
+  /**
+   * Skip a product on a channel it already exists on, instead of sending it.
+   * For the bulk editor, whose selection can mix new and existing products.
+   * Shopify: already has a product GID (the push would be an update, not a
+   * create). Sitoo: any size already linked (the creator refuses a product
+   * whose sizes all exist, and groups a partial one with the sizes it finds).
+   * Loom is never skipped: its upsert is keyed on Origo's ids, cannot
+   * duplicate, and is what carries the new Shopify and Sitoo ids across.
+   */
+  skipExisting?: boolean;
 }
 
 export interface BatchProgress {
@@ -88,7 +98,8 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
       style: true,
       brand: true,
       channelContent: true,
-      variants: true,
+      variants: { include: { channelRefs: { where: { channel: "SITOO" }, select: { id: true } } } },
+      publications: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
       prices: input.seasonCode ? { where: { season: { code: input.seasonCode } } } : true,
       media: true,
       seasonImages: true,
@@ -155,6 +166,22 @@ export async function createPushBatch(input: CreatePushBatchInput): Promise<{
             waivable = true;
           }
         }
+      }
+
+      const alreadyOn =
+        input.skipExisting &&
+        ((channel === "SHOPIFY" && cw.publications.some((p) => !!p.externalId)) ||
+          (channel === "SITOO" && cw.variants.some((v) => v.channelRefs.length > 0)));
+      if (alreadyOn) {
+        // Not a failure and not a block: there is nothing to create. Recorded
+        // so the batch says why this channel was not touched.
+        items.push({
+          colorwayId: cw.id,
+          channel: channel as Channel,
+          state: "SKIPPED",
+          error: `already on ${channel === "SHOPIFY" ? "Shopify" : "Sitoo"}`,
+        });
+        continue;
       }
 
       if (channel === "LOOM" && !input.seasonCode) {

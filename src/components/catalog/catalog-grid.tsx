@@ -229,6 +229,11 @@ const FIXED_WIDTH: Record<string, number> = Object.fromEntries(
  */
 export type GridScope = "seasonal" | "external";
 
+type CreateChannel = "SHOPIFY" | "SITOO" | "LOOM";
+/** In push order: Shopify first, so Loom receives the inventory ids. */
+const CREATE_CHANNELS: CreateChannel[] = ["SHOPIFY", "SITOO", "LOOM"];
+const CREATE_CHANNEL_LABELS: Record<CreateChannel, string> = { SHOPIFY: "Shopify", SITOO: "Sitoo", LOOM: "Loom" };
+
 export function CatalogGrid({
   initialRows,
   seasons,
@@ -645,9 +650,25 @@ export function CatalogGrid({
   // Set once a batch exists, so closing the dialog reloads the rows: the grid
   // holds the rows it was given, and they still say "not on Shopify".
   const createdBatch = useRef(false);
+  // Which channels to create on. A product already on one is skipped there
+  // (Loom aside — see CreatePushBatchInput.skipExisting).
+  const [createChannels, setCreateChannels] = useState<CreateChannel[]>(["SHOPIFY", "SITOO", "LOOM"]);
+  // Offered: selected products missing from at least one channel.
   const creatableRows = seasonal
-    ? visibleRows.filter((r) => selected.has(r.id) && !r.onShopify && !r.isVintage && !r.dropped)
+    ? visibleRows.filter(
+        (r) =>
+          selected.has(r.id) &&
+          !r.isVintage &&
+          !r.dropped &&
+          CREATE_CHANNELS.some((c) => !r.channelsLive.includes(c))
+      )
     : [];
+  // Sent: those missing from at least one CHOSEN channel. A product already on
+  // all of them has nothing to create; one missing only some is skipped where
+  // it exists, and Loom's update rides along.
+  const createTargets = creatableRows.filter((r) =>
+    createChannels.some((c) => !r.channelsLive.includes(c))
+  );
   // One batch, one season: Loom files the product under it and it decides which
   // price is sent. The season tab decides it here; without one, the selection
   // must share exactly one.
@@ -1853,7 +1874,7 @@ export function CatalogGrid({
           )}
           {creatableRows.length > 0 && canEdit && (
             <Button size="sm" variant="outline" onClick={openCreate}>
-              Create {creatableRows.length} on channels…
+              Create on channels ({creatableRows.length})…
             </Button>
           )}
           <FieldBulkPicker
@@ -2439,35 +2460,68 @@ export function CatalogGrid({
       >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              Create {creatableRows.length} product{creatableRows.length === 1 ? "" : "s"}
-            </DialogTitle>
+            <DialogTitle>Create on channels</DialogTitle>
             <DialogDescription>
-              On Shopify, Sitoo and Loom, for {createSeason}. They keep their Origo status, so a Draft
-              product arrives on Shopify as Draft. Run a dry run first to see what the readiness gate
-              holds back.
+              For {createSeason}. A product already on a channel is skipped there, so nothing is
+              created twice. Loom is updated either way: it cannot duplicate, and it needs the new
+              Shopify and Sitoo ids. Products keep their Origo status, so a Draft product arrives on
+              Shopify as Draft.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            {CREATE_CHANNELS.map((c) => {
+              const already = creatableRows.filter((r) => r.channelsLive.includes(c)).length;
+              const on = createChannels.includes(c);
+              return (
+                <label key={c} className="flex items-center gap-2 text-body">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() =>
+                      setCreateChannels((prev) =>
+                        on ? prev.filter((x) => x !== c) : CREATE_CHANNELS.filter((x) => x === c || prev.includes(x))
+                      )
+                    }
+                  />
+                  <span className="w-16">{CREATE_CHANNEL_LABELS[c]}</span>
+                  <span className="text-fine text-muted-foreground">
+                    {c === "LOOM"
+                      ? `${creatableRows.length - already} new · ${already} updated`
+                      : `${creatableRows.length - already} to create · ${already} already there, skipped`}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
           <ul className="max-h-40 overflow-auto text-fine text-muted-foreground">
-            {creatableRows.map((r) => (
+            {createTargets.map((r) => (
               <li key={r.id}>
                 {r.styleName} · {r.name} <span className="font-mono">{r.colorwaySku}</span>
+                {r.channelsLive.length ? ` — on ${r.channelsLive.map((c) => CREATE_CHANNEL_LABELS[c as CreateChannel] ?? c).join(", ")}` : ""}
               </li>
             ))}
           </ul>
-          {createOpen && createSeason && (
+          {createOpen && createSeason && createTargets.length > 0 && (
             <DraftPushPanel
+              // A new channel choice is a new batch, not a resume of the last one.
+              key={createChannels.join(",")}
               draftId={null}
-              colorwayIds={creatableRows.map((r) => r.id)}
-              channels={["SHOPIFY", "SITOO", "LOOM"]}
+              colorwayIds={createTargets.map((r) => r.id)}
+              channels={createChannels}
               seasonCode={createSeason}
               kind="create"
               note="Bulk editor"
-              title={`Create ${creatableRows.length} on channels`}
+              skipExisting
+              title={`Create ${createTargets.length} product${createTargets.length === 1 ? "" : "s"}`}
               onBatchCreated={() => {
                 createdBatch.current = true;
               }}
             />
+          )}
+          {createTargets.length === 0 && (
+            <p className="text-fine text-muted-foreground">
+              Every selected product is already on the chosen channels.
+            </p>
           )}
         </DialogContent>
       </Dialog>
