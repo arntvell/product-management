@@ -3,6 +3,10 @@
     {
       "path": "/api/vintage/schedule?run=due",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/stock-arrivals",
+      "schedule": "0 7,13 * * *"
     }
   ]
 }

@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AppShell } from "@/components/layout/app-shell";
+import { StockAlerts } from "@/components/layout/stock-alerts";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ClerkProvider } from "@clerk/nextjs";
 import { CurrentUserProvider } from "@/components/auth/current-user";
@@ -46,6 +47,7 @@ export default async function RootLayout({
       <QueryProvider>
         <TooltipProvider>
           <AppShell>{children}</AppShell>
+          <StockAlerts />
           <Toaster />
         </TooltipProvider>
       </QueryProvider>

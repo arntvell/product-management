@@ -1136,3 +1136,46 @@ enum UserRole {
   VINTAGE
   VIEWER
 }
+
+// ---------------------------------------------------------------------------
+// Stock arrival alerts
+// ---------------------------------------------------------------------------
+//
+// Twice a day the stock in Loom (warehouse + stores) is read for every
+// product in a regular season and compared with the previous read. A product
+// that had none and now has some has ARRIVED: one alert per run lists every
+// arrival, and each Admin and Product manager sees it once in Origo.
+
+/// The last stock read for one colorway, and whether it has ever arrived.
+model StockWatch {
+  colorwayId String    @id
+  /// On hand across every Loom location at the last read.
+  onHand     Int
+  checkedAt  DateTime
+  /// When stock was first seen. Set once and never cleared: a product that
+  /// sells out and is restocked is not an arrival. Set silently on the first
+  /// read for anything already in stock — that read is the baseline.
+  receivedAt DateTime?
+}
+
+/// One run that found arrivals. `arrivals` is the list shown in the alert.
+model StockAlert {
+  id        String              @id @default(cuid())
+  /// [{ colorwayId, sku, styleName, name, brand, season, onHand, warehouse, stores, locations }]
+  arrivals  Json
+  createdAt DateTime            @default(now())
+  receipts  StockAlertReceipt[]
+}
+
+/// Who an alert is for, and whether they have seen it. Made at run time for
+/// every active Admin and Product manager, so "once per person" is a flag here.
+model StockAlertReceipt {
+  id      String     @id @default(cuid())
+  alertId String
+  alert   StockAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  userId  String
+  seenAt  DateTime?
+
+  @@unique([alertId, userId])
+  @@index([userId, seenAt])
+}
