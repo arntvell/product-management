@@ -432,18 +432,12 @@ export async function pushColorwayToShopify(
 
   // A unisex product's gallery is the flat-lay, because the gendered model
   // shots go to custom.men_images / custom.women_images instead. But a style
-  // can be flagged unisex before its flat has been shot, and an empty `files`
-  // list means the product page has no photograph at all — so fall back to the
-  // gallery rather than publish a blank product.
-  const productMediaUrls = preview.unisex
-    ? flatUrls.length
-      ? flatUrls
-      : [...galleryUrls, ...menUrls, ...womenUrls]
-    : galleryUrls;
+  // can be flagged unisex before its flat has been shot, so with no flat the
+  // GALLERY-role images stand in. Men and Women images never do: an image
+  // tagged with a gender goes to that gender's metafield only (publish.ts).
+  const productMediaUrls = preview.unisex ? (flatUrls.length ? flatUrls : galleryUrls) : galleryUrls;
   if (preview.unisex && !flatUrls.length && productMediaUrls.length)
-    warnings.push(
-      "Unisex product with no FLAT image — used the gendered/gallery shots for the product media instead."
-    );
+    warnings.push("Unisex product with no FLAT image — used the Gallery-role shots for the product media instead.");
 
   // Idempotent media: reuse the Shopify file GID cached on first upload
   // (MediaAsset.shopifyMediaId / SeasonImage.shopifyFileId) so re-pushing does

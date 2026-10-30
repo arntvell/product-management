@@ -193,13 +193,17 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
   if (unisex) {
     // Unisex: gallery lives in men_images/women_images metafields; the flat is
     // the sole Shopify media-section image. With no flat yet, the product's own
-    // gallery stands in — the same fallback push-shopify.ts applies on create.
-    // Without it here, an update never saw a unisex product's gallery images:
-    // Sol Seok's incense (unisex, gallery only) went live with no photographs
-    // and every later push reported nothing to send.
+    // GALLERY-role images stand in — the same fallback push-shopify.ts applies
+    // on create. Without it here, an update never saw a unisex product's gallery
+    // images: Sol Seok's incense (unisex, gallery only) went live with no
+    // photographs and every later push reported nothing to send.
+    //
+    // Men and Women images never stand in. An image tagged with a gender goes
+    // to that gender's metafield and nowhere else; putting it in the gallery
+    // too showed every model shot twice on the product page.
     media = roleMedia.flat.length
       ? dedupe(roleMedia.flat)
-      : dedupe([...galleryUrls, ...seasonUrls, ...roleMedia.men, ...roleMedia.women]);
+      : dedupe([...galleryUrls, ...seasonUrls]);
     if (roleMedia.men.length)
       add("men_images", "list.file_reference", `${roleMedia.men.length} image(s) via role → Shopify files`);
     if (roleMedia.women.length)
@@ -207,8 +211,10 @@ export function buildShopifyPreview(cw: PublishColorway): ShopifyPreview {
     if (roleMedia.flat.length === 0)
       warnings.push(
         media.length
-          ? "Unisex product with no Flat-role image — the gallery shots are used as the product images."
-          : "Unisex product: no Flat-role image — Shopify media section would be empty."
+          ? "Unisex product with no Flat-role image — the Gallery-role shots are used as the product images."
+          : roleMedia.men.length || roleMedia.women.length
+            ? "Unisex product with no Flat or Gallery image — the Men/Women shots go to their metafields only, so the Shopify media section will be empty."
+            : "Unisex product: no Flat-role image — Shopify media section would be empty."
       );
     if (roleMedia.men.length === 0 && roleMedia.women.length === 0)
       warnings.push("Unisex product: no Men/Women-role images for the gallery metafields.");
