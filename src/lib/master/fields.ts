@@ -50,7 +50,7 @@ export const SPLIT_TEXT_FIELDS = [
   { key: "fullDescription", label: "Full description", multiline: true },
   { key: "details", label: "Details", multiline: true },
   { key: "styleTagline", label: "Style tagline", multiline: false },
-  { key: "styleName", label: "Style name", multiline: false },
+  { key: "styleName", label: "Metafield: Style name", multiline: false },
 ] as const;
 
 export type SplitFieldKey = (typeof SPLIT_TEXT_FIELDS)[number]["key"];

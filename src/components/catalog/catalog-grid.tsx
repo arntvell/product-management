@@ -127,7 +127,9 @@ const COLUMNS: ColDef[] = [
   { key: "fullDescription", label: "Full desc", width: 220, kind: "text", split: true },
   { key: "details", label: "Details", width: 200, kind: "text", split: true },
   { key: "styleTagline", label: "Tagline", width: 170, kind: "text", split: true },
-  { key: "styleName", label: "Style name", width: 150, kind: "text", split: true },
+  // The custom.style_name metafield on the shop page, not the style itself —
+  // labelled so, because "Style name" read as the style's own name.
+  { key: "styleName", label: "Metafield: Style name", width: 170, kind: "text", split: true },
 ];
 
 /**
@@ -146,7 +148,7 @@ const LONG_TEXT_FIELDS = new Set([
 const FIELD_LABELS: Record<string, string> = {
   swatchHex: "Swatch",
   priceNok: "NOK price",
-  name: "Name",
+  name: "Colourway",
   status: "Shopify status",
   ...Object.fromEntries(COLUMNS.map((c) => [c.key, c.label])),
   ...Object.fromEntries(REF_SINGLE.map((c) => [c.key, c.label])),
@@ -193,12 +195,15 @@ function dkey(id: string, layer: EditLayer, field: string) {
 
 // Always-visible columns (every layer), left of the layer-specific columns.
 const FIXED_COLS: { key: string; label: string; width: number }[] = [
-  // Name is layer-independent — there is one name, not a Shopify one and a Loom
-  // one — so it sits with the other always-visible columns rather than in a
-  // view. Title beside it is derived and read-only: it is what Shopify and the
-  // till will show, and seeing it is what stops a half-rename going out.
-  { key: "name", label: "Name", width: 190 },
-  { key: "title", label: "Title", width: 190 },
+  // The colourway's name is layer-independent, so it sits with the other
+  // always-visible columns rather than in a view. Loom is sent it as is, under
+  // its style. Product name is derived and read-only — style + colourway, what
+  // the till shows — and seeing it is what stops a half-rename going out.
+  // Shopify title is the one name that can be anything: a Shopify-only title,
+  // editable in every view, blank meaning "same as the product name".
+  { key: "name", label: "Colourway", width: 170 },
+  { key: "title", label: "Product name", width: 190 },
+  { key: "shopifyTitle", label: "Shopify title", width: 210 },
   // Where this product lives. The fact the channel toggle used to obscure: a
   // product is not "a Shopify product" or "a Sitoo product" — four of the five
   // Tarvas shoes are on all three at once, which is why this is a column saying
@@ -1654,7 +1659,7 @@ export function CatalogGrid({
             {
               title: "Product",
               columns: [
-                { key: "__label", label: "Style · Colorway" },
+                { key: "__label", label: "Style · Colourway" },
                 ...FIXED_COLS.map((c) => ({ key: c.key, label: c.label })),
               ],
             },
@@ -1944,7 +1949,7 @@ export function CatalogGrid({
                 style={place("__label", LABEL_W, false, true)}
                 className="flex shrink-0 items-center justify-between gap-1 border-l px-3 py-2"
               >
-                <span className="truncate">Style · Colorway</span>
+                <span className="truncate">Style · Colourway</span>
                 <span className="flex shrink-0 items-center">
                   {pinButton("__label")}
                   {sortButton("__label")}
@@ -2085,49 +2090,47 @@ export function CatalogGrid({
                     />
                   </div>
                   ) : null}
-                  {/* The composed title — what the till shows. In the Shopify
-                      view it becomes editable: a Shopify-only title, blank
-                      meaning "same as the till". */}
-                  {shown("title") ? (() => {
+                  {/* Product name: style + colourway, what the till shows. */}
+                  {shown("title") || shown("shopifyTitle") ? (() => {
                     const composed = channelProductTitle({
                       name: cellValue(row, "BASE", "name"),
                       style: {
                         styleName: row.ownsStyle ? cellValue(row, "BASE", "name") : row.styleName,
                       },
                     });
-                    return layer === "SHOPIFY" ? (
-                      <div
-                        style={place("title", FIXED_WIDTH["title"], isSel)}
-                        className={cn(
-                          "shrink-0 border-l",
-                          dirty.has(dkey(row.id, "SHOPIFY", "title")) && dirtyCell
-                        )}
-                      >
-                        <input
-                          value={cellValue(row, "SHOPIFY", "title")}
-                          placeholder={composed}
-                          onChange={(e) => setCell(row, "title", e.target.value, "SHOPIFY")}
-                          title="Shopify-only title. Empty uses the till's title."
-                          className="h-full w-full bg-transparent px-2 text-fine outline-none placeholder:text-muted-foreground/70 focus:bg-background"
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        style={place("title", FIXED_WIDTH["title"], isSel)}
-                        className="flex shrink-0 items-center border-l px-2 text-fine text-muted-foreground"
-                        title={
-                          row.overrides.SHOPIFY?.title
-                            ? `The till shows this; Shopify shows "${row.overrides.SHOPIFY.title}". Loom gets the name alone.`
-                            : "What Shopify and the till will show. Loom is sent the name on its own."
-                        }
-                      >
-                        <span className="truncate">{composed}</span>
-                        {row.overrides.SHOPIFY?.title ? (
-                          <span className="ml-1 shrink-0 text-ink" aria-label="Shopify has its own title">
-                            *
-                          </span>
+                    return (
+                      <>
+                        {shown("title") ? (
+                          <div
+                            style={place("title", FIXED_WIDTH["title"], isSel)}
+                            className="flex shrink-0 items-center border-l px-2 text-fine text-muted-foreground"
+                            title="Style + colourway. The till shows this; Loom gets the colourway under its style; Shopify too, unless it has its own title."
+                          >
+                            <span className="truncate">{composed}</span>
+                          </div>
                         ) : null}
-                      </div>
+                        {/* Shopify title: always editable, whichever view is
+                            open. It writes the Shopify layer, so the till and
+                            Loom never see it. */}
+                        {shown("shopifyTitle") ? (
+                          <div
+                            style={place("shopifyTitle", FIXED_WIDTH["shopifyTitle"], isSel)}
+                            className={cn(
+                              "shrink-0 border-l",
+                              dirty.has(dkey(row.id, "SHOPIFY", "title")) && dirtyCell
+                            )}
+                          >
+                            <input
+                              value={cellValue(row, "SHOPIFY", "title")}
+                              placeholder={composed}
+                              onChange={(e) => setCell(row, "title", e.target.value, "SHOPIFY")}
+                              title="The title on the online shop. Empty uses the product name."
+                              aria-label={`Shopify title for ${composed}`}
+                              className="h-full w-full bg-transparent px-2 text-fine outline-none placeholder:text-muted-foreground/70 focus:bg-background"
+                            />
+                          </div>
+                        ) : null}
+                      </>
                     );
                   })() : null}
                   {shown("channels") ? (

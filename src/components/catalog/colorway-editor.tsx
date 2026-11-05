@@ -206,7 +206,7 @@ export function ColorwayEditor({
         <h2 className="text-body">Name and price</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Product name</Label>
+            <Label>Colourway</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-1.5">
@@ -220,8 +220,8 @@ export function ColorwayEditor({
                 Shopify `style_name` metafield and does not change the title. */}
             {ownsStyle && (
               <p className="text-fine text-muted-foreground">
-                The parent style. The <span>Style name</span> field under Content
-                is a Shopify metafield and does not change the title.
+                The parent style. The <span>Metafield: Style name</span> field under
+                Content is a Shopify metafield and does not change the title.
               </p>
             )}
             {!ownsStyle && (
@@ -241,13 +241,13 @@ export function ColorwayEditor({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Title on the till (Sitoo)</Label>
+          <Label>Product name</Label>
           <p className="border bg-muted/40 px-3 py-2 font-mono text-body">
             {composedTitle || "—"}
           </p>
           <p className="text-fine text-muted-foreground">
-            Composed from the style and the product name. Loom is sent the
-            product name on its own — it nests style → colour → size, so the
+            Style + colourway, as the till (Sitoo) shows it. Loom is sent the
+            colourway under its style — it nests style → colour → size, so the
             style is already one level up.
           </p>
         </div>
@@ -261,7 +261,7 @@ export function ColorwayEditor({
                 overrides.SHOPIFY?.title?.trim() ? "text-foreground" : "text-muted-foreground"
               )}
             >
-              {overrides.SHOPIFY?.title?.trim() ? "Own title" : "Same as the till"}
+              {overrides.SHOPIFY?.title?.trim() ? "Own title" : "Same as the product name"}
             </span>
           </div>
           <Input
@@ -270,8 +270,8 @@ export function ColorwayEditor({
             onChange={(e) => setOverride("SHOPIFY", "title", e.target.value)}
           />
           <p className="text-fine text-muted-foreground">
-            What the webshop shows customers. Leave it empty to use the till&rsquo;s
-            title; anything typed here goes to Shopify only.
+            What the webshop shows customers. Leave it empty to use the product
+            name; anything typed here goes to Shopify only.
           </p>
         </div>
 
