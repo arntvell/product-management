@@ -35,7 +35,40 @@ const KINDS: ProductKind[] = [
   "SERVICE",
 ];
 
-export function StepBrand({ payload, update, options }: StepProps) {
+/**
+ * A brand's saved defaults, as template fields to fill. Null when the brand
+ * has no settings row; throws when the lookup itself fails.
+ */
+export async function fetchBrandDefaults(brandId: string): Promise<{
+  fill: Partial<DraftTemplate>;
+  unisex: boolean;
+  channels: PublishChannelKey[];
+} | null> {
+  const res = await fetch(`/api/catalog/brands/${brandId}/template`);
+  if (!res.ok) throw new Error("Could not load the brand's defaults");
+  const { template } = (await res.json()) as { template: Record<string, unknown> | null };
+  if (!template) return null;
+  const str = (k: string) => (typeof template[k] === "string" ? (template[k] as string) : "");
+  const channels = Array.isArray(template.channels)
+    ? (template.channels as string[]).filter((c): c is PublishChannelKey =>
+        (PUBLISH_CHANNELS as readonly string[]).includes(c)
+      )
+    : [];
+  const fill: Partial<DraftTemplate> = {};
+  for (const k of TEMPLATE_KEYS) if (str(k)) fill[k] = str(k);
+  // unisex is a boolean, so it cannot ride the string path above.
+  return { fill, unisex: Boolean(template.unisex), channels };
+}
+
+export function StepBrand({
+  payload,
+  update,
+  options,
+  beforeBrandChange,
+}: StepProps & {
+  /** Asked before the brand changes; false keeps the current brand. */
+  beforeBrandChange?: () => boolean;
+}) {
   const external = options.brands.filter((b) => !b.isLivid);
   const [applied, setApplied] = useState<string | null>(null);
 
@@ -53,34 +86,21 @@ export function StepBrand({ payload, update, options }: StepProps) {
    */
   async function applyBrandTemplate(brandId: string) {
     try {
-      const res = await fetch(`/api/catalog/brands/${brandId}/template`);
-      if (!res.ok) return;
-      const { template } = (await res.json()) as {
-        template: Record<string, unknown> | null;
-      };
-      if (!template) {
+      const defaults = await fetchBrandDefaults(brandId);
+      if (!defaults) {
         setApplied("no defaults saved for this brand");
         return;
       }
-      const str = (k: string) =>
-        typeof template[k] === "string" ? (template[k] as string) : "";
-      const chan = Array.isArray(template.channels)
-        ? (template.channels as string[]).filter((c): c is PublishChannelKey =>
-            (PUBLISH_CHANNELS as readonly string[]).includes(c)
-          )
-        : [];
       // Decide what to fill from the template as it stands now, outside the
       // updater — an updater can be invoked more than once for one state change,
       // and a count assembled inside it would double.
       // Against the CLEARED template, not the one still on screen — the reset in
       // the select below has been queued but this closure predates it.
-      const fill: Partial<DraftTemplate> = {};
-      for (const k of TEMPLATE_KEYS) if (str(k)) fill[k] = str(k);
+      const { fill, unisex, channels: chan } = defaults;
       const filled = Object.keys(fill);
       update((p) => ({
         ...p,
-        // unisex is a boolean, so it cannot ride the string path above.
-        template: { ...p.template, ...fill, unisex: Boolean(template.unisex) },
+        template: { ...p.template, ...fill, unisex },
         channels: chan.length ? chan : p.channels,
       }));
       setApplied(
@@ -107,6 +127,7 @@ export function StepBrand({ payload, update, options }: StepProps) {
             className="mt-1.5 h-9 w-full border bg-transparent px-3 text-body"
             value={payload.brand.id ?? ""}
             onChange={(e) => {
+              if (beforeBrandChange && !beforeBrandChange()) return;
               const b = external.find((x) => x.id === e.target.value);
               setApplied(null);
               update((p) => ({

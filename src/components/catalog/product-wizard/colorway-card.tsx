@@ -9,6 +9,7 @@ import { barcodeKey, rejectionReason } from "@/lib/master/barcode";
 import type { DraftColorway } from "@/lib/master/draft-payload";
 import type { SizeSystemView } from "@/lib/master/size-systems";
 import type { ColorwayHit } from "@/lib/master/builder-search";
+import { colorwayAnchor } from "./types";
 
 /**
  * One colourway, filled top to bottom: what it is, which sizes it comes in,
@@ -17,6 +18,7 @@ import type { ColorwayHit } from "@/lib/master/builder-search";
  * four separate steps.
  */
 export function ColorwayCard({
+  draftId,
   cw,
   index,
   styleName,
@@ -32,6 +34,7 @@ export function ColorwayCard({
   onSetPrice,
   onSetBarcode,
 }: {
+  draftId: string;
   cw: DraftColorway;
   index: number;
   styleName: string;
@@ -57,7 +60,7 @@ export function ColorwayCard({
   const id = useId();
 
   return (
-    <section id={`cw-${cw.key}`} className="border">
+    <section id={colorwayAnchor(draftId, cw.key)} className="scroll-mt-4 border">
       {/* What it is */}
       <div className="border-b p-3">
         <div className="mb-2 flex items-center justify-between gap-3">

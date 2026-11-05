@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getDraft, DraftNotFoundError } from "@/lib/master/drafts";
+import { getDraft, getGroupSiblings, DraftNotFoundError } from "@/lib/master/drafts";
 import { listBrands, listSeasons, listManufacturers } from "@/lib/master/queries";
 import { listSizeSystems } from "@/lib/master/size-systems";
 import { listCategoryTree, newCategoryChoices } from "@/lib/master/categories";
@@ -21,6 +21,19 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
   }
   if (draft.status === "COMPLETED") redirect(`/catalog/products/drafts/${id}/done`);
   if (draft.status === "DISCARDED") redirect("/catalog/products/drafts");
+
+  // A style added to another draft is edited on that draft's page, with the
+  // rest of its build. Once the lead has been created or discarded, the style
+  // opens on its own, so a style left behind can still be finished.
+  if (draft.groupId && draft.groupId !== draft.id) {
+    const lead = await prisma.productDraft.findUnique({
+      where: { id: draft.groupId },
+      select: { status: true },
+    });
+    if (lead && (lead.status === "DRAFT" || lead.status === "FINALIZING"))
+      redirect(`/catalog/products/drafts/${draft.groupId}`);
+  }
+  const siblings = draft.groupId === draft.id ? await getGroupSiblings(draft.id) : [];
 
   const [brandRows, seasons, sizeSystems, manufacturers, categoryTree, newCategory] = await Promise.all([
     // Archived brands are not offered — except the one this draft already
@@ -78,6 +91,12 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
         initialPayload={draft.payload}
         initialRevision={draft.revision}
         initialStep={draft.step}
+        initialSiblings={siblings.map((s) => ({
+          id: s.id,
+          payload: s.payload,
+          revision: s.revision,
+          status: s.status,
+        }))}
         options={{ brands: brandRows, seasons, sizeSystems, manufacturers, categories, newCategory }}
       />
     </main>

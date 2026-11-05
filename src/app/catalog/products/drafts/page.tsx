@@ -61,6 +61,7 @@ export default async function DraftsPage() {
                     <div className="truncate text-meta uppercase text-muted-foreground">
                       {[
                         d.seasonCode,
+                        d.styles > 1 ? `${d.styles} styles` : null,
                         `${d.colorways} colourways`,
                         `${d.variants} sizes`,
                         `at ${d.step}`,

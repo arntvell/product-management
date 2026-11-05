@@ -11,8 +11,25 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
   const draft = await prisma.productDraft.findUnique({ where: { id } });
   if (!draft) notFound();
 
+  // Several styles built together are one result: every created style's
+  // colourways, published as one batch. A style that was not created is
+  // listed below with a way back to it.
+  const siblings =
+    draft.groupId === draft.id
+      ? await prisma.productDraft.findMany({
+          where: { groupId: id, id: { not: id }, status: { not: "DISCARDED" } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, title: true, status: true, createdColorwayIds: true },
+        })
+      : [];
+  const colorwayIds = [
+    ...draft.createdColorwayIds,
+    ...siblings.filter((s) => s.status === "COMPLETED").flatMap((s) => s.createdColorwayIds),
+  ];
+  const leftBehind = siblings.filter((s) => s.status !== "COMPLETED");
+
   const colorways = await prisma.colorway.findMany({
-    where: { id: { in: draft.createdColorwayIds } },
+    where: { id: { in: colorwayIds } },
     select: {
       id: true,
       colorwaySku: true,
@@ -53,9 +70,25 @@ export default async function DraftDonePage({ params }: { params: Promise<{ id: 
         whether or not a channel is reachable.
       </p>
 
+      {leftBehind.length ? (
+        <div className="mt-4 border border-ink bg-paper p-4 text-body text-ink">
+          {leftBehind.length === 1 ? "One style was" : `${leftBehind.length} styles were`} not
+          created:
+          <ul className="mt-1.5 space-y-1">
+            {leftBehind.map((s) => (
+              <li key={s.id}>
+                <Link href={`/catalog/products/drafts/${s.id}`} className="underline underline-offset-2">
+                  {s.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <DraftPushPanel
         draftId={id}
-        colorwayIds={draft.createdColorwayIds}
+        colorwayIds={colorwayIds}
         channels={draft.channels as ("SHOPIFY" | "LOOM" | "SITOO")[]}
         seasonCode={season?.code}
         // Same policy as the import screen, for the same reason: a draft that

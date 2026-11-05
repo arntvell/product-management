@@ -278,8 +278,9 @@ model ProductDraft {
   id            String             @id @default(cuid())
   title         String // "Paraboot — 3 colourways", for the drafts list
   status        ProductDraftStatus @default(DRAFT)
-  /// Which step to reopen on: brand | style | colorways | sizes | prices |
-  /// barcodes | review.
+  /// Which step to reopen on: brand | build | review. Older rows may still say
+  /// style | colorways | sizes | prices | barcodes; normalizeDraftStep reads
+  /// those as build.
   step          String             @default("brand")
   /// Payload shape version. Drafts outlive deploys, so parseDraftPayload()
   /// migrates forward or refuses rather than crashing on a field that moved.
@@ -309,10 +310,17 @@ model ProductDraft {
   createdStyleIds    String[]  @default([])
   createdColorwayIds String[]  @default([])
 
+  /// Several styles built together in the wizard. Each style is its own draft
+  /// (finalize, reserved ids and resume are per draft), and every member,
+  /// the first included, carries the first draft's id here. Null for a draft
+  /// on its own.
+  groupId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status, updatedAt])
+  @@index([groupId])
 }
 
 enum ProductDraftStatus {

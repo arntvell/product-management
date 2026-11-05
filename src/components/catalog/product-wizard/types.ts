@@ -21,6 +21,11 @@ export interface StepProps {
   options: WizardOptions;
 }
 
+/** Where Review's "fix" and "fill in" links land. Scoped by draft, because
+ *  several styles' builders are on one page at once. */
+export const customsAnchor = (draftId: string) => `customs-${draftId}`;
+export const colorwayAnchor = (draftId: string, key: string) => `cw-${draftId}-${key}`;
+
 /** Short random key, stable for the life of a draft row. */
 export function newKey(): string {
   return Math.random().toString(36).slice(2, 10);

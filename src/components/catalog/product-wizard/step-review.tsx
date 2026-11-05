@@ -2,36 +2,135 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PUBLISH_CHANNEL_LABELS } from "@/lib/master/fields";
+import { PUBLISH_CHANNEL_LABELS, type PublishChannelKey } from "@/lib/master/fields";
+import type { DraftPayloadV1 } from "@/lib/master/draft-payload";
 import type { PreflightReport } from "@/lib/master/finalize";
-import type { StepProps } from "./types";
+import { colorwayAnchor, customsAnchor, type WizardOptions } from "./types";
 import { missingCustoms } from "./customs-card";
 
+/** One style of the build, as Review sees it. */
+export interface ReviewItem {
+  draftId: string;
+  payload: DraftPayloadV1;
+  report: PreflightReport | null;
+  /** Already in the master, from an earlier press of Create. */
+  created: boolean;
+}
+
 export function StepReview({
-  payload,
+  items,
+  channels,
+  groupErrors,
   options,
-  report,
   checking,
   onCheck,
   onCreate,
   creating,
   onJumpTo,
-}: StepProps & {
-  report: PreflightReport | null;
+}: {
+  items: ReviewItem[];
+  channels: PublishChannelKey[];
+  /** Problems between styles of this build, which no single draft's check sees. */
+  groupErrors: string[];
+  options: WizardOptions;
   checking: boolean;
   onCheck: () => void;
   onCreate: () => void;
   creating: boolean;
-  /** Open the builder at a colourway's card, or at the customs card. */
+  /** Open the builder at an element: a colourway's card, or a customs card. */
   onJumpTo: (anchor: string) => void;
 }) {
+  const pending = items.filter((i) => !i.created);
+  const ready =
+    pending.length > 0 && !groupErrors.length && pending.every((i) => i.report?.ok);
+
+  return (
+    <div className="space-y-5">
+      <div className="border p-4">
+        <div className="text-fine text-muted-foreground">Publishing to</div>
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          {channels.length ? (
+            channels.map((c) => (
+              <span key={c} className="rounded-full border px-2.5 py-0.5 text-fine">
+                {PUBLISH_CHANNEL_LABELS[c]}
+              </span>
+            ))
+          ) : (
+            <span className="text-fine text-muted-foreground">nothing selected</span>
+          )}
+        </div>
+      </div>
+
+      {groupErrors.length ? (
+        <div className="border border-destructive/50 bg-destructive/5 p-4">
+          <div className="text-body text-destructive">
+            The styles in this build clash with each other — nothing will be created
+          </div>
+          <ul className="mt-2 list-inside list-disc space-y-1 text-fine">
+            {groupErrors.map((e) => (
+              <li key={e}>{e}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {items.map((item, i) => (
+        <StyleReview
+          key={item.draftId}
+          item={item}
+          heading={items.length > 1 ? `Style ${i + 1} of ${items.length}` : null}
+          options={options}
+          onJumpTo={onJumpTo}
+        />
+      ))}
+
+      <div className="flex items-center justify-end gap-3">
+        <Button variant="outline" disabled={checking} onClick={onCheck}>
+          {checking ? "Checking…" : "Check again"}
+        </Button>
+        <Button disabled={creating || !ready} onClick={onCreate}>
+          {creating
+            ? "Creating…"
+            : pending.length > 1 || items.length > 1
+              ? `Create ${pending.length} style${pending.length === 1 ? "" : "s"}`
+              : "Create products"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StyleReview({
+  item,
+  heading,
+  options,
+  onJumpTo,
+}: {
+  item: ReviewItem;
+  heading: string | null;
+  options: WizardOptions;
+  onJumpTo: (anchor: string) => void;
+}) {
+  const { payload, report, draftId } = item;
   const [open, setOpen] = useState(true);
   const season = options.seasons.find((s) => s.id === payload.seasonId);
   const variants = payload.colorways.reduce((a, c) => a + c.variants.length, 0);
   const customsGaps = missingCustoms(payload.template);
 
   return (
-    <div className="space-y-5">
+    <section className="space-y-3">
+      {heading ? (
+        <h3 className="text-body">
+          {heading}
+          <span className="ml-2 text-muted-foreground">
+            {payload.style?.styleName || "no style chosen"}
+          </span>
+          {item.created ? (
+            <span className="ml-2 border border-ink px-2 py-0.5 text-fine text-ink">created</span>
+          ) : null}
+        </h3>
+      ) : null}
+
       <div className="grid gap-3 border p-4 sm:grid-cols-5">
         <Stat label="Brand" value={payload.brand.name || "—"} />
         <Stat label="Season" value={season?.code ?? "—"} />
@@ -52,22 +151,7 @@ export function StepReview({
         <Stat label="Will create" value={`${payload.colorways.length} × ${variants}`} sub="colourways × sizes" />
       </div>
 
-      <div className="border p-4">
-        <div className="text-fine text-muted-foreground">Publishing to</div>
-        <div className="mt-1.5 flex flex-wrap gap-2">
-          {payload.channels.length ? (
-            payload.channels.map((c) => (
-              <span key={c} className="rounded-full border px-2.5 py-0.5 text-fine">
-                {PUBLISH_CHANNEL_LABELS[c]}
-              </span>
-            ))
-          ) : (
-            <span className="text-fine text-muted-foreground">nothing selected</span>
-          )}
-        </div>
-      </div>
-
-      {report ? (
+      {item.created ? null : report ? (
         <div className="space-y-3">
           {report.collisions.length ? (
             <div className="border border-destructive/50 bg-destructive/5 p-4">
@@ -86,7 +170,7 @@ export function StepReview({
                       <button
                         type="button"
                         className="ml-2 underline underline-offset-2"
-                        onClick={() => onJumpTo(`cw-${c.row.colorwayKey}`)}
+                        onClick={() => onJumpTo(colorwayAnchor(draftId, c.row.colorwayKey!))}
                       >
                         fix
                       </button>
@@ -117,7 +201,7 @@ export function StepReview({
                 <button
                   type="button"
                   className="text-fine underline underline-offset-2"
-                  onClick={() => onJumpTo("customs")}
+                  onClick={() => onJumpTo(customsAnchor(draftId))}
                 >
                   fill in
                 </button>
@@ -160,7 +244,7 @@ export function StepReview({
           className="flex w-full items-center justify-between px-4 py-2.5 text-left text-body"
           onClick={() => setOpen((v) => !v)}
         >
-          Everything that will be created
+          {item.created ? "What was created" : "Everything that will be created"}
           <span className="text-fine text-muted-foreground">{open ? "hide" : "show"}</span>
         </button>
         {open ? (
@@ -210,16 +294,7 @@ export function StepReview({
           </div>
         ) : null}
       </div>
-
-      <div className="flex items-center justify-end gap-3">
-        <Button variant="outline" disabled={checking} onClick={onCheck}>
-          {checking ? "Checking…" : "Check again"}
-        </Button>
-        <Button disabled={creating || !report?.ok} onClick={onCreate}>
-          {creating ? "Creating…" : "Create products"}
-        </Button>
-      </div>
-    </div>
+    </section>
   );
 }
 

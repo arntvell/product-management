@@ -30,11 +30,12 @@ export function StepBuild({
   update,
   options,
   draftId,
-  revision,
+  revisionRef,
   onImported,
 }: StepProps & {
   draftId: string;
-  revision: number;
+  /** The draft's save revision, read when an import is sent. */
+  revisionRef: { current: number };
   onImported: (payload: StepProps["payload"], revision: number) => void;
 }) {
   const style = payload.style;
@@ -213,7 +214,7 @@ export function StepBuild({
 
       {style ? (
         <>
-          <CustomsCard payload={payload} update={update} options={options} />
+          <CustomsCard payload={payload} update={update} options={options} draftId={draftId} />
 
           <section className="space-y-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -271,6 +272,7 @@ export function StepBuild({
             {payload.colorways.map((cw, i) => (
               <ColorwayCard
                 key={cw.key}
+                draftId={draftId}
                 cw={cw}
                 index={i}
                 styleName={style.styleName}
@@ -297,12 +299,12 @@ export function StepBuild({
                 + Colourway
               </Button>
               <div className="min-w-[16rem] flex-1">
-                <Label htmlFor="bulk" className="text-fine">
+                <Label htmlFor={`bulk-${draftId}`} className="text-fine">
                   Or paste a list, one name per line
                 </Label>
                 <div className="mt-1.5 flex gap-2">
                   <Input
-                    id="bulk"
+                    id={`bulk-${draftId}`}
                     value={bulk}
                     onChange={(e) => setBulk(e.target.value)}
                     placeholder="Dark Brown, Black, Marine"
@@ -331,7 +333,7 @@ export function StepBuild({
           {allVariants.length ? (
             <BarcodeFileTools
               draftId={draftId}
-              revision={revision}
+              revisionRef={revisionRef}
               onImported={onImported}
               total={allVariants.length}
               blank={blankBarcodes}
@@ -347,14 +349,14 @@ export function StepBuild({
 /** Barcodes for the whole draft at once, through a spreadsheet. */
 function BarcodeFileTools({
   draftId,
-  revision,
+  revisionRef,
   onImported,
   total,
   blank,
   toLoom,
 }: {
   draftId: string;
-  revision: number;
+  revisionRef: { current: number };
   onImported: (payload: StepProps["payload"], revision: number) => void;
   total: number;
   blank: number;
@@ -370,7 +372,7 @@ function BarcodeFileTools({
       const res = await fetch(`/api/catalog/drafts/${draftId}/barcodes`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ csv, revision }),
+        body: JSON.stringify({ csv, revision: revisionRef.current }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Import failed");

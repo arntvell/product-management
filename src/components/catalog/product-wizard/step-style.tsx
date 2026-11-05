@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import type { StepProps } from "./types";
 import { resyncSkus } from "./sku-tools";
 
 export function StepStyle({ payload, update }: StepProps) {
+  const inputId = useId();
   const [query, setQuery] = useState(payload.style?.styleName ?? "");
   const [hits, setHits] = useState<StyleHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -88,11 +89,11 @@ export function StepStyle({ payload, update }: StepProps) {
   return (
     <div className="space-y-4">
       <div>
-        <Label htmlFor="style-q" className="text-fine">
+        <Label htmlFor={inputId} className="text-fine">
           Style name
         </Label>
         <Input
-          id="style-q"
+          id={inputId}
           className="mt-1.5"
           value={query}
           onChange={(e) => setQuery(e.target.value)}

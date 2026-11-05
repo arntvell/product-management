@@ -41,6 +41,8 @@ export interface DraftView {
   finalizeError: string | null;
   createdStyleIds: string[];
   createdColorwayIds: string[];
+  /** The first draft's id when this draft is one style of several; else null. */
+  groupId: string | null;
   updatedAt: string;
 }
 
@@ -53,6 +55,8 @@ export interface DraftSummary {
   seasonCode: string | null;
   colorways: number;
   variants: number;
+  /** Styles in this build: 1, or the size of its group. */
+  styles: number;
   finalizeError: string | null;
   updatedAt: string;
 }
@@ -73,6 +77,22 @@ export async function createDraft(): Promise<string> {
 export async function getDraft(id: string): Promise<DraftView> {
   const d = await prisma.productDraft.findUnique({ where: { id } });
   if (!d) throw new DraftNotFoundError("Draft not found.");
+  return toView(d);
+}
+
+function toView(d: {
+  id: string;
+  title: string;
+  status: string;
+  step: string;
+  revision: number;
+  payload: unknown;
+  finalizeError: string | null;
+  createdStyleIds: string[];
+  createdColorwayIds: string[];
+  groupId: string | null;
+  updatedAt: Date;
+}): DraftView {
   return {
     id: d.id,
     title: d.title,
@@ -83,8 +103,77 @@ export async function getDraft(id: string): Promise<DraftView> {
     finalizeError: d.finalizeError,
     createdStyleIds: d.createdStyleIds,
     createdColorwayIds: d.createdColorwayIds,
+    groupId: d.groupId,
     updatedAt: d.updatedAt.toISOString(),
   };
+}
+
+/**
+ * The other styles built alongside `leadId`, oldest first. Discarded ones are
+ * gone; created ones stay, so the review and the done page can say so.
+ */
+export async function getGroupSiblings(leadId: string): Promise<DraftView[]> {
+  const rows = await prisma.productDraft.findMany({
+    where: { groupId: leadId, id: { not: leadId }, status: { not: "DISCARDED" } },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(toView);
+}
+
+/**
+ * Another style in the same build.
+ *
+ * Its own draft, not a second style inside this one's payload: finalize, the
+ * reserved ids and the resume probe are all per draft, and a group of drafts
+ * gets them for nothing. Brand, season, channels and kind are the lead's,
+ * because they are chosen once for the whole build; the template is the
+ * caller's, normally the brand's defaults, never the lead's filled-in customs,
+ * which belong to a different garment.
+ */
+export async function addStyleToDraft(leadId: string, template: unknown): Promise<DraftView> {
+  return prisma.$transaction(async (tx) => {
+    const lead = await tx.productDraft.findUnique({ where: { id: leadId } });
+    if (!lead) throw new DraftNotFoundError("Draft not found.");
+    if (lead.status !== "DRAFT")
+      throw new DraftConflictError(
+        `This draft is ${lead.status.toLowerCase()} and can no longer take another style.`,
+        { revision: lead.revision, status: lead.status }
+      );
+    if (lead.groupId && lead.groupId !== lead.id)
+      throw new DraftConflictError("Add styles from the first style of the build.", {
+        revision: lead.revision,
+        status: lead.status,
+      });
+
+    const from = parseDraftPayload(lead.payload);
+    const payload = parseDraftPayload({
+      ...emptyDraftPayload(),
+      brand: from.brand,
+      seasonId: from.seasonId,
+      channels: from.channels,
+      kind: from.kind,
+      template,
+    });
+
+    // Not a payload change, so not a revision bump: the lead's open tab keeps
+    // saving without a conflict.
+    if (!lead.groupId)
+      await tx.productDraft.update({ where: { id: leadId }, data: { groupId: leadId } });
+
+    const created = await tx.productDraft.create({
+      data: {
+        title: draftTitle(payload),
+        payload: payload as unknown as object,
+        schemaVersion: DRAFT_SCHEMA_VERSION,
+        step: "build",
+        brandId: payload.brand.id,
+        seasonId: payload.seasonId,
+        channels: payload.channels,
+        groupId: leadId,
+      },
+    });
+    return toView(created);
+  });
 }
 
 export async function listDrafts(
@@ -103,13 +192,20 @@ export async function listDrafts(
       step: true,
       payload: true,
       finalizeError: true,
+      groupId: true,
       updatedAt: true,
       brand: { select: { name: true } },
       season: { select: { code: true } },
     },
   });
 
-  return rows.map((r) => {
+  // One row per build. A style added to another draft is listed under that
+  // draft, not as a second thing to open; its counts are added to the lead's.
+  type Extra = { colorways: number; variants: number; styles: number; interrupted: boolean };
+  const siblings = new Map<string, Extra>();
+  const leadIds = new Set(rows.filter((r) => !r.groupId || r.groupId === r.id).map((r) => r.id));
+
+  const summaries = rows.map((r) => {
     let colorways = 0;
     let variants = 0;
     try {
@@ -129,10 +225,41 @@ export async function listDrafts(
       seasonCode: r.season?.code ?? null,
       colorways,
       variants,
+      styles: 1,
       finalizeError: r.finalizeError,
       updatedAt: r.updatedAt.toISOString(),
+      groupId: r.groupId,
     };
   });
+
+  for (const s of summaries) {
+    if (!s.groupId || s.groupId === s.id || !leadIds.has(s.groupId)) continue;
+    const t = siblings.get(s.groupId) ?? { colorways: 0, variants: 0, styles: 0, interrupted: false };
+    t.interrupted ||= s.status === "FINALIZING";
+    t.colorways += s.colorways;
+    t.variants += s.variants;
+    t.styles += 1;
+    siblings.set(s.groupId, t);
+  }
+
+  return summaries
+    // A sibling whose lead is not listed (finished, or discarded on its own)
+    // stays visible, so nothing in progress disappears from the list.
+    .filter((s) => !(s.groupId && s.groupId !== s.id && leadIds.has(s.groupId)))
+    .map(({ groupId, ...s }) => {
+      const t = groupId === s.id ? siblings.get(s.id) : undefined;
+      return t
+        ? {
+            ...s,
+            colorways: s.colorways + t.colorways,
+            variants: s.variants + t.variants,
+            styles: 1 + t.styles,
+            // An interrupted style is the one state that needs acting on, so
+            // it must not hide behind a lead that is merely in progress.
+            status: t.interrupted ? "FINALIZING" : s.status,
+          }
+        : s;
+    });
 }
 
 export interface SaveDraftInput {
@@ -187,7 +314,7 @@ export async function saveDraft(
 }
 
 /**
- * Abandon a draft.
+ * Abandon a draft, and with the first style of a build, the rest of it.
  *
  * DISCARDED, never deleted. A barcode allocated while drafting is in the ledger
  * for good — allocation is a one-way door — so the row that explains which SKU
@@ -206,6 +333,12 @@ export async function discardDraft(id: string): Promise<void> {
       status: d.status,
     });
   }
+  // Only the lead carries its own id as groupId, so for any other draft this
+  // matches nothing. Created siblings are left alone: they are in the master.
+  await prisma.productDraft.updateMany({
+    where: { groupId: id, id: { not: id }, status: { in: ["DRAFT", "FINALIZING"] } },
+    data: { status: "DISCARDED" },
+  });
 }
 
 export { DraftPayloadError };

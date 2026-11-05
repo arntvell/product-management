@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NewCategoryForm } from "@/components/catalog/new-category-form";
 import type { DraftTemplate } from "@/lib/master/draft-payload";
-import type { StepProps } from "./types";
+import { customsAnchor, type StepProps } from "./types";
 
 /**
  * The six classification fields, in the order they are shown. Category is the
@@ -32,13 +32,13 @@ export function missingCustoms(t: DraftTemplate): string[] {
   return CUSTOMS_FIELDS.filter((f) => !String(t[f.field] ?? "").trim()).map((f) => f.label);
 }
 
-export function CustomsCard({ payload, update, options }: StepProps) {
+export function CustomsCard({ payload, update, options, draftId }: StepProps & { draftId: string }) {
   const missing = missingCustoms(payload.template);
   const filled = CUSTOMS_FIELDS.length - missing.length;
   const complete = missing.length === 0;
 
   return (
-    <section id="customs" className="border p-4">
+    <section id={customsAnchor(draftId)} className="scroll-mt-4 border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-body">Customs and classification</h3>
         <span
@@ -60,6 +60,7 @@ export function CustomsCard({ payload, update, options }: StepProps) {
         {CUSTOMS_FIELDS.filter((f) => f.field !== "categoryId").map((f) => (
           <TemplateField
             key={f.field}
+            inputId={`${customsAnchor(draftId)}-${f.field}`}
             label={f.label}
             field={f.field}
             placeholder={f.placeholder}
@@ -73,19 +74,20 @@ export function CustomsCard({ payload, update, options }: StepProps) {
 }
 
 function TemplateField({
+  inputId,
   label,
   field,
   placeholder,
   payload,
   update,
 }: Pick<StepProps, "payload" | "update"> & {
+  inputId: string;
   label: string;
   field: keyof DraftTemplate;
   placeholder?: string;
 }) {
   const value = payload.template[field];
   const blank = !String(value ?? "").trim();
-  const inputId = `customs-${field}`;
   return (
     <div>
       <Label htmlFor={inputId} className="text-fine">{label}</Label>
