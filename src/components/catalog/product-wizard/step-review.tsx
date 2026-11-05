@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { PUBLISH_CHANNEL_LABELS } from "@/lib/master/fields";
 import type { PreflightReport } from "@/lib/master/finalize";
 import type { StepProps } from "./types";
+import { missingCustoms } from "./customs-card";
 
 export function StepReview({
   payload,
@@ -21,11 +22,13 @@ export function StepReview({
   onCheck: () => void;
   onCreate: () => void;
   creating: boolean;
-  onJumpTo: (step: "colorways" | "sizes" | "barcodes") => void;
+  /** Open the builder at a colourway's card, or at the customs card. */
+  onJumpTo: (anchor: string) => void;
 }) {
   const [open, setOpen] = useState(true);
   const season = options.seasons.find((s) => s.id === payload.seasonId);
   const variants = payload.colorways.reduce((a, c) => a + c.variants.length, 0);
+  const customsGaps = missingCustoms(payload.template);
 
   return (
     <div className="space-y-5">
@@ -83,9 +86,7 @@ export function StepReview({
                       <button
                         type="button"
                         className="ml-2 underline underline-offset-2"
-                        onClick={() =>
-                          onJumpTo(c.level === "variant" ? "sizes" : "colorways")
-                        }
+                        onClick={() => onJumpTo(`cw-${c.row.colorwayKey}`)}
                       >
                         fix
                       </button>
@@ -104,6 +105,29 @@ export function StepReview({
                   <li key={e}>{e}</li>
                 ))}
               </ul>
+            </div>
+          ) : null}
+
+          {customsGaps.length ? (
+            <div className="border border-ink bg-paper p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className="text-body text-ink">
+                  Customs incomplete — {customsGaps.length} of 6 missing
+                </div>
+                <button
+                  type="button"
+                  className="text-fine underline underline-offset-2"
+                  onClick={() => onJumpTo("customs")}
+                >
+                  fill in
+                </button>
+              </div>
+              <p className="mt-1 text-fine text-ink">
+                Missing: {customsGaps.join(", ")}. The product can still be created, but
+                Loom and Shopify will not have {customsGaps.length === 1 ? "it" : "them"} for
+                shipping and duties until someone fills {customsGaps.length === 1 ? "it" : "them"}{" "}
+                in on the product.
+              </p>
             </div>
           ) : null}
 

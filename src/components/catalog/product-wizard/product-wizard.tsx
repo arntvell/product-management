@@ -8,21 +8,13 @@ import { DRAFT_STEPS, type DraftStep, type DraftPayloadV1 } from "@/lib/master/d
 import type { PreflightReport } from "@/lib/master/finalize";
 import { useDraftAutosave } from "./use-draft-autosave";
 import { StepBrand } from "./step-brand";
-import { StepStyle } from "./step-style";
-import { StepColorways } from "./step-colorways";
-import { StepSizes } from "./step-sizes";
-import { StepPrices } from "./step-prices";
-import { StepBarcodes } from "./step-barcodes";
+import { StepBuild } from "./step-build";
 import { StepReview } from "./step-review";
 import type { WizardOptions } from "./types";
 
 const STEP_LABELS: Record<DraftStep, string> = {
   brand: "Brand & season",
-  style: "Style",
-  colorways: "Colourways",
-  sizes: "Sizes",
-  prices: "Prices",
-  barcodes: "Barcodes",
+  build: "Style, colourways, sizes & prices",
   review: "Review",
 };
 
@@ -132,16 +124,8 @@ export function ProductWizard({
 
       <div className="min-h-[18rem]">
         {step === "brand" ? <StepBrand payload={payload} update={update} options={options} /> : null}
-        {step === "style" ? <StepStyle payload={payload} update={update} options={options} /> : null}
-        {step === "colorways" ? (
-          <StepColorways payload={payload} update={update} options={options} />
-        ) : null}
-        {step === "sizes" ? <StepSizes payload={payload} update={update} options={options} /> : null}
-        {step === "prices" ? (
-          <StepPrices payload={payload} update={update} options={options} />
-        ) : null}
-        {step === "barcodes" ? (
-          <StepBarcodes
+        {step === "build" ? (
+          <StepBuild
             payload={payload}
             update={update}
             options={options}
@@ -163,7 +147,11 @@ export function ProductWizard({
             onCheck={check}
             onCreate={create}
             creating={creating}
-            onJumpTo={goToStep}
+            onJumpTo={(anchor) => {
+              goToStep("build");
+              // After the builder has rendered, bring the card into view.
+              setTimeout(() => document.getElementById(anchor)?.scrollIntoView({ block: "start" }), 50);
+            }}
           />
         ) : null}
       </div>
@@ -198,15 +186,20 @@ export function ProductWizard({
   );
 }
 
-/** Which steps have enough in them to move past. A rail, not a gate. */
+/**
+ * Which steps have enough in them to move past. A rail, not a gate: Next always
+ * moves on, and Review says itself what is still missing. Barcodes and customs
+ * are optional, so they do not hold up the tick.
+ */
 function completedSteps(p: DraftPayloadV1): Set<DraftStep> {
   const done = new Set<DraftStep>();
   if (p.brand.id && p.seasonId && p.channels.length) done.add("brand");
-  if (p.style) done.add("style");
-  if (p.colorways.length && p.colorways.every((c) => c.name.trim())) done.add("colorways");
-  if (p.colorways.length && p.colorways.every((c) => c.variants.length)) done.add("sizes");
-  if (p.colorways.every((c) => c.prices.MSRP)) done.add("prices");
-  done.add("barcodes"); // optional by design
+  if (
+    p.style &&
+    p.colorways.length &&
+    p.colorways.every((c) => c.name.trim() && c.variants.length && c.prices.MSRP)
+  )
+    done.add("build");
   return done;
 }
 

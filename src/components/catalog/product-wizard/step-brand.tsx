@@ -48,7 +48,7 @@ export function StepBrand({ payload, update, options }: StepProps) {
    * typed about the brand you just left, and carrying Paraboot's HS code,
    * country and weight onto a candle would be worse than losing them.
    *
-   * Everything after this point is editable by hand on step 5; the defaults are
+   * Everything after this point is editable by hand in the builder (step 2); the defaults are
    * a starting position, not a lock.
    */
   async function applyBrandTemplate(brandId: string) {

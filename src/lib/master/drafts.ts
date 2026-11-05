@@ -17,6 +17,7 @@ import {
   DRAFT_SCHEMA_VERSION,
   type DraftPayloadV1,
   type DraftStep,
+  normalizeDraftStep,
 } from "./draft-payload";
 import type { PublishChannelKey } from "./fields";
 
@@ -76,7 +77,7 @@ export async function getDraft(id: string): Promise<DraftView> {
     id: d.id,
     title: d.title,
     status: d.status,
-    step: d.step as DraftStep,
+    step: normalizeDraftStep(d.step),
     revision: d.revision,
     payload: parseDraftPayload(d.payload),
     finalizeError: d.finalizeError,
@@ -123,7 +124,7 @@ export async function listDrafts(
       id: r.id,
       title: r.title,
       status: r.status,
-      step: r.step,
+      step: normalizeDraftStep(r.step),
       brandName: r.brand?.name ?? null,
       seasonCode: r.season?.code ?? null,
       colorways,
@@ -159,7 +160,7 @@ export async function saveDraft(
     data: {
       payload: payload as unknown as object,
       title,
-      ...(input.step ? { step: input.step } : {}),
+      ...(input.step ? { step: normalizeDraftStep(input.step) } : {}),
       brandId: payload.brand.id,
       seasonId: payload.seasonId,
       channels: payload.channels,

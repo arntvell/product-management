@@ -11,16 +11,22 @@ import type { PublishChannelKey } from "./fields";
 
 export const DRAFT_SCHEMA_VERSION = 1;
 
-export const DRAFT_STEPS = [
-  "brand",
-  "style",
-  "colorways",
-  "sizes",
-  "prices",
-  "barcodes",
-  "review",
-] as const;
+// Three steps. Style, colourways, sizes, prices, barcodes and customs used to be
+// five more, clicked through one after another for every product; they are now
+// one vertical builder, because a style holds colourways, which hold sizes,
+// which hold prices and barcodes, and that is the order a person fills them.
+export const DRAFT_STEPS = ["brand", "build", "review"] as const;
 export type DraftStep = (typeof DRAFT_STEPS)[number];
+
+/**
+ * A stored step, read forward. `ProductDraft.step` is a column, so a draft
+ * left at "sizes" by the seven-step wizard reopens on the builder, where the
+ * sizes now are, rather than on a step that no longer exists.
+ */
+export function normalizeDraftStep(step: string | null | undefined): DraftStep {
+  if (step === "brand" || step === "review") return step;
+  return step ? "build" : "brand";
+}
 
 export interface DraftVariant {
   /** Stable within the draft, so reordering colourways cannot re-key a barcode. */
