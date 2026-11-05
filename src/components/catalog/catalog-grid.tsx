@@ -213,6 +213,11 @@ const FIXED_COLS: { key: string; label: string; width: number }[] = [
   { key: "priceNok", label: "NOK", width: 84 },
   { key: "media", label: "Media", width: 78 },
 ];
+/** Hidden until someone adds them from Columns. */
+const DEFAULT_HIDDEN = ["__label", "name"];
+/** Bump to apply a new DEFAULT_HIDDEN once to browsers with saved choices. */
+const DEFAULTS_KEY = "defaults-v1";
+
 /** Width by key, so adding a column cannot silently shift another one's cell. */
 const FIXED_WIDTH: Record<string, number> = Object.fromEntries(
   FIXED_COLS.map((c) => [c.key, c.width])
@@ -379,14 +384,27 @@ export function CatalogGrid({
   // Columns the viewer chose to hide. Per browser, per page — a convenience,
   // not shared state. Hidden columns are also out of keyboard order and the
   // copy-down picker, so "the columns I work with" means one thing.
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set());
+  //
+  // Style · Colourway and Colourway start hidden: Product name already says
+  // both, and links to the product. A browser that saved its own choice before
+  // that default existed gets the two hidden once (DEFAULTS_KEY marks it), and
+  // can add them back from Columns like any other.
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => new Set(DEFAULT_HIDDEN));
   const hiddenKey = `origo:catalog-grid:${scope}:hidden-columns`;
   useEffect(() => {
     try {
       const raw = localStorage.getItem(hiddenKey);
-      if (raw) setHiddenCols(new Set(JSON.parse(raw) as string[]));
+      if (!raw) return;
+      const saved = new Set(JSON.parse(raw) as string[]);
+      const defaultsKey = `${hiddenKey}:${DEFAULTS_KEY}`;
+      if (!localStorage.getItem(defaultsKey)) {
+        for (const k of DEFAULT_HIDDEN) saved.add(k);
+        localStorage.setItem(hiddenKey, JSON.stringify([...saved]));
+        localStorage.setItem(defaultsKey, "1");
+      }
+      setHiddenCols(saved);
     } catch {
-      // Storage unavailable: every column shows.
+      // Storage unavailable: the default set applies.
     }
   }, [hiddenKey]);
   const updateHiddenCols = (next: Set<string>) => {
@@ -2103,10 +2121,25 @@ export function CatalogGrid({
                         {shown("title") ? (
                           <div
                             style={place("title", FIXED_WIDTH["title"], isSel)}
-                            className="flex shrink-0 items-center border-l px-2 text-fine text-muted-foreground"
+                            className="flex shrink-0 items-center border-l px-2 text-fine"
                             title="Style + colourway. The till shows this; Loom gets the colourway under its style; Shopify too, unless it has its own title."
                           >
-                            <span className="truncate">{composed}</span>
+                            {/* The way into the product, now that Style ·
+                                Colourway starts hidden. */}
+                            {row.dropped && (
+                              <span
+                                title="Cancelled for this season"
+                                className="mr-1 shrink-0 border border-line px-1 text-fine uppercase text-muted-foreground"
+                              >
+                                Cancelled
+                              </span>
+                            )}
+                            <a
+                              href={withFrom(`/catalog/colorways/${row.id}`, here)}
+                              className="truncate hover:underline"
+                            >
+                              {composed}
+                            </a>
                           </div>
                         ) : null}
                         {/* Shopify title: always editable, whichever view is
