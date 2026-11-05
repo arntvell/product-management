@@ -236,6 +236,8 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
     barcode: string;
     category: string;
     sizeSystem: string;
+    /** The spreadsheet turned the size into a date (8.5 → 8 May). */
+    sizeIsDate: boolean;
   }
   const raw: RawRow[] = [];
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -245,6 +247,7 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
       style: text(row.getCell(COL.style)),
       colorway: text(row.getCell(COL.colorway)),
       size: text(row.getCell(COL.size)),
+      sizeIsDate: row.getCell(COL.size).value instanceof Date,
       priceIn: text(row.getCell(COL.priceIn)),
       priceOut: text(row.getCell(COL.priceOut)),
       barcode: text(row.getCell(COL.barcode)),
@@ -391,7 +394,17 @@ export async function parseImportWorkbook(buffer: Buffer): Promise<ImportReport>
           errors.push(`Row ${r.row}: no size.`);
           continue;
         }
-        const entry = byLabel.get(r.size.trim().toLowerCase());
+        // A decimal comma is the same size: Norwegian settings write 8,5.
+        const key = r.size.trim().toLowerCase();
+        const entry = byLabel.get(key) ?? byLabel.get(key.replace(",", "."));
+        if (!entry && r.sizeIsDate) {
+          errors.push(
+            `Row ${r.row}: the size was turned into a date by the spreadsheet. ` +
+              `Format the Size column as plain text (in Google Sheets: Format → Number → ` +
+              `Plain text), then pick the size from the dropdown again.`
+          );
+          continue;
+        }
         if (!entry) {
           errors.push(
             `Row ${r.row}: "${r.size}" is not an active size in ${system.name}. ` +

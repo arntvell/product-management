@@ -9,7 +9,7 @@
 // ALREADY MADE, and the only open cells are the seven the operator actually
 // knows: style, colourway, size, the two prices, barcode, category.
 //
-// THREE THINGS THAT ARE LOAD-BEARING IN THE FILE FORMAT
+// FOUR THINGS THAT ARE LOAD-BEARING IN THE FILE FORMAT
 //
 //   1. Size validation points at a hidden sheet, never an inline list. Excel
 //      caps an inline `"S,M,L"` formula at 255 characters; a W/L jeans run is
@@ -19,7 +19,12 @@
 //      number, and Excel renders 7072536000012 as 7.07254E+12 — then hands that
 //      back on read. `numFmt: "@"` is what keeps thirteen digits thirteen
 //      digits.
-//   3. The Meta sheet carries the ids, not just the names. The upload step
+//   3. The Size column is text-formatted too, and so is its source list. Most
+//      sizes are numbers (36, 8.5, 42), and Google Sheets and Excel both turn a
+//      number typed into a General cell into whatever their locale makes of
+//      it: under Norwegian settings 8.5 becomes the 8th of May and 8,5 becomes
+//      a number that no longer equals the dropdown's "8.5". Text in, text out.
+//   4. The Meta sheet carries the ids, not just the names. The upload step
 //      recovers brand, season, kind and size system from the file rather than
 //      asking again, so a file cannot be filled in for one brand and imported
 //      against another.
@@ -130,8 +135,11 @@ export async function buildImportTemplate(
   const sizeSheet = wb.addWorksheet(SHEET_SIZES);
   sizeSheet.state = "veryHidden";
   sizeSheet.getColumn(1).width = 16;
+  sizeSheet.getColumn(1).numFmt = "@";
   sizes.forEach((e, i) => {
-    sizeSheet.getCell(i + 1, 1).value = e.sizeLabel;
+    const cell = sizeSheet.getCell(i + 1, 1);
+    cell.numFmt = "@";
+    cell.value = e.sizeLabel;
   });
   const sizeRange = `${SHEET_SIZES}!$A$1:$A$${sizes.length}`;
 
@@ -219,12 +227,15 @@ export async function buildImportTemplate(
   // Barcode column as TEXT. Set on the column AND on each cell: a column-level
   // numFmt does not apply to cells Excel has not materialised, and a person
   // typing into row 120 of a 200-row sheet is doing exactly that.
-  ws.getColumn(COL.barcode).numFmt = "@";
+  // The dropdown columns as TEXT as well, for the same reason: a size of 8.5
+  // or 36 must stay the label it was picked as, not a locale's number or date.
+  const textCols = [COL.barcode, COL.size, COL.sizeSystem, COL.category];
+  for (const col of textCols) ws.getColumn(col).numFmt = "@";
   ws.getColumn(COL.priceIn).numFmt = "0.00";
   ws.getColumn(COL.priceOut).numFmt = "0.00";
 
   for (let r = firstRow; r <= lastRow; r++) {
-    ws.getCell(r, COL.barcode).numFmt = "@";
+    for (const col of textCols) ws.getCell(r, col).numFmt = "@";
 
     ws.getCell(r, COL.size).dataValidation = {
       type: "list",
