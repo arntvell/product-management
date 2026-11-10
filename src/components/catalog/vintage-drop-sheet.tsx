@@ -188,6 +188,19 @@ export function VintageDropSheet({
   // Reversed turns the whole order round: by item number, highest first.
   const [reversed, setReversed] = useState(false);
 
+  // ---- scheduled reveals ----------------------------------------------------
+  // Read from the schedule so a reveal that did not open the drop is seen here,
+  // not on the storefront. `lastResult` is the read-back written after each run.
+  const [reveals, setReveals] = useState<RevealSchedule[] | null>(null);
+  const refreshReveals = useCallback(async () => {
+    const res = await fetch("/api/vintage/schedule");
+    const json = await res.json().catch(() => ({}));
+    if (res.ok) setReveals((json.schedules ?? []) as RevealSchedule[]);
+  }, []);
+  useEffect(() => {
+    void refreshReveals();
+  }, [refreshReveals]);
+
   // ---- created garments -----------------------------------------------------
   const [busy, setBusy] = useState<string | null>(null);
   // The drop the stage buttons act on: the open draft's, or one loaded by name.
@@ -647,6 +660,14 @@ export function VintageDropSheet({
       revealAt: at.toISOString(),
     });
     if (json) toast.success(`${dropName.trim()} opens ${at.toLocaleString()}.`);
+    void refreshReveals();
+  }
+
+  async function onCancelReveal(drop: string) {
+    if (!confirm(`Cancel the scheduled reveal of ${drop}? Nothing on Shopify changes.`)) return;
+    const json = await call("Cancel reveal", "/api/vintage/schedule", { drop, cancel: true });
+    if (json) toast.success(`${drop} is no longer scheduled.`);
+    void refreshReveals();
   }
 
   /**
@@ -963,6 +984,11 @@ export function VintageDropSheet({
           </div>
         )}
       </div>
+
+      {/* --- Scheduled reveals ---------------------------------------------- */}
+      {reveals && reveals.length > 0 && (
+        <RevealsPanel reveals={reveals} busy={busy !== null} onRefresh={refreshReveals} onCancel={onCancelReveal} />
+      )}
 
       {/* --- Created drops --------------------------------------------------- */}
       <div className="flex flex-wrap items-end gap-3">
@@ -1479,6 +1505,80 @@ export function VintageDropSheet({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+interface RevealSchedule {
+  drop: string;
+  revealAt: string | null;
+  revealedAt: string | null;
+  lastResult: string | null;
+  due: boolean;
+}
+
+/** What a schedule row says, and whether it needs someone to look. */
+function revealState(r: RevealSchedule): { text: string; bad: boolean } {
+  if (r.due) return { text: "Should have opened — not revealed", bad: true };
+  if (!r.revealedAt) return { text: "Scheduled", bad: false };
+  if (!r.lastResult) return { text: "Revealing…", bad: false };
+  // Runs before 2026-11-10 wrote what the mutations returned, not a read-back.
+  const bad = /NOT live|warning|Nothing on Shopify/i.test(r.lastResult);
+  return { text: r.lastResult, bad };
+}
+
+function RevealsPanel({
+  reveals,
+  busy,
+  onRefresh,
+  onCancel,
+}: {
+  reveals: RevealSchedule[];
+  busy: boolean;
+  onRefresh: () => void;
+  onCancel: (drop: string) => void;
+}) {
+  // Upcoming first, then the most recent runs; older history is not news.
+  const upcoming = reveals.filter((r) => !r.revealedAt);
+  const done = reveals
+    .filter((r) => r.revealedAt)
+    .sort((a, b) => (b.revealAt ?? "").localeCompare(a.revealAt ?? ""))
+    .slice(0, 4);
+  const when = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString("nb-NO", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+      : "—";
+  return (
+    <div className="space-y-2 border p-4">
+      <div className="flex items-center gap-3">
+        <span className="text-body">Reveals</span>
+        <button type="button" onClick={onRefresh} className={SMALL_BTN}>
+          Refresh
+        </button>
+      </div>
+      <table className="w-full text-body">
+        <tbody>
+          {[...upcoming, ...done].map((r) => {
+            const st = revealState(r);
+            return (
+              <tr key={r.drop} className="border-t align-top">
+                <td className="py-1.5 pr-4 whitespace-nowrap">{r.drop}</td>
+                <td className="py-1.5 pr-4 whitespace-nowrap text-muted-foreground">{when(r.revealAt)}</td>
+                <td className={cn("py-1.5 pr-4", st.bad ? "text-destructive" : "text-muted-foreground")}>
+                  {st.text}
+                </td>
+                <td className="py-1.5 text-right">
+                  {!r.revealedAt && (
+                    <button type="button" disabled={busy} onClick={() => onCancel(r.drop)} className={SMALL_BTN}>
+                      Cancel
+                    </button>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
