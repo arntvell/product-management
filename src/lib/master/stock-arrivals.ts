@@ -14,9 +14,10 @@
 //   absent from Loom               skipped, not read as 0 — a product Loom
 //                                  does not hold has not "had none".
 //
-// Scope: every merchandise product in a REGULAR season, all brands, cancelled
-// season entries aside. Continuity (vintage, resold brands) is out: it is
-// bought in already in stock.
+// Scope: every Livid merchandise product in a REGULAR season, cancelled season
+// entries aside. Other brands are left out for now; to watch one, widen
+// WATCHED_BRANDS. Continuity (vintage, resold brands) is out: it is bought in
+// already in stock.
 import { prisma } from "@/lib/db";
 import { loomStockFor, type LoomStock } from "@/lib/loom/stock";
 import type { Prisma } from "@/generated/prisma/client";
@@ -44,6 +45,9 @@ export interface StockArrivalRun {
   dryRun: boolean;
 }
 
+/** Which brands are watched. Livid only for now. */
+const WATCHED_BRANDS: Prisma.BrandWhereInput = { isLivid: true };
+
 /** A Loom read for every candidate, season by season. Throws if Loom does. */
 async function readCandidates() {
   const entries = await prisma.seasonEntry.findMany({
@@ -51,7 +55,7 @@ async function readCandidates() {
       season: { kind: "REGULAR" },
       cancelled: false,
       OR: [{ drop: null }, { drop: { not: "CANCELED" } }],
-      colorway: { archived: false, kind: "MERCHANDISE" },
+      colorway: { archived: false, kind: "MERCHANDISE", brand: WATCHED_BRANDS },
     },
     select: {
       season: { select: { code: true } },
