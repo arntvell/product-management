@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { revealProducts } from "@/lib/shopify/reveal";
+import { revealProducts, describeReveal } from "@/lib/shopify/reveal";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -96,7 +96,7 @@ async function runDue() {
   });
   if (!due.length) return NextResponse.json({ ok: true, revealed: 0, drops: [] });
 
-  const results: Array<{ drop: string; revealed: number; warnings: string[] }> = [];
+  const results: Array<{ drop: string; revealed: number; notLive: number; warnings: string[] }> = [];
 
   for (const row of due) {
     // Claim it first. A second tick arriving mid-reveal then finds nothing due
@@ -122,7 +122,7 @@ async function runDue() {
         where: { drop: row.drop },
         data: { revealedAt: null, lastResult: "Nothing on Shopify yet — left scheduled." },
       });
-      results.push({ drop: row.drop, revealed: 0, warnings: ["nothing pushed yet"] });
+      results.push({ drop: row.drop, revealed: 0, notLive: 0, warnings: ["nothing pushed yet"] });
       continue;
     }
 
@@ -134,15 +134,17 @@ async function runDue() {
          where id = any($1::text[])`,
       live.map((c) => c.id)
     );
+    // What the storefront shows, read back — not what the mutations returned.
+    // DROP 193 recorded "published 40" while all 40 sat in Draft.
     await prisma.vintageDropReveal.update({
       where: { drop: row.drop },
       data: {
         lastResult:
-          `untagged ${r.untagged.length}, published ${r.published.length}` +
+          describeReveal(r, live.length) +
           (r.warnings.length ? ` — ${r.warnings.length} warning(s): ${r.warnings[0]}` : ""),
       },
     });
-    results.push({ drop: row.drop, revealed: r.untagged.length, warnings: r.warnings });
+    results.push({ drop: row.drop, revealed: r.live.length, notLive: r.notLive.length, warnings: r.warnings });
   }
 
   return NextResponse.json({ ok: true, revealed: results.length, drops: results });

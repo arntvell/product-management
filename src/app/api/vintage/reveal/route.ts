@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { revealProducts, HIDE_TAGS } from "@/lib/shopify/reveal";
+import { revealProducts, describeReveal, HIDE_TAGS } from "@/lib/shopify/reveal";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -8,8 +8,9 @@ export const maxDuration = 300;
 
 // POST /api/vintage/reveal  { colorwayIds[] | drop, dryRun? }
 //
-// Take a pushed drop off the hook: drop the `hide` / `rocket-hide` tags and
-// publish to every sales channel. The master's own tags are updated too, so a
+// Take a pushed drop off the hook: set it ACTIVE, drop the `hide` /
+// `rocket-hide` tags and publish to every sales channel, then read it back and
+// report what is really live. The master's own tags are updated too, so a
 // later re-push does not put the hide tags straight back — the Shopify push
 // merges tags additively, so a stale `hide` in the master would re-hide a live
 // product.
@@ -70,5 +71,10 @@ export async function POST(req: Request) {
     onShopify.map((r) => r.id)
   );
 
-  return NextResponse.json({ ok: true, ...result, notPushed });
+  return NextResponse.json({
+    ok: true,
+    ...result,
+    summary: describeReveal(result, onShopify.length),
+    notPushed,
+  });
 }

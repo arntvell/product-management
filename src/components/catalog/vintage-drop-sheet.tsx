@@ -185,6 +185,8 @@ export function VintageDropSheet({
   const [legacy, setLegacy] = useState<{ drop: string; rows: Partial<Row>[] } | null>(null);
   const [saveState, setSaveState] = useState<"saved" | "pending" | "saving" | "error">("saved");
   const [sort, setSort] = useState<SortKey>("number");
+  // Reversed turns the whole order round: by item number, highest first.
+  const [reversed, setReversed] = useState(false);
 
   // ---- created garments -----------------------------------------------------
   const [busy, setBusy] = useState<string | null>(null);
@@ -623,11 +625,12 @@ export function VintageDropSheet({
     if (!created?.length) return;
     const json = await call("Reveal", "/api/vintage/reveal", { colorwayIds: created });
     if (!json) return;
+    // The summary is read back from Shopify, so a garment still in Draft or
+    // off a channel is named here rather than counted as done.
     const w = (json.warnings ?? []) as string[];
     if (w.length) toast.warning(w[0]);
-    toast.success(
-      `Untagged ${json.untagged?.length ?? 0}, published ${json.published?.length ?? 0} to sales channels.`
-    );
+    if (json.notLive?.length) toast.error(String(json.summary), { duration: Infinity });
+    else toast.success(String(json.summary));
   }
 
   async function onSchedule() {
@@ -812,7 +815,7 @@ export function VintageDropSheet({
   // ---- view -----------------------------------------------------------------
 
   // Sorting is a view: the stored order, the numbers and Create are untouched.
-  const shown = useMemo(() => {
+  const sorted = useMemo(() => {
     if (sort === "number") return rows;
     const key = (r: Row): [number, string | number] => {
       switch (sort) {
@@ -839,6 +842,7 @@ export function VintageDropSheet({
       return Number(a.itemNumber) - Number(b.itemNumber);
     });
   }, [rows, sort]);
+  const shown = useMemo(() => (reversed ? [...sorted].reverse() : sorted), [sorted, reversed]);
 
   const brandOptions = useMemo<ComboOption[]>(() => brands.map((b) => ({ value: b })), [brands]);
   const categoryOptions = useMemo<ComboOption[]>(
@@ -1194,6 +1198,15 @@ export function VintageDropSheet({
               ))}
             </select>
           </label>
+          <button
+            type="button"
+            onClick={() => setReversed((v) => !v)}
+            aria-pressed={reversed}
+            title={reversed ? "Highest first — click for lowest first" : "Lowest first — click for highest first"}
+            className={`${SMALL_BTN} ${reversed ? "bg-muted" : ""}`}
+          >
+            {reversed ? "High → low" : "Low → high"}
+          </button>
         </div>
       )}
 
