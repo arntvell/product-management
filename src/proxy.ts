@@ -48,7 +48,13 @@ const ORIGO_HEADERS = [USER_ID_HEADER, USER_ROLE_HEADER, USER_EMAIL_HEADER];
  * it in Clerk mode alone would work in production and 401 in local dev, and the
  * reverse would be worse.
  */
-const WEBHOOK_PATHS = [/^\/api\/loom\/warehouse-barcodes$/, /^\/api\/threadflow\/webhook$/];
+const WEBHOOK_PATHS = [
+  /^\/api\/loom\/warehouse-barcodes$/,
+  /^\/api\/threadflow\/webhook$/,
+  // Partner API: each route checks its own partner token and scope
+  // (lib/partner/auth.ts). Never CRON_SECRET there.
+  /^\/api\/partner\/v1\//,
+];
 
 function isWebhook(path: string): boolean {
   return WEBHOOK_PATHS.some((r) => r.test(path));

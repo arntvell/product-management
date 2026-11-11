@@ -29,6 +29,9 @@ model Brand {
   // already uses, never a guess — a new style SKU is never rewritten
   // (roadmap 2.2), so a wrong token diverges that brand permanently.
   skuToken       String?
+  /// Loom's id for this brand, so a Loom call names it without relying on the
+  /// spelling. Null falls back to the brand name.
+  loomBrandId    String?           @unique
   styles         Style[]
   colorways      Colorway[]
   template       BrandTemplate?
@@ -316,11 +319,49 @@ model ProductDraft {
   /// on its own.
   groupId String?
 
+  /// Loom's buying-line id when Loom asked for this product
+  /// (/api/partner/v1/external-products). A repeated call finds the draft here
+  /// and returns what it created, instead of creating it twice.
+  loomKey String? @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status, updatedAt])
   @@index([groupId])
+}
+
+/// A partner system's key to /api/partner/v1/*. Only the SHA-256 of the token
+/// is stored; the token itself is shown once, when it is minted
+/// (scripts/partner-token.ts).
+model PartnerToken {
+  id         String    @id @default(cuid())
+  /// "loom" — named in every PartnerCall row.
+  name       String    @unique
+  tokenHash  String    @unique
+  /// e.g. products:create, categories:read, master-data:write
+  scopes     String[]
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+}
+
+/// One row per partner call, for the log.
+model PartnerCall {
+  id        String   @id @default(cuid())
+  tokenName String
+  method    String
+  path      String
+  status    Int
+  /// Items asked for, and how many came back ok.
+  items     Int?
+  ok        Int?
+  dryRun    Boolean  @default(false)
+  ms        Int
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([tokenName, createdAt])
 }
 
 enum ProductDraftStatus {
