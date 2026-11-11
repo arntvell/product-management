@@ -22,13 +22,12 @@
 //   customs                 country of origin and HS code are per garment, not
 //                           per size
 //
-// What is NOT done: stocking it at the siblings' locations. That is
-// inventoryQuantities, which needs write_inventory, and Origio's token has only
-// write_products — asking would fail the whole create. Shopify stocks a new
-// variant at its default location; the plan says when the siblings are stocked
-// in more places than that.
+// Stocking: after the create, the new size is switched on at every active
+// location at 0 (locations.ts), so store stock from Loom has somewhere to land.
+// No quantity is ever sent.
 
 import { shopifyGraphQL } from "./client";
+import { ensureStockedEverywhere } from "./locations";
 import { fetchShopifyVariants } from "./link";
 import { recordShopifyVariantRefs, type VariantRefResult } from "./adopt";
 import { normalizeSku } from "@/lib/master/sku";
@@ -311,9 +310,8 @@ export async function planShopifyAddSize(input: ShopifyAddSizeInput): Promise<Sh
   const price = agreedPrice ?? input.masterPriceNok ?? null;
   if (!price) return { state: "refused", productGid, note: "the sizes disagree on price and the master has no NOK MSRP" };
 
-  // Ids only: the token has no read_locations scope, so a location's name is
-  // not readable — asking for it fails the whole query. Counted for the report,
-  // not written (see the note at the top).
+  // The siblings' locations, counted for the report. Stocking the new size
+  // happens after the create, at every active location (see the note at the top).
   const locations = [
     ...new Set(pool.flatMap((v) => v.inventoryItem?.inventoryLevels.nodes ?? []).map((l) => l.location.id)),
   ];
@@ -420,6 +418,8 @@ export async function applyShopifyAddSize(input: ShopifyAddSizeInput): Promise<S
       warnings.push(`size added, but the picker order was not changed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+
+  if (plan.productGid) warnings.push(...(await ensureStockedEverywhere(plan.productGid)).warnings);
 
   return {
     ...plan,

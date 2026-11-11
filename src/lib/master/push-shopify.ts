@@ -23,6 +23,7 @@ import { resolveCustoms, toInventoryItemInput } from "./customs-shopify";
 import { planShopifyUpdate, applyShopifyUpdate, setShopifyBaseline, labelFor } from "./shopify-update";
 import { ensureShopifyFiles, isPublicUrl, knownFileIds } from "./shopify-media";
 import { revealProducts } from "@/lib/shopify/reveal";
+import { ensureStockedEverywhere, type StockedResult } from "@/lib/shopify/locations";
 import {
   adoptExistingShopifyProduct,
   recordShopifyVariantRefs,
@@ -155,6 +156,16 @@ interface ProductSetResult {
   };
 }
 
+/** The push-result lines for the location activation: what was switched on, what failed. */
+function stockedLines(r: StockedResult): string[] {
+  const out = [...r.warnings];
+  if (r.activated.length) {
+    const skus = new Set(r.activated.map((a) => a.split(" @ ")[0])).size;
+    out.push(`Stocked ${skus} size(s) at ${r.activated.length} missing store location(s), at 0.`);
+  }
+  return out;
+}
+
 export interface PushResult {
   action: "create" | "update";
   productGid: string;
@@ -232,6 +243,7 @@ export async function pushColorwayToShopify(
         r.failed.map((f) => `${f.keys.join(", ")}: ${f.error}`).join("; ") +
           (r.written.length ? ` (written: ${r.written.join(", ")})` : "")
       );
+    const stocked = await ensureStockedEverywhere(plan.productGid);
     const store = (process.env.SHOPIFY_STORE_URL ?? "").replace(/^https?:\/\//, "");
     return {
       action,
@@ -244,6 +256,7 @@ export async function pushColorwayToShopify(
           ? `Sent: ${r.written.map((k) => labelFor(k)).join(", ")}.`
           : "Nothing changed since the last push — nothing sent.",
         ...r.warnings,
+        ...stockedLines(stocked),
       ],
       adminUrl: `https://${store}/admin/products/${plan.productGid.split("/").pop()}`,
       ...(adopted ? { adopted } : {}),
@@ -636,6 +649,11 @@ export async function pushColorwayToShopify(
       `Could not record Shopify variant identity: ${err instanceof Error ? err.message : String(err)}. Run the Shopify linker.`
     );
   }
+
+  // Every store location, at 0, so the store stock Loom writes has a level to
+  // land in (lib/shopify/locations.ts). After the identity write: a failure
+  // here is a warning, never a failed push.
+  warnings.push(...stockedLines(await ensureStockedEverywhere(product.id)));
 
   // Clear metafields the user emptied in master. productSet does delete a key
   // it is not given, but the carry-forward above deliberately keeps every key
