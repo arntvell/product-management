@@ -56,3 +56,4 @@ __pycache__/
 
 # Design-system source drop (licensed desktop fonts, zip). Web woff2 lives in src/app/fonts/.
 _front-end-design-system/
+scripts/shopify-locations/report-*.json
