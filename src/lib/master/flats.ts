@@ -42,7 +42,7 @@ export interface FlatRow {
   flat: string | null;
   shopifyAdminUrl: string | null;
   shopifyStatus: string | null;
-  /** Null when Loom could not be read or does not hold the product. */
+  /** Null when Loom could not be read; zero when it holds none (or not the product yet). */
   stock: FlatStock | null;
 }
 
@@ -62,7 +62,8 @@ async function stockBySku(skus: string[]): Promise<Map<string, FlatStock>> {
         try {
           const page = await loomGet<{ rows: LoomRow[] }>("products", { sku });
           const row = page.rows.find((r) => r.colorway_sku.toUpperCase() === sku.toUpperCase());
-          if (!row) return;
+          // Not in Loom yet: nothing received, which is "none on hand", not unknown.
+          if (!row) return void out.set(sku, { total: 0, warehouse: 0, stores: 0, byLocation: [] });
           const by = new Map<string, number>();
           let warehouse = 0;
           let stores = 0;

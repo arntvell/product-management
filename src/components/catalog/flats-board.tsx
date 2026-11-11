@@ -12,23 +12,26 @@ import { cn } from "@/lib/utils";
 import type { FlatRow } from "@/lib/master/flats";
 import { OptionSearch } from "./references-panel";
 
-type Tab = "open" | "done";
-type Where = "all" | "warehouse" | "stores" | "none";
+type Tab = "shoot" | "waiting" | "done";
+type Where = "all" | "warehouse" | "stores";
 
 const WHERE_LABELS: Record<Where, string> = {
   all: "Anywhere",
   warehouse: "In the warehouse",
   stores: "In a store only",
-  none: "None on hand",
 };
 
 function matchesWhere(r: FlatRow, w: Where) {
   if (w === "all") return true;
   const s = r.stock;
   if (w === "warehouse") return !!s && s.warehouse > 0;
-  if (w === "stores") return !!s && s.warehouse === 0 && s.stores > 0;
-  return !s || s.total === 0;
+  return !!s && s.warehouse === 0 && s.stores > 0;
 }
+
+// Nothing on hand: queued, but there is no garment to shoot. Stock is read on
+// every load, so a product moves to To shoot by itself the day it arrives.
+// Unknown stock (Loom unreadable) stays in To shoot rather than hiding.
+const isWaiting = (r: FlatRow) => r.stock?.total === 0;
 
 const day = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("nb-NO", { day: "numeric", month: "short" }) : "";
@@ -45,16 +48,18 @@ export function FlatsBoard({
   candidates: { id: string; label: string }[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("open");
+  const [tab, setTab] = useState<Tab>("shoot");
   const [q, setQ] = useState("");
   const [where, setWhere] = useState<Where>("all");
 
-  const rows = tab === "open" ? open : done;
+  const shoot = useMemo(() => open.filter((r) => !isWaiting(r)), [open]);
+  const waiting = useMemo(() => open.filter(isWaiting), [open]);
+  const rows = tab === "shoot" ? shoot : tab === "waiting" ? waiting : done;
   const shown = useMemo(() => {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     return rows.filter(
       (r) =>
-        (tab === "done" || matchesWhere(r, where)) &&
+        (tab !== "shoot" || matchesWhere(r, where)) &&
         words.every((w) => `${r.product} ${r.sku} ${r.gender}`.toLowerCase().includes(w))
     );
   }, [rows, q, where, tab]);
@@ -65,15 +70,18 @@ export function FlatsBoard({
 
       <div className="flex flex-wrap items-center gap-3">
         <nav className={tabListClass} aria-label="Flats">
-          <button type="button" className={tabItemClass(tab === "open")} onClick={() => setTab("open")}>
-            To shoot ({open.length})
+          <button type="button" className={tabItemClass(tab === "shoot")} onClick={() => setTab("shoot")}>
+            To shoot ({shoot.length})
+          </button>
+          <button type="button" className={tabItemClass(tab === "waiting")} onClick={() => setTab("waiting")}>
+            Waiting for stock ({waiting.length})
           </button>
           <button type="button" className={tabItemClass(tab === "done")} onClick={() => setTab("done")}>
             Done ({done.length})
           </button>
         </nav>
         <Input className="w-64" placeholder="Search product or SKU" value={q} onChange={(e) => setQ(e.target.value)} />
-        {tab === "open" && (
+        {tab === "shoot" && (
           <select
             value={where}
             onChange={(e) => setWhere(e.target.value as Where)}
@@ -92,12 +100,16 @@ export function FlatsBoard({
 
       {shown.length === 0 ? (
         <p className="text-body text-muted-foreground">
-          {tab === "open" ? "Nothing to shoot." : "No flats uploaded in the last 30 days."}
+          {tab === "shoot"
+            ? "Nothing to shoot."
+            : tab === "waiting"
+              ? "Nothing waiting for stock."
+              : "No flats uploaded in the last 30 days."}
         </p>
       ) : (
         <div className="divide-y border">
           {shown.map((r) =>
-            tab === "open" ? (
+            tab !== "done" ? (
               <OpenRow key={r.id} row={r} canQueue={canQueue} onChange={() => router.refresh()} />
             ) : (
               <DoneRow key={r.id} row={r} />
