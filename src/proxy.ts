@@ -41,11 +41,14 @@ const ORIGO_HEADERS = [USER_ID_HEADER, USER_ROLE_HEADER, USER_EMAIL_HEADER];
  * answer 401. The route verifies the signature itself and is useless to a caller
  * who cannot compute one.
  *
+ * Threadflow's webhook (/api/threadflow/webhook) signs the same way, with
+ * `X-Threadflow-Signature`.
+ *
  * Listed in ONE place because the two gates are separate code paths: exempting
  * it in Clerk mode alone would work in production and 401 in local dev, and the
  * reverse would be worse.
  */
-const WEBHOOK_PATHS = [/^\/api\/loom\/warehouse-barcodes$/];
+const WEBHOOK_PATHS = [/^\/api\/loom\/warehouse-barcodes$/, /^\/api\/threadflow\/webhook$/];
 
 function isWebhook(path: string): boolean {
   return WEBHOOK_PATHS.some((r) => r.test(path));
