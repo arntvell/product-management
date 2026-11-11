@@ -164,6 +164,22 @@ async function oneItem(
 
   // --- colourway and sizes ---
   const colourName = item.colour?.trim() || styleName;
+  // The same colour under the same style is the same garment. The SKU check
+  // alone misses it for the many older products whose SKUs predate the rule
+  // (Paraboot's Fine boot laces / Cafe is EXT-PB-LCT-FNL-CF, where the rule
+  // now gives EXT-PB-LCT-FNL-NR-CF), so it is asked by name as well.
+  if (existing) {
+    const same = await prisma.colorway.findFirst({
+      where: { styleId: existing.id, name: { equals: colourName, mode: "insensitive" } },
+      select: { colorwaySku: true, archived: true },
+    });
+    if (same)
+      return fail(
+        key,
+        `${existing.styleName} ${colourName} is already in Origio as ${same.colorwaySku}` +
+          `${same.archived ? " (archived)" : ""}; order that product instead`
+      );
+  }
   const colorwaySku = normalizeSku(buildColorwaySku(styleSku, colourName));
   const entries = template.defaultSizeSystemId
     ? await prisma.sizeSystemEntry.findMany({
@@ -228,7 +244,11 @@ async function oneItem(
   if (dryRun) {
     const report = await preflightPayload(`loom:${key}`, payload);
     if (!report.ok) return fail(key, reportError(report));
-    return { loom_key: key, ok: true, colorway_sku: colorwaySku, variant_skus: skus, warnings: [...warnings, ...report.warnings] };
+    // The builder's "no barcode, so not in Loom's registry" note is about the
+    // registry push, which since 2026-09-23 sends unbarcoded variants too — and
+    // a product Loom asked for is applied by Loom itself. Noise for a buyer.
+    const notes = report.warnings.filter((w) => !/no barcode/i.test(w));
+    return { loom_key: key, ok: true, colorway_sku: colorwaySku, variant_skus: skus, warnings: [...warnings, ...notes] };
   }
 
   // --- real: a draft keyed on loom_key, then the ordinary finalize ---
