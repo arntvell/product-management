@@ -453,6 +453,7 @@ model Colorway {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   pushBatchItems PushBatchItem[]
+  flatRequests   FlatRequest[]
 
   @@index([styleId])
   @@index([brandId])
@@ -1178,4 +1179,28 @@ model StockAlertReceipt {
 
   @@unique([alertId, userId])
   @@index([userId, seenAt])
+}
+
+/// A flat-lay to shoot. Admins and Product managers queue a product; the
+/// Vintage photographer uploads the flat against it. Open while doneAt is null.
+/// The upload becomes the colourway's FLAT image in Origo and custom.flat on
+/// Shopify; a Shopify failure leaves the request open with shopifyError set.
+model FlatRequest {
+  id           String    @id @default(cuid())
+  colorwayId   String
+  colorway     Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  note         String?
+  requestedBy  String?
+  createdAt    DateTime  @default(now())
+  /// The FLAT MediaAsset the upload created.
+  mediaId      String?
+  uploadedAt   DateTime?
+  uploadedBy   String?
+  /// Set once custom.flat points at the upload. Done = this is set.
+  doneAt       DateTime?
+  shopifyFileId String?
+  shopifyError String?
+
+  @@index([doneAt])
+  @@index([colorwayId])
 }

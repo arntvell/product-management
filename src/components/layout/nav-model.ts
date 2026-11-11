@@ -66,6 +66,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/catalog/drops", label: "Drops", icon: CalendarRange },
       { href: "/catalog/vintage", label: "Vintage drops", icon: CalendarRange },
       { href: "/catalog/vintage/brands", label: "Vintage brands", icon: BadgeCheck },
+      { href: "/catalog/flats", label: "Flats", icon: Camera },
       { href: "/catalog/media", label: "Media", icon: Images },
       // The catalogue is two jobs, so it is two destinations.
       //

@@ -109,6 +109,8 @@ export function refusal(role: UserRole, permission: Permission): string {
 const PAGE_RULES: Array<[RegExp, Permission]> = [
   [/^\/catalog\/users(\/|$)/, "admin"],
   [/^\/catalog\/shoot(\/|$)/, "admin"],
+  // The photographer's list: the Vintage role works it, Viewer has no use for it.
+  [/^\/catalog\/flats(\/|$)/, "vintage"],
   // Data repair: bulk tools over the whole master.
   [/^\/catalog\/(fix|import-gaps|skus|duplicates|style-splits|cutover|identity)(\/|$)/, "admin"],
   // Creating, importing, publishing, and the variant and season-drop editors.
