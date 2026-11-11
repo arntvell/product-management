@@ -14,12 +14,16 @@
 //   absent from Loom               skipped, not read as 0 — a product Loom
 //                                  does not hold has not "had none".
 //
+// Each arrival with no flat is also put on the flats list (flats.ts), so the
+// photographer sees it under "To shoot" the same day.
+//
 // Scope: every Livid merchandise product in a REGULAR season, cancelled season
 // entries aside. Other brands are left out for now; to watch one, widen
 // WATCHED_BRANDS. Continuity (vintage, resold brands) is out: it is bought in
 // already in stock.
 import { prisma } from "@/lib/db";
 import { loomStockFor, type LoomStock } from "@/lib/loom/stock";
+import { queueFlatsForArrivals } from "@/lib/master/flats";
 import type { Prisma } from "@/generated/prisma/client";
 
 export interface StockArrival {
@@ -42,6 +46,10 @@ export interface StockArrivalRun {
   arrivals: StockArrival[];
   alertId: string | null;
   recipients: number;
+  /** Arrivals with no flat, put on the flats list (would be, on a dry run). */
+  flatsQueued: string[];
+  /** Set when queueing flats failed; the alert went out regardless. */
+  flatsError: string | null;
   dryRun: boolean;
 }
 
@@ -152,7 +160,20 @@ export async function runStockArrivals(opts: { dryRun?: boolean } = {}): Promise
     select: { id: true },
   });
 
-  if (dryRun)
+  // Arrivals without a flat go on the flats list. A failure here is reported,
+  // not thrown: the alert and the watch rows matter more than the queue.
+  let flatsQueued: string[] = [];
+  let flatsError: string | null = null;
+  const queueFlats = async () => {
+    try {
+      flatsQueued = (await queueFlatsForArrivals(arrivals.map((a) => a.colorwayId), { dryRun })).queued;
+    } catch (err) {
+      flatsError = err instanceof Error ? err.message : String(err);
+    }
+  };
+
+  if (dryRun) {
+    await queueFlats();
     return {
       checked: candidates,
       baselined,
@@ -160,8 +181,11 @@ export async function runStockArrivals(opts: { dryRun?: boolean } = {}): Promise
       arrivals,
       alertId: null,
       recipients: recipients.length,
+      flatsQueued,
+      flatsError,
       dryRun,
     };
+  }
 
   // The alert first, then the watch rows. If the watch writes fail, the next
   // run sees the same arrivals and alerts again: a repeat, which is better than
@@ -179,6 +203,7 @@ export async function runStockArrivals(opts: { dryRun?: boolean } = {}): Promise
     ).id;
   // Batched so a season's worth of updates is a handful of round trips.
   for (let i = 0; i < writes.length; i += 200) await prisma.$transaction(writes.slice(i, i + 200));
+  await queueFlats();
 
   return {
     checked: candidates,
@@ -187,6 +212,8 @@ export async function runStockArrivals(opts: { dryRun?: boolean } = {}): Promise
     arrivals,
     alertId,
     recipients: recipients.length,
+    flatsQueued,
+    flatsError,
     dryRun,
   };
 }

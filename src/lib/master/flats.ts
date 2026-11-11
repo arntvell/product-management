@@ -336,3 +336,59 @@ export async function sendFlatToShopify(requestId: string): Promise<{ done: bool
   await finish({ shopifyFileId: fileId, error: null });
   return { done: true, error: null };
 }
+
+const FLAT_ON_SHOPIFY = `
+  query HasFlat($ids: [ID!]!) {
+    nodes(ids: $ids) { ... on Product { id flat: metafield(namespace: "custom", key: "flat") { id } } }
+  }
+`;
+
+/**
+ * Put products that have just received stock on the list, unless they already
+ * have a flat. Called by the stock-arrival check, so a garment lands in "To
+ * shoot" the day it is in the building.
+ *
+ * "Has a flat" is either side: a FLAT image in Origo, or `custom.flat` on
+ * Shopify — flats have been uploaded straight to Shopify, and Origo does not
+ * know about those. If Shopify cannot be read, a product with no flat in Origo
+ * is queued anyway: one to remove by hand beats one nobody shoots.
+ */
+export async function queueFlatsForArrivals(colorwayIds: string[], opts: { dryRun?: boolean } = {}) {
+  if (!colorwayIds.length) return { queued: [] as string[], hadFlat: 0 };
+  const cws = await prisma.colorway.findMany({
+    where: { id: { in: colorwayIds } },
+    select: {
+      id: true,
+      colorwaySku: true,
+      media: { where: { role: "FLAT" }, select: { id: true }, take: 1 },
+      publications: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
+      flatRequests: { where: { doneAt: null }, select: { id: true }, take: 1 },
+    },
+  });
+  const gidOf = (c: (typeof cws)[number]) => c.publications.find((p) => p.externalId)?.externalId ?? null;
+  const gids = cws.map(gidOf).filter((g): g is string => !!g);
+  const flatOnShopify = new Set<string>();
+  for (let i = 0; i < gids.length; i += 50) {
+    try {
+      const d = await shopifyGraphQL<{ nodes: ({ id: string; flat: { id: string } | null } | null)[] }>(
+        FLAT_ON_SHOPIFY,
+        { ids: gids.slice(i, i + 50) }
+      );
+      for (const n of d.nodes) if (n?.flat) flatOnShopify.add(n.id);
+    } catch {
+      /* unread: decided on Origo alone, see above */
+    }
+  }
+  let hadFlat = 0;
+  const toQueue: (typeof cws)[number][] = [];
+  for (const c of cws) {
+    const gid = gidOf(c);
+    if (c.media.length || (gid && flatOnShopify.has(gid))) hadFlat++;
+    else if (!c.flatRequests.length) toQueue.push(c);
+  }
+  if (!opts.dryRun && toQueue.length)
+    await prisma.flatRequest.createMany({
+      data: toQueue.map((c) => ({ colorwayId: c.id, requestedBy: "Stock arrival" })),
+    });
+  return { queued: toQueue.map((c) => c.colorwaySku), hadFlat };
+}
