@@ -26,6 +26,7 @@ import {
   getProductVariants as getProductVariantsRaw,
   productCount,
   setProductVariants as setProductVariantsRaw,
+  toWritableVariantRow,
   type SitooTarget,
   type SitooVariantRow,
 } from "./client";
@@ -350,7 +351,10 @@ async function joinFamily(input: SitooAddSizeInput, r: Resolved, productId: numb
   const options = orderSizes([...new Set([...family.groups[0].options, input.size.sizeLabel])]);
   await setProductVariants(
     parentId,
-    { groups: [{ name: family.groups[0].name, options }], variants: [...family.variants, newRow] },
+    // Rebuild every existing row: the GET carries `pricelisthasvolume`, which the
+    // PUT refuses with a 400 — after the new product was already created, so
+    // the size would be stranded outside its family.
+    { groups: [{ name: family.groups[0].name, options }], variants: [...family.variants.map(toWritableVariantRow), newRow] },
     TARGET
   );
   const [after] = await findProductsBySku([input.size.sku], TARGET);
