@@ -53,9 +53,40 @@ async function main() {
     season: "SS27",
     items: [
       { loom_key: "p-dm", brand: { name: "Diemme" }, style_name: "Dry Run Boot", colour: "Black", sizes: ["41", "42"], msrp_nok: 3999, cost_nok: 1600 },
+      { loom_key: "p-draft", brand: { name: "Brand Nobody Has", sku_token: null }, style_name: "Dry Run Tee", colour: "Navy", sizes: ["S", "M"], msrp_nok: 499, cost_nok: 200 },
+      { loom_key: "p-draft-taken", brand: { name: "Brand Nobody Has", sku_token: "PB" }, style_name: "Dry Run Tee", sizes: ["S"], msrp_nok: 499, cost_nok: 200 },
+      { loom_key: "p-id", brand: { origio_brand_id: "cmwe0sbqe0002v77245kk545n", name: "whatever Loom calls it" }, style_name: "Dry Run Sneaker", colour: "Black", sizes: ["42"], msrp_nok: 1999, cost_nok: 800 },
       { loom_key: "p-cnvr", brand: { name: "Converse" }, style_name: "Dry Run Chuck", colour: "Off White", sizes: ["42"], msrp_nok: 1199, cost_nok: 500 },
     ],
   });
   console.log("EXTERNAL-PRODUCTS", JSON.stringify(products.items, null, 1));
+  const real = await createExternalProducts({
+    dry_run: false,
+    season: "SS27",
+    items: [{ loom_key: "p-real-unknown-brand", brand: { name: "Brand Nobody Has" }, style_name: "X", sizes: ["S"], msrp_nok: 1, cost_nok: 1 }],
+  });
+  console.log("REAL CALL, UNKNOWN BRAND (refused before any write)", JSON.stringify(real.items));
+
+  // Evidence for external-products filing a product in its season.
+  const done = await prisma.productDraft.findMany({
+    where: { loomKey: { not: null }, status: "COMPLETED" },
+    select: { loomKey: true, createdColorwayIds: true },
+    take: 3,
+  });
+  for (const d of done) {
+    const cw = await prisma.colorway.findUnique({
+      where: { id: d.createdColorwayIds[0] },
+      select: {
+        colorwaySku: true,
+        entries: { select: { season: { select: { code: true } }, origin: true, approvedForProduction: true, _count: { select: { variants: true } } } },
+        prices: { select: { season: { select: { code: true } }, currency: true, priceType: true, amount: true } },
+      },
+    });
+    console.log("LOOM-BORN", d.loomKey, JSON.stringify(cw));
+  }
+  const all = await prisma.colorway.findMany({ select: { colorwaySku: true } });
+  const { normalizeSku } = await import("../../src/lib/master/sku");
+  const odd = all.filter((c) => normalizeSku(c.colorwaySku) !== c.colorwaySku);
+  console.log(`colourway SKUs not in normalised form: ${odd.length}`, odd.slice(0, 5).map((c) => c.colorwaySku));
 }
 main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });

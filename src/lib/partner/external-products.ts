@@ -30,13 +30,21 @@ import { prisma } from "@/lib/db";
 import { emptyDraftPayload, type DraftPayloadV1, type DraftVariant } from "@/lib/master/draft-payload";
 import { createDraft, saveDraft } from "@/lib/master/drafts";
 import { finalizeDraft, preflightPayload, type PreflightReport } from "@/lib/master/finalize";
-import { missingBrandDefaults } from "@/lib/master/brands";
+import { cleanSkuToken, missingBrandDefaults } from "@/lib/master/brands";
+import { chooseToken, matchBrand, takenTokens, type BrandRow } from "./brand-rules";
 import { buildColorwaySku, buildStyleSku, buildVariantSku, normalizeSku, sizeSkuToken } from "@/lib/master/sku";
 import { buildLoomPayload } from "@/lib/loom/payload";
 
 export interface ExternalProductItem {
   loom_key: string;
-  brand: { loom_brand_id?: string | null; name?: string | null };
+  brand: {
+    /** From POST /brands. Wins over the other two. */
+    origio_brand_id?: string | null;
+    loom_brand_id?: string | null;
+    name?: string | null;
+    /** Dry run only: the token to preview a brand Origio does not have yet. */
+    sku_token?: string | null;
+  };
   style_name: string;
   colour?: string | null;
   model_number?: string | null;
@@ -124,8 +132,9 @@ async function oneItem(
   if (!(item.cost_nok >= 0)) return fail(key, "cost_nok must be a number");
 
   // --- brand ---
-  const brand = await resolveBrand(item.brand);
-  if (!brand) return fail(key, `Origio has no brand "${item.brand?.name ?? item.brand?.loom_brand_id}"`);
+  const resolved = await resolveBrand(item.brand, dryRun);
+  if ("error" in resolved) return fail(key, resolved.error);
+  const brand = resolved.brand;
   if (brand.isLivid) return fail(key, "Livid products come from Threadflow, not from Loom");
 
   // --- template: the brand's defaults, blanks allowed (see the header) ---
@@ -142,7 +151,7 @@ async function oneItem(
     manufacturerId: t?.manufacturerId ?? "",
     defaultSizeSystemId: t?.defaultSizeSystemId ?? "",
   };
-  const warnings: string[] = [];
+  const warnings: string[] = resolved.note ? [resolved.note] : [];
   const missing = missingBrandDefaults(template);
   if (missing.length) warnings.push(`${brand.name} has no ${missing.join(", ")} in Origio yet`);
 
@@ -160,10 +169,13 @@ async function oneItem(
   }
 
   // --- style: the brand's own of that name, else a new one ---
-  const existing = await prisma.style.findFirst({
-    where: { brandId: brand.id, styleName: { equals: styleName, mode: "insensitive" } },
-    select: { id: true, styleSku: true, styleName: true },
-  });
+  // A brand still a draft in Loom has no styles in Origio.
+  const existing = resolved.draft
+    ? null
+    : await prisma.style.findFirst({
+        where: { brandId: brand.id, styleName: { equals: styleName, mode: "insensitive" } },
+        select: { id: true, styleSku: true, styleName: true },
+      });
   const styleSku =
     existing?.styleSku ??
     buildStyleSku({ prefix: "EXT", brandToken: brand.skuToken, brandName: brand.name, style: styleName });
@@ -326,31 +338,76 @@ async function finish(
   };
 }
 
-async function resolveBrand(b: ExternalProductItem["brand"]) {
-  const select = {
-    id: true,
-    name: true,
-    isLivid: true,
-    skuToken: true,
-    loomBrandId: true,
-    template: true,
-  } as const;
-  if (b?.loom_brand_id) {
-    const byId = await prisma.brand.findUnique({ where: { loomBrandId: b.loom_brand_id }, select });
-    if (byId) return byId;
+type ResolvedBrand = {
+  id: string;
+  name: string;
+  isLivid: boolean;
+  skuToken: string | null;
+  template: Awaited<ReturnType<typeof prisma.brandTemplate.findUnique>>;
+};
+
+/**
+ * The brand an item names: Origio's id (from POST /brands), else Loom's id,
+ * else the name with case and punctuation ignored. The same rules as the brands
+ * endpoint (matchBrand), so a brand that call answered for resolves here too.
+ *
+ * A dry run for a brand still a draft in Loom's plan previews its SKUs with the
+ * token POST /brands would give it (`draft: true`); a real call needs the brand.
+ */
+async function resolveBrand(
+  b: ExternalProductItem["brand"],
+  dryRun: boolean
+): Promise<{ brand: ResolvedBrand; draft?: boolean; note?: string } | { error: string }> {
+  const select = { id: true, name: true, isLivid: true, skuToken: true, loomBrandId: true, template: true } as const;
+  const loomId = b?.loom_brand_id?.trim() || null;
+  const label = b?.name?.trim() || loomId || "(no name)";
+
+  if (b?.origio_brand_id) {
+    const row = await prisma.brand.findUnique({ where: { id: b.origio_brand_id }, select: { ...select, mergedIntoId: true } });
+    if (!row) return { error: `Origio has no brand with id ${b.origio_brand_id}` };
+    const brand = row.mergedIntoId ? await prisma.brand.findUnique({ where: { id: row.mergedIntoId }, select }) : row;
+    if (!brand) return { error: `Origio brand ${b.origio_brand_id} was merged into one that is gone` };
+    return { brand };
   }
-  if (!b?.name?.trim()) return null;
-  const byName = await prisma.brand.findFirst({
-    where: { name: { equals: b.name.trim(), mode: "insensitive" }, archived: false },
-    select,
+
+  const all: BrandRow[] = await prisma.brand.findMany({
+    select: { id: true, name: true, isLivid: true, skuToken: true, loomBrandId: true, archived: true, mergedIntoId: true },
   });
-  // Remember Loom's id the first time the name finds the brand, so a later
-  // respelling in Loom still reaches it.
-  if (byName && b.loom_brand_id && !byName.loomBrandId)
-    await prisma.brand
-      .update({ where: { id: byName.id }, data: { loomBrandId: b.loom_brand_id } })
-      .catch(() => undefined);
-  return byName;
+  const match = matchBrand({ loom_brand_id: loomId, name: b?.name ?? "" }, all);
+  if (match.kind === "refuse") return { error: match.error };
+  if (match.kind === "found") {
+    const brand = await prisma.brand.findUnique({ where: { id: match.brand.id }, select });
+    if (!brand) return { error: `Origio has no brand "${label}"` };
+    // Remember Loom's id the first time the name finds the brand, so a later
+    // respelling in Loom still reaches it. Never on a dry run.
+    if (!dryRun && loomId && !brand.loomBrandId)
+      await prisma.brand.updateMany({ where: { id: brand.id, loomBrandId: null }, data: { loomBrandId: loomId } });
+    return { brand };
+  }
+
+  if (!dryRun) return { error: `Origio has no brand "${label}"; create it through POST /brands first` };
+  const name = b?.name?.trim().replace(/\s+/g, " ") ?? "";
+  if (!name) return { error: "brand.name is missing" };
+  let given: string | null;
+  try {
+    given = cleanSkuToken(b?.sku_token);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+  const styles = await prisma.style.findMany({
+    where: { styleSku: { startsWith: "EXT-" } },
+    select: { styleSku: true, brand: { select: { name: true } } },
+  });
+  const taken = takenTokens(all, styles.map((s) => ({ styleSku: s.styleSku, brandName: s.brand?.name ?? null })));
+  const choice = chooseToken(name, given, taken);
+  if (!choice.ok) return { error: choice.error };
+  return {
+    // A placeholder id: preflight only checks that one is set, and a dry run
+    // writes nothing.
+    brand: { id: `draft-brand:${name}`, name, isLivid: false, skuToken: choice.token, template: null },
+    draft: true,
+    note: `${name} is not in Origio yet; previewed with SKU token ${choice.token}, which POST /brands would give it`,
+  };
 }
 
 async function resolveCategory(

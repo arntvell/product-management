@@ -11,7 +11,7 @@ Every call is logged in `PartnerCall`.
 ## Order at lock
 
 1. `POST /brands` for every draft brand on the plan. Loom makes its own Brand row from `origio_brand_id`, `name` and `sku_token`.
-2. `POST /external-products` for new styles and colours. A product dry run says "Origio has no brand" until step 1 has run for real, because a dry run of step 1 creates nothing.
+2. `POST /external-products` for new styles and colours. Send `brand.origio_brand_id` from step 1. In a dry run, a brand still a draft in Loom's plan is previewed (see section 2); a real call needs step 1 to have run for real.
 3. `POST /season-assignments` for carry-overs, meaning products Origio already has.
 
 ## 1. `POST /brands` (scope `brands:create`), new
@@ -48,9 +48,20 @@ On refusal: `{ "loom_key", "ok": false, "error" }`.
 - `supplier_name` and `currency` are accepted and ignored: Origio's Brand has no field for them.
 - **Added to the brief's shape:** `loom_brand_id`, `is_livid` and `warnings`.
 
-## 2. `POST /external-products` (scope `products:create`), shape unchanged
+## 2. `POST /external-products` (scope `products:create`), brand block extended
 
-This already filed each new product in the request's `season` before this branch. Nothing about it changed except one error text.
+Two changes, both additive, as the Loom session asked:
+
+```jsonc
+"brand": { "origio_brand_id": "cmwe…?", "loom_brand_id": "…?", "name": "Converse", "sku_token": "CNVR?" }
+```
+
+- **Resolve.** `origio_brand_id` first (a merged brand follows to the brand it was merged into), then `loom_brand_id`, then the normalised name. These are the same rules as `/brands`, so a brand that call answered for always resolves here. The name match used to be exact and case-insensitive, and skipped archived brands.
+- **Dry run for a draft brand.** If no Origio brand matches, the SKUs are previewed with `sku_token`, or else the token `/brands` would derive. The answer is `ok: true` with a warning naming the token. A token `/brands` would refuse is refused here too.
+- **Real call for an unknown brand.** `ok: false`, "create it through POST /brands first".
+- **Loom id.** A real call that finds the brand by name records `loom_brand_id` on it. A dry run no longer does.
+
+Proof from data that the season filing already worked before this branch: Loom-born `EXT-PB-TSTMD-ZT-NR` (loom_key `origo-test-zeta-1`) has an SS27 entry (NEW, approved, 3 sizes) and SS27 NOK MSRP 4500 / COST 1500.55.
 `finalizeDraft` writes, for that season:
 - a `SeasonEntry` (origin NEW, approved for production), with every size linked through `SeasonVariant`;
 - NOK `Price` rows: `MSRP = msrp_nok`, `COST = cost_nok`.
@@ -78,6 +89,8 @@ On refusal: `{ "loom_key", "ok": false, "colorway_sku", "error" }`.
 - **Sizes.** Every size is linked to the entry.
 - **Prices.** The season's NOK `MSRP` is upserted to `msrp_nok`, and NOK `COST` to `cost_nok` when sent. If the MSRP changes, a warning gives the old value. Other seasons' prices are untouched.
 - **Repeats.** A repeat with the same values writes nothing.
+
+`colorway_sku` is looked up as sent, then in normalised form. 170 older SKUs are not stored normalised.
 
 **Refused:**
 - an unknown `colorway_sku`;

@@ -99,9 +99,15 @@ async function oneItem(
   const bad = checkAmounts(item);
   if (bad) return fail(bad);
 
-  const cw = await prisma.colorway.findUnique({
-    where: { colorwaySku: normalizeSku(asked) },
-    select: {
+  // As sent first: 170 older SKUs are not in normalised form (mixed case).
+  const hit =
+    (await prisma.colorway.findUnique({ where: { colorwaySku: asked }, select: { id: true } })) ??
+    (await prisma.colorway.findUnique({ where: { colorwaySku: normalizeSku(asked) }, select: { id: true } }));
+  const cw = !hit
+    ? null
+    : await prisma.colorway.findUnique({
+        where: { id: hit.id },
+        select: {
       id: true,
       colorwaySku: true,
       status: true,
@@ -113,8 +119,8 @@ async function oneItem(
         select: { priceType: true, amount: true },
       },
       variants: { select: { id: true } },
-    },
-  });
+        },
+      });
   if (!cw) return fail(`Origio has no colourway ${asked}`);
   if (cw.brand?.isLivid)
     return fail("Livid products get their seasons and prices from Threadflow, not from Loom");
