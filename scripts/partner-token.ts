@@ -4,11 +4,15 @@
 //   npx dotenv -e .env.local -- npx tsx --tsconfig tsconfig.json scripts/partner-token.ts loom \
 //     products:create categories:read master-data:write
 //   … scripts/partner-token.ts loom --revoke
+//   … scripts/partner-token.ts loom --add-scopes brands:create seasons:write
+//
+// --add-scopes changes the scopes of the existing token IN PLACE. Minting again
+// would rotate the token, and the partner's copy would stop working.
 import { randomBytes } from "node:crypto";
 import { prisma } from "../src/lib/db";
-import { hashPartnerToken } from "../src/lib/partner/auth";
+import { hashPartnerToken, PARTNER_SCOPES } from "../src/lib/partner/auth";
 
-const SCOPES = ["products:create", "categories:read", "master-data:write"];
+const SCOPES: readonly string[] = PARTNER_SCOPES;
 
 async function main() {
   const [name, ...rest] = process.argv.slice(2);
@@ -16,6 +20,17 @@ async function main() {
   if (rest.includes("--revoke")) {
     await prisma.partnerToken.update({ where: { name }, data: { revokedAt: new Date() } });
     console.log(`${name}: revoked`);
+    return;
+  }
+  if (rest[0] === "--add-scopes") {
+    const add = rest.slice(1);
+    const wrong = add.filter((s) => !SCOPES.includes(s));
+    if (!add.length || wrong.length) throw new Error(`scopes must be from: ${SCOPES.join(", ")}`);
+    const row = await prisma.partnerToken.findUnique({ where: { name } });
+    if (!row) throw new Error(`${name}: no token to add scopes to`);
+    const scopes = [...new Set([...row.scopes, ...add])];
+    await prisma.partnerToken.update({ where: { name }, data: { scopes } });
+    console.log(`${name}: ${row.scopes.join(", ")}\n   -> ${scopes.join(", ")}\n(token unchanged)`);
     return;
   }
   const bad = rest.filter((s) => !SCOPES.includes(s));

@@ -7,6 +7,8 @@
 //   products:create      POST external-products
 //   categories:read      GET  categories
 //   master-data:write    PATCH variants/master-data
+//   brands:create        POST brands
+//   seasons:write        POST season-assignments
 //
 // Only the SHA-256 of a token is stored. It is minted, and shown once, by
 // scripts/partner-token.ts. Revoking is setting revokedAt.
@@ -18,7 +20,14 @@ import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-export type PartnerScope = "products:create" | "categories:read" | "master-data:write";
+export const PARTNER_SCOPES = [
+  "products:create",
+  "categories:read",
+  "master-data:write",
+  "brands:create",
+  "seasons:write",
+] as const;
+export type PartnerScope = (typeof PARTNER_SCOPES)[number];
 
 export function hashPartnerToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");

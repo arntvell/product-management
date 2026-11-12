@@ -20,6 +20,12 @@
 //   idempotent     on `loom_key`, kept on ProductDraft.loomKey. A repeated real
 //                  call returns what the first created. A dry run writes
 //                  nothing at all.
+//   in the season  finalizeDraft files the product in the request's season the
+//                  way it files any built product: a SeasonEntry (NEW, approved
+//                  for production) with every size linked, and NOK Price rows
+//                  for that season — MSRP from msrp_nok, COST from cost_nok.
+//                  A product Origio already has goes through season-assignments
+//                  instead.
 import { prisma } from "@/lib/db";
 import { emptyDraftPayload, type DraftPayloadV1, type DraftVariant } from "@/lib/master/draft-payload";
 import { createDraft, saveDraft } from "@/lib/master/drafts";
@@ -177,7 +183,7 @@ async function oneItem(
       return fail(
         key,
         `${existing.styleName} ${colourName} is already in Origio as ${same.colorwaySku}` +
-          `${same.archived ? " (archived)" : ""}; order that product instead`
+          `${same.archived ? " (archived)" : ""}; add that one to the season through season-assignments instead`
       );
   }
   const colorwaySku = normalizeSku(buildColorwaySku(styleSku, colourName));
