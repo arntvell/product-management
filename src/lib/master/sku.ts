@@ -366,6 +366,33 @@ export function buildColorwaySku(styleSku: string, color: string): string {
 }
 
 /**
+ * The colourway SKU for an external product a partner (Loom) asks for:
+ * EXT-<brand token>-<style tokens>-<colour tokens>, always rebuilt from the names.
+ *
+ * Unlike buildColorwaySku, this never inherits an existing style's SKU. Those
+ * stems were mostly written as a copy of the style's first colourway
+ * (EXT-KEEN-JAS-ATBR is Jasper Atmosphere Birch) or by the Cin7 import as
+ * LIV-STY-<name + colour>, so a new colour that inherited one carried an old
+ * colour, or a LIV- prefix on an external brand. The colourway still joins the
+ * existing Style record; only its SKU is derived afresh, and the collision
+ * checks in preflight are unchanged.
+ *
+ * No colour (or a colour that only repeats the style name) gives the stem
+ * alone, never the style twice (EXT-CMP-KR-SNDL, not EXT-CMP-KR-SNDL-KR-SNDL).
+ */
+export function partnerColorwaySku(input: {
+  brandToken?: string | null;
+  brandName?: string | null;
+  style: string;
+  colour?: string | null;
+}): { stem: string; colorwaySku: string } {
+  const stem = buildStyleSku({ prefix: "EXT", brandToken: input.brandToken, brandName: input.brandName, style: input.style });
+  const colour = input.colour?.trim() ?? "";
+  const repeatsStyle = colour.toLowerCase() === input.style.trim().toLowerCase();
+  return { stem, colorwaySku: colour && !repeatsStyle ? buildColorwaySku(stem, colour) : stem };
+}
+
+/**
  * colorwaySku + "-" + the size's token.
  *
  * The token is passed through verbatim: a size must never meet `abbreviate`,

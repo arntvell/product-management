@@ -32,7 +32,7 @@ import { createDraft, saveDraft } from "@/lib/master/drafts";
 import { finalizeDraft, preflightPayload, type PreflightReport } from "@/lib/master/finalize";
 import { cleanSkuToken, missingBrandDefaults } from "@/lib/master/brands";
 import { chooseToken, matchBrand, takenTokens, type BrandRow } from "./brand-rules";
-import { buildColorwaySku, buildStyleSku, buildVariantSku, normalizeSku, sizeSkuToken } from "@/lib/master/sku";
+import { buildVariantSku, normalizeSku, partnerColorwaySku, sizeSkuToken } from "@/lib/master/sku";
 import { buildLoomPayload } from "@/lib/loom/payload";
 
 export interface ExternalProductItem {
@@ -176,9 +176,15 @@ async function oneItem(
         where: { brandId: brand.id, styleName: { equals: styleName, mode: "insensitive" } },
         select: { id: true, styleSku: true, styleName: true },
       });
-  const styleSku =
-    existing?.styleSku ??
-    buildStyleSku({ prefix: "EXT", brandToken: brand.skuToken, brandName: brand.name, style: styleName });
+  // The colourway SKU is rebuilt from the names even under an existing style:
+  // old style SKUs carry a colour or a LIV-STY- prefix (see partnerColorwaySku).
+  const { stem, colorwaySku } = partnerColorwaySku({
+    brandToken: brand.skuToken,
+    brandName: brand.name,
+    style: styleName,
+    colour: item.colour,
+  });
+  const styleSku = existing?.styleSku ?? stem;
 
   // --- colourway and sizes ---
   const colourName = item.colour?.trim() || styleName;
@@ -198,7 +204,6 @@ async function oneItem(
           `${same.archived ? " (archived)" : ""}; add that one to the season through season-assignments instead`
       );
   }
-  const colorwaySku = normalizeSku(buildColorwaySku(styleSku, colourName));
   const entries = template.defaultSizeSystemId
     ? await prisma.sizeSystemEntry.findMany({
         where: { sizeSystemId: template.defaultSizeSystemId, archived: false },

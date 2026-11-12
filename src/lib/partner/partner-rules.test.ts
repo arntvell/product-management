@@ -96,3 +96,36 @@ test("season prices must be numbers", () => {
   assert.notEqual(checkAmounts({ msrp_nok: "2499" }), null);
   assert.notEqual(checkAmounts({ msrp_nok: 2499, cost_nok: -1 }), null);
 });
+
+// --- SKUs of new products (external-products) ---
+import { partnerColorwaySku } from "../master/sku";
+
+const sku = (brandToken: string, style: string, colour?: string | null) =>
+  partnerColorwaySku({ brandToken, style, colour }).colorwaySku;
+
+test("a new colour never inherits a LIV-STY- style SKU", () => {
+  // Existing style SKUs: LIV-STY-JASPER-ROCKS-BIRCH-BLACK, LIV-STY-BOSTON-MINK-SUEDE …
+  assert.equal(sku("KEEN", "Jasper Rocks", "Martini Olive/Safari"), "EXT-KEEN-JSPR-RCKS-MRTN-OLV-SFR");
+  assert.equal(sku("PB", "Barth", "Lisse America"), "EXT-PB-BRTH-LSS-AMRC");
+  assert.equal(sku("BKST", "Boston", "Suede Stone Blue"), "EXT-BKST-BSTN-SD-STN-BL");
+  assert.equal(sku("BKST", "Utti", "Lace Suede Gray Taupe"), "EXT-BKST-UTT-LC-SD-GRY-TP");
+});
+
+test("a new colour never inherits the colour baked into a style SKU", () => {
+  // Existing: EXT-KEEN-JAS-ATBR (Atmosphere Birch), EXT-NRD-001A-SCRM (Scoria M)
+  assert.equal(sku("KEEN", "Jasper", "Abbey Stone/Steel Grey"), "EXT-KEEN-JSPR-ABBY-STN-STL-GRY");
+  assert.equal(sku("NRD", "001A", "Serpentine W"), "EXT-NRD-001A-SRPNT-W");
+});
+
+test("no colour gives the stem once, not the style twice", () => {
+  assert.equal(sku("CMP", "Kora Sandal", null), "EXT-CMP-KR-SNDL");
+  assert.equal(sku("CMP", "Kora Sandal", ""), "EXT-CMP-KR-SNDL");
+  assert.equal(sku("CMP", "Kora Sandal", "kora sandal"), "EXT-CMP-KR-SNDL");
+  assert.equal(partnerColorwaySku({ brandToken: "CMP", style: "Kora Sandal" }).stem, "EXT-CMP-KR-SNDL");
+});
+
+test("always EXT and the brand token; the name only when there is no token", () => {
+  for (const s of [sku("PB", "Michael", "Lisse Noir"), sku("RT", "Vertical Stripe Socks", "Lime")])
+    assert.match(s, /^EXT-(PB|RT)-/);
+  assert.equal(partnerColorwaySku({ brandName: "Birkenstock", style: "Arizona", colour: "Mink" }).colorwaySku, "EXT-BRKN-ARZN-MNK");
+});

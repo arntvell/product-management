@@ -61,6 +61,8 @@ Two changes, both additive, as the Loom session asked:
 - **Real call for an unknown brand.** `ok: false`, "create it through POST /brands first".
 - **Loom id.** A real call that finds the brand by name records `loom_brand_id` on it. A dry run no longer does.
 
+**SKUs (2026-11-12).** A new product's `colorway_sku` is always `EXT-<brand token>-<style tokens>-<colour tokens>`, built from `style_name` and `colour`. This holds even when the colour joins an existing style. Older style SKUs are not inherited, because they carry an old colour (`EXT-KEEN-JAS-ATBR`) or `LIV-STY-`. With no `colour`, the SKU is the style stem alone. The collision checks are unchanged. A clash is refused, never suffixed around.
+
 Proof from data that the season filing already worked before this branch: Loom-born `EXT-PB-TSTMD-ZT-NR` (loom_key `origo-test-zeta-1`) has an SS27 entry (NEW, approved, 3 sizes) and SS27 NOK MSRP 4500 / COST 1500.55.
 `finalizeDraft` writes, for that season:
 - a `SeasonEntry` (origin NEW, approved for production), with every size linked through `SeasonVariant`;
