@@ -173,6 +173,71 @@ Tests: `src/lib/partner/colorway-sizes.test.ts`, which uses an in-memory store a
 2. In Loom, set the env `ORIGIO_PARTNER_URL` and `ORIGIO_PARTNER_TOKEN`, and the setting `buying_origio_products` = `on`. These are the same three as for `external-products`.
 3. Suggested Loom change, additive: send `season` (the plan's season) in `addColorwaySizes`, as `assignSeason` does.
 
+## 5. Size systems: `GET /size-systems` and `PATCH /size-systems/{id}` (new 2026-11-13)
+
+Branch `partner-size-systems`. For the Buying planner to show a colourway's sizes, and to add a size to a system without leaving Loom.
+
+**How Origio models them.** A size system is global. A brand points at one only as its default (`BrandTemplate.defaultSizeSystemId`). Styles and colourways have no link to a system, and a variant holds its size as plain strings. So any edit reaches every brand that defaults to the system.
+
+### `GET /size-systems?colorway_sku=…` or `?brand=<origio_brand_id|name>` (scope `size-systems:read`)
+```jsonc
+{ "systems": [{ "id": "cmucicwwt…", "name": "UK Shoes", "kind": "ONE_D", "reason": "Paraboot's default size system",
+    "brands": ["Paraboot"],
+    "sizes": [{ "label": "7.5", "token": "7.5", "dim1": "7.5", "dim2": null, "position": 15, "archived": false, "in_use": true }],
+    "display_order": ["3", "3.5", "4", …] }],
+  "colorway": { "colorway_sku": "EXT-PRB-CMB-NR", "sizes": ["7", "7.5", …] } }   // by colourway only
+```
+- **By colourway.** It returns the same candidates `colorway-sizes` accepts sizes from:
+  - one system when evidence names it: the draft that created the colourway, or the brand's default;
+  - otherwise every system that holds all of the colourway's sizes.
+- **By brand.** It returns the brand's default system. The brand is matched by id (following merges), then by name, the same way `/brands` does.
+- **`in_use`.** True when a variant of a brand that defaults to this system holds the label. A system no brand defaults to is checked across the whole catalogue.
+- **`display_order`.** The live sizes in the order the storefront and the till sort them, which is by label. `position` only orders the wizard's and the importer's lists.
+- **Errors.** An unknown colourway or brand, a brand with no default system, or a colourway no system fits each give a 200 with `systems: []` and an `error`. A call with neither parameter is a 400.
+
+### `PATCH /size-systems/{id}` (scope `size-systems:write`)
+```jsonc
+{ "dry_run": true, "loom_key": "…?", "confirm_shared": false,
+  "ops": [{ "op": "add", "label": "14", "dim1": "14?", "dim2": null, "after": "13?" },
+          { "op": "reorder", "labels": ["3", "3.5", …] }] }
+→ { "ok": true, "system": { …as in GET, with reason: null… }, "applied": ["add 14 after 13"], "noop": [], "warnings": [] }
+```
+- **`add`.**
+  - `dim1` defaults to the label. A waist × length system needs both `dim1` and `dim2`.
+  - The SKU token is derived (`sizeSkuToken`) and is never taken from the request.
+  - `after` places the new size after a live size; without it, the size is appended.
+  - Adding a size the system already has is a no-op. `"7,5"` counts as `7.5`. Dims are compared only when they are sent.
+- **`reorder`.** It must list every live size exactly once. Retired sizes keep their slots.
+- **All or nothing.** The ops are applied in order, and the result is saved in one `updateSizeSystem` call, the code behind `/catalog/size-systems`. If any op is refused, nothing is saved.
+- **Repeats.** A call that changes nothing writes nothing.
+- **Concurrent edits.** If the system's entries changed in Origio between the read and the save, nothing is written and the call is refused with "send it again". `updateSizeSystem` would otherwise retire a size missing from a stale list.
+- **`loom_key`.** Accepted, not stored: `PartnerCall` has no column for it.
+- **Refused** with a 200, `ok: false` and an `error` for a buyer:
+  - the ops `rename`/`relabel`, `retire`/`remove`/`delete`/`archive`, `unretire`/`restore`, `set_token`/`token`, `edit`/`update`, `set_kind`/`kind`, `create`/`create_system`, `archive_system` and `rename_system`;
+  - adding a retired size;
+  - adding an existing size with different dims;
+  - a token another size already has;
+  - an unknown `after`;
+  - an archived system, a one-size system, or an unknown system id;
+  - a system that more than one brand defaults to, unless `confirm_shared: true`. The error says it is shared and names the brands.
+- **400.** No `ops`, an op with the wrong shape, or an unknown op name.
+
+### `colorway-sizes`: `allowed_sizes`
+A size the colourway's size system lacks is still refused. The refusal now also carries `allowed_sizes`: the labels it does take, in display order, from all of its candidate systems.
+
+### Turning it on
+1. Merge `partner-size-systems` and deploy Origio. No migration is needed.
+2. Add the two scopes to the existing `loom` token **in place**, without rotating it. Run this from a checkout that has this branch, because the script checks scopes against `PARTNER_SCOPES`:
+   ```
+   npx dotenv -e .env.local -- npx tsx --tsconfig tsconfig.json scripts/partner-token.ts loom --add-scopes size-systems:read size-systems:write
+   ```
+
+Tests: `src/lib/partner/size-systems.test.ts`, run against an in-memory store. Read-only run against the database: `scripts/partner/dry-run-size-systems.ts`. Its 2026-11-13 output:
+- Chambord → UK Shoes (Paraboot's default; in use: UK 3–11.5);
+- "Converse" → EU Shoes half sizes, shared by Converse and Eyyts, so an add without `confirm_shared` is refused;
+- dry add of 14 after 13: ok;
+- `colorway-sizes` with `46`: refused, with `allowed_sizes` UK 3–13.
+
 ## Scopes
 
 `PARTNER_SCOPES` in `src/lib/partner/auth.ts` adds `brands:create` and `seasons:write`.

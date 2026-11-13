@@ -10,6 +10,8 @@
 //   master-data:write    PATCH variants/master-data
 //   brands:create        POST brands
 //   seasons:write        POST season-assignments
+//   size-systems:read    GET  size-systems
+//   size-systems:write   PATCH size-systems/{id}
 //
 // Only the SHA-256 of a token is stored. It is minted, and shown once, by
 // scripts/partner-token.ts. Revoking is setting revokedAt.
@@ -27,6 +29,8 @@ export const PARTNER_SCOPES = [
   "master-data:write",
   "brands:create",
   "seasons:write",
+  "size-systems:read",
+  "size-systems:write",
 ] as const;
 export type PartnerScope = (typeof PARTNER_SCOPES)[number];
 

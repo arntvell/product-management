@@ -287,6 +287,17 @@ test("a label the colourway's size system lacks is refused, naming the sizes it 
   assert.match((p as { error: string }).error, /^47 is not a size in Origio's EU Shoes size system, which EXT-PB-CHMBR-LSS-NR is sized in \(40, 41, .*\); pick one of those/);
 });
 
+test("the off-system refusal carries allowed_sizes, in display order", async () => {
+  const { store } = fakeStore([chambord()]);
+  const r = await addColorwaySizes({ dry_run: true, items: [item(["47"])] }, store);
+  const o = r.items[0] as { ok: false; error: string; allowed_sizes?: string[] };
+  assert.equal(o.ok, false);
+  assert.deepEqual(o.allowed_sizes, ["40", "41", "42", "42.5", "43", "44", "45", "46"]);
+  // Other refusals do not.
+  const none = await addColorwaySizes({ dry_run: true, items: [item(["46"], "x", "EXT-NOPE")] }, store);
+  assert.equal("allowed_sizes" in none.items[0], false);
+});
+
 test("with no size system that fits, a label is added as written, with a warning", () => {
   const p = planColorwaySizes(chambord(), [], ["47"]);
   assert.ok(p.ok);

@@ -71,7 +71,14 @@ export type ColorwaySizesResult =
       /** Real call only. */
       style?: Record<string, unknown>;
     }
-  | { loom_key: string; ok: false; colorway_sku: string; error: string };
+  | {
+      loom_key: string;
+      ok: false;
+      colorway_sku: string;
+      error: string;
+      /** On a size the colourway's size system lacks: the sizes it does take, in display order. */
+      allowed_sizes?: string[];
+    };
 
 // ---------------------------------------------------------------------------
 // The colourway and its size system, as the planner sees them
@@ -113,7 +120,9 @@ export interface PlannedSize {
   adHoc: boolean;
 }
 
-export type SizePlan = { ok: false; error: string } | { ok: true; sizes: PlannedSize[]; warnings: string[] };
+export type SizePlan =
+  | { ok: false; error: string; allowedSizes?: string[] }
+  | { ok: true; sizes: PlannedSize[]; warnings: string[] };
 
 /** "42,5", " 42.5 " and "42.5" are one size; so are "m" and "M". */
 export function sizeKey(label: string): string {
@@ -182,8 +191,12 @@ export function planColorwaySizes(cw: SizesColorway, systems: SizesSystem[], ask
       return { ok: false, error: `size ${label} has been retired from Origio's ${gone.system} size system` };
     if (!entry && system) {
       const offered = system.entries.filter((e) => !e.archived);
+      // Every candidate's sizes are accepted, so all of them are offered.
+      const allowed = new Map<string, string>();
+      for (const e of live) if (!allowed.has(sizeKey(e.sizeLabel))) allowed.set(sizeKey(e.sizeLabel), e.sizeLabel);
       return {
         ok: false,
+        allowedSizes: displaySizes([...allowed.values()], (l) => l),
         error:
           (systems.length === 1
             ? `${label} is not a size in Origio's ${system.name} size system, which ${cw.colorwaySku} is sized in`
@@ -298,7 +311,13 @@ async function oneItem(
   store: ColorwaySizesStore
 ): Promise<ColorwaySizesResult> {
   const key = item.loom_key;
-  const fail = (error: string): ColorwaySizesResult => ({ loom_key: key, ok: false, colorway_sku: asked, error });
+  const fail = (error: string, allowed?: string[]): ColorwaySizesResult => ({
+    loom_key: key,
+    ok: false,
+    colorway_sku: asked,
+    error,
+    ...(allowed ? { allowed_sizes: allowed } : {}),
+  });
   if (!asked) return fail("colorway_sku is missing");
   if (!Array.isArray(item.sizes)) return fail("sizes must be a list of size labels");
 
@@ -309,7 +328,7 @@ async function oneItem(
   };
 
   let { cw, plan: p } = await plan();
-  if (!p.ok) return fail(p.error);
+  if (!p.ok) return fail(p.error, p.allowedSizes);
   const fresh = p.sizes.filter((s) => !s.existing);
   if (fresh.length) {
     // Another colourway only: a racing call may have just added the size here,
@@ -356,6 +375,19 @@ async function oneItem(
 // The database
 // ---------------------------------------------------------------------------
 
+/**
+ * The colourway's candidate size systems, as add-size ranks them: the draft that
+ * created the colourway, then the brand's default — either is the answer on its
+ * own — else every system that holds all its sizes (getAddSizeContext ranks
+ * those only when neither claims). Shared with GET size-systems.
+ */
+export async function candidateSystems(colorwayId: string): Promise<Array<{ id: string; name: string; reason: string }>> {
+  const ctx = await getAddSizeContext(colorwayId);
+  const ranked = ctx?.systems ?? [];
+  const evidence = ranked.filter((s) => !/^holds all|^no sizes yet/.test(s.reason));
+  return (evidence.length ? evidence.slice(0, 1) : ranked).map((s) => ({ id: s.id, name: s.name, reason: s.reason }));
+}
+
 const colorwaySelect = {
   id: true,
   colorwaySku: true,
@@ -386,13 +418,7 @@ export const prismaStore: ColorwaySizesStore = {
   },
 
   async sizeSystems(cw) {
-    // The add-size flow's ranking: the draft that created the colourway, then the
-    // brand's default — either is the answer on its own — else every system that
-    // holds all its sizes (getAddSizeContext ranks those only when neither claims).
-    const ctx = await getAddSizeContext(cw.id);
-    const ranked = ctx?.systems ?? [];
-    const evidence = ranked.filter((s) => !/^holds all|^no sizes yet/.test(s.reason));
-    const chosen = evidence.length ? evidence.slice(0, 1) : ranked;
+    const chosen = await candidateSystems(cw.id);
     if (!chosen.length) return [];
     const entries = await prisma.sizeSystemEntry.findMany({
       where: { sizeSystemId: { in: chosen.map((s) => s.id) } },
