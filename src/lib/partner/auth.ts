@@ -5,6 +5,7 @@
 // only under /api/partner/v1/ and only for the scopes it was minted with:
 //
 //   products:create      POST external-products
+//                        POST colorway-sizes
 //   categories:read      GET  categories
 //   master-data:write    PATCH variants/master-data
 //   brands:create        POST brands

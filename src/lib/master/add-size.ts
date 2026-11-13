@@ -306,8 +306,11 @@ async function draftSizeSystemId(cw: LoadedColorway): Promise<string | null> {
  * keep their old stem — so a common stem the siblings DO agree on is accepted,
  * with a note, and disagreement is refused.
  */
-function skuStemFor(
-  cw: LoadedColorway,
+export function skuStemFor(
+  cw: {
+    colorwaySku: string;
+    variants: Array<{ variantSku: string; sizeLabel: string; dim1: string; dim2: string | null }>;
+  },
   tokenByLabel: Map<string, string>
 ): { stem: string | null; note: string | null } {
   if (!cw.variants.length) return { stem: normalizeSku(cw.colorwaySku), note: null };

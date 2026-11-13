@@ -3,7 +3,7 @@
 Branch `partner-brands-seasons`, 2026-11-12. Base URL `https://origo.livid.no/api/partner/v1`.
 Auth: `Authorization: Bearer <ORIGIO_PARTNER_TOKEN>` (the `loom` partner token). Each route needs one scope.
 
-All three calls take `dry_run` (anything but `false` is a dry run, which writes nothing) and return one entry per item, in order.
+Every call takes `dry_run` (anything but `false` is a dry run, which writes nothing) and return one entry per item, in order.
 A refused item comes back as `ok: false` with an `error` written for a buyer. The call itself still succeeds.
 Only a malformed call gets a 400 with `{ error }`: no `items` array, or no season, an unknown one or a non-regular one.
 Every call is logged in `PartnerCall`.
@@ -104,6 +104,61 @@ On refusal: `{ "loom_key", "ok": false, "colorway_sku", "error" }`.
 **Nothing is pushed.** The season's MSRP reaches the channels on the next push for that season: the Loom registry payload, the push orchestrator and the Shopify publish all read prices filtered to the batch's season. Loom's existing season price list therefore picks the price up from the registry push.
 
 **Known caveat (not changed here).** `src/lib/sitoo/update.ts` reads the NOK MSRP with `take: 1` and no season filter. A colourway priced in two seasons can therefore send either price to Sitoo on an update.
+
+## 4. `POST /colorway-sizes` (scope `products:create`), new 2026-11-13
+
+For a size the buyer adds to a line of a product Origio already has. Loom calls it at create POs, after `external-products` and before `season-assignments`. Branch `partner-colorway-sizes`.
+
+Request:
+```jsonc
+{ "dry_run": true,
+  "season": "SS27",            // optional, see "Season" below; Loom does not send it yet
+  "items": [{ "loom_key": "<buying line id>", "colorway_sku": "EXT-PRB-CMB-NR", "sizes": ["12"], "cost_nok": 2343.2, "msrp_nok": 6900 }] }
+```
+
+Response:
+```jsonc
+{ "items": [{ "loom_key": "…", "ok": true, "colorway_sku": "EXT-PRB-CMB-NR",
+              "variant_skus": { "12": "EXT-PRB-CMB-NR-12" },   // keyed by the labels sent
+              "existing": [],                                  // asked sizes it already had
+              "warnings": [],
+              "style": { /* real call only: FeedStyle of the WHOLE colourway */ } }] }
+```
+On refusal: `{ "loom_key", "ok": false, "colorway_sku", "error" }`.
+
+**What a real call writes.** It adds one `Variant` per missing size, with no barcode, linked to the same season entries as its siblings. That is all it writes:
+- nothing goes to Shopify, Sitoo or Loom;
+- `ChannelPublication`s are untouched;
+- no prices: Origio prices a colourway per season, so `cost_nok` and `msrp_nok` are accepted and ignored. The season price comes from `season-assignments`.
+
+The whole item is written in one transaction, or nothing is.
+
+**The size.** It must be in the colourway's size system. The system is chosen as the add-size flow chooses it: the draft that created the colourway, then the brand's default, then a system that holds all its sizes.
+- The size system's spelling and SKU token are used. `"42,5"` and `"42.5"` are the same size.
+- A label the system lacks is **refused**, and the error lists the sizes it has. Origio's Paraboot Chambord (`EXT-PRB-CMB-NR`) is sized UK 7–11, so an EU `46` from the planner is refused, not added beside them.
+- A label is taken as written only when no size system fits the colourway at all, and never for a waist × length colourway.
+- A size retired from the system is refused.
+
+**The SKU** is the siblings' stem plus the size token (`skuStemFor` from add-size). It is refused when:
+- the siblings disagree on a stem;
+- another colourway holds the SKU (`collision: <sku> exists on <colourway>`);
+- two asked sizes give one SKU.
+
+**Idempotent** by construction, with no table and no migration. A size the colourway already has is a no-op, matched by label or by SKU, and is returned with its SKU in `existing`.
+- A repeated real call writes nothing and returns the same SKUs and the same style.
+- If two calls race on one size, the loser re-reads and answers from what the winner wrote.
+
+**`style`** is built by `buildLoomPayloadFromColorways` in full mode, the builder behind the catalogue push. It contains every variant with its `variant_id`, because Loom applies it in full mode and full mode drops the sizes a payload leaves out.
+- `channels` are what the colourway has, so a carry-over live on Shopify or Sitoo stays declared there.
+- `approved_for_production: true` and `dropped: false` are always sent. Loom applies the style to the plan's season, and its feed engine writes approved from the payload, treating absent as false. Loom calls this before `season-assignments`, so the colourway usually has no Origio entry in that season yet. The plain builder would then send `false` and un-approve the line in Loom.
+
+**Season.** `season` is optional. When it is sent, the style carries that season's NOK MSRP and main image. Without it, `prices` is `{}` and `image` is `null`, and Loom keeps what it has for both. An unknown season is a 400.
+
+**Refused per item:** an unknown colourway (looked up as sent, then normalised), Livid/Threadflow colourways, archived ones, non-merchandise records, no sizes.
+
+**Not handled here (follow-up).** A size added here reaches Shopify and Sitoo only when someone carries it there. Once its barcode arrives through `variants/master-data`, the add-size page (`/catalog/products/new/size`) lists it under sizes missing from a channel and propagates it. Until then Loom holds a variant with no Shopify or Sitoo link on a colourway declared for both, so its stock hub may flag the size.
+
+Tests: `src/lib/partner/colorway-sizes.test.ts`, which uses an in-memory store and the real payload builder. Dry run against the database: `scripts/partner/dry-run-sizes.ts`.
 
 ## Scopes
 
