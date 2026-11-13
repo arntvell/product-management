@@ -133,8 +133,13 @@ export function refusalFor(cw: SizesColorway): string | null {
 /**
  * The sizes to add, without touching the database. Every size or nothing: one
  * refused size refuses the item, so a line is never half-added.
+ *
+ * `systems` are the colourway's candidate size systems: one when evidence names
+ * it (the draft that created the colourway, or the brand's default), every
+ * system holding all its sizes when only coverage does. A label any candidate
+ * has is taken from the first that has it; refused only when none has it.
  */
-export function planColorwaySizes(cw: SizesColorway, system: SizesSystem | null, asked: string[]): SizePlan {
+export function planColorwaySizes(cw: SizesColorway, systems: SizesSystem[], asked: string[]): SizePlan {
   const refused = refusalFor(cw);
   if (refused) return { ok: false, error: refused };
 
@@ -148,9 +153,13 @@ export function planColorwaySizes(cw: SizesColorway, system: SizesSystem | null,
   }
   if (!labels.length) return { ok: false, error: "no sizes" };
 
-  const live = system?.entries.filter((e) => !e.archived) ?? [];
-  const retired = system?.entries.filter((e) => e.archived) ?? [];
-  const tokenByLabel = new Map(live.map((e) => [e.sizeLabel.toUpperCase(), e.skuToken.toUpperCase()]));
+  const system = systems[0] ?? null;
+  const live = systems.flatMap((sys) => sys.entries.filter((e) => !e.archived));
+  const retired = systems.flatMap((sys) => sys.entries.filter((e) => e.archived).map((e) => ({ ...e, system: sys.name })));
+  // First wins: candidates hold every existing size, so they agree on those.
+  const tokenByLabel = new Map<string, string>();
+  for (const e of live)
+    if (!tokenByLabel.has(e.sizeLabel.toUpperCase())) tokenByLabel.set(e.sizeLabel.toUpperCase(), e.skuToken.toUpperCase());
   const twoD = cw.variants.some((v) => v.dim2);
   const bySku = new Map(cw.variants.map((v) => [normalizeSku(v.variantSku), v]));
   const byLabel = new Map(cw.variants.map((v) => [sizeKey(v.sizeLabel), v]));
@@ -168,15 +177,20 @@ export function planColorwaySizes(cw: SizesColorway, system: SizesSystem | null,
     }
 
     const entry = live.find((e) => sizeKey(e.sizeLabel) === sizeKey(label));
-    if (!entry && retired.some((e) => sizeKey(e.sizeLabel) === sizeKey(label)))
-      return { ok: false, error: `size ${label} has been retired from Origio's ${system!.name} size system` };
-    if (!entry && system)
+    const gone = retired.find((e) => sizeKey(e.sizeLabel) === sizeKey(label));
+    if (!entry && gone)
+      return { ok: false, error: `size ${label} has been retired from Origio's ${gone.system} size system` };
+    if (!entry && system) {
+      const offered = system.entries.filter((e) => !e.archived);
       return {
         ok: false,
         error:
-          `${label} is not a size in Origio's ${system.name} size system, which ${cw.colorwaySku} is sized in` +
-          ` (${displaySizes(live, (e) => e.sizeLabel).map((e) => e.sizeLabel).join(", ")}); pick one of those, or ask Origio to add ${label} to the size system`,
+          (systems.length === 1
+            ? `${label} is not a size in Origio's ${system.name} size system, which ${cw.colorwaySku} is sized in`
+            : `${label} is not a size in any of the size systems ${cw.colorwaySku} fits (${systems.map((x) => x.name).join(", ")}); ${system.name} has`) +
+          ` (${displaySizes(offered, (e) => e.sizeLabel).map((e) => e.sizeLabel).join(", ")}); pick one of those, or ask Origio to add ${label} to the size system`,
       };
+    }
     if (!entry && twoD)
       return {
         ok: false,
@@ -238,7 +252,8 @@ export function sizesFeedStyle(colorways: LoomColorway[], seasonCode: string | n
 export interface ColorwaySizesStore {
   seasonExists(code: string): Promise<boolean>;
   findColorway(sku: string): Promise<SizesColorway | null>;
-  sizeSystem(cw: SizesColorway): Promise<SizesSystem | null>;
+  /** The candidate size systems, see planColorwaySizes. */
+  sizeSystems(cw: SizesColorway): Promise<SizesSystem[]>;
   /** Variants anywhere in the master holding any of these SKUs. */
   skusTaken(skus: string[]): Promise<Array<{ variantSku: string; colorwaySku: string }>>;
   /** One variant per size, linked to the siblings' seasons; all or nothing. */
@@ -290,14 +305,18 @@ async function oneItem(
   const plan = async () => {
     const cw = await store.findColorway(asked);
     if (!cw) return { cw: null, plan: { ok: false, error: `Origio has no colourway ${asked}` } as SizePlan };
-    return { cw, plan: planColorwaySizes(cw, await store.sizeSystem(cw), item.sizes) };
+    return { cw, plan: planColorwaySizes(cw, await store.sizeSystems(cw), item.sizes) };
   };
 
   let { cw, plan: p } = await plan();
   if (!p.ok) return fail(p.error);
   const fresh = p.sizes.filter((s) => !s.existing);
   if (fresh.length) {
-    const taken = await store.skusTaken(fresh.map((s) => s.sku));
+    // Another colourway only: a racing call may have just added the size here,
+    // and that is resolved below by re-reading, not reported as a clash.
+    const taken = (await store.skusTaken(fresh.map((s) => s.sku))).filter(
+      (t) => normalizeSku(t.colorwaySku) !== normalizeSku(cw!.colorwaySku)
+    );
     if (taken.length)
       return fail(taken.map((t) => `collision: ${t.variantSku} exists on ${t.colorwaySku}`).join("; "));
   }
@@ -366,17 +385,20 @@ export const prismaStore: ColorwaySizesStore = {
     return { ...rest, isLivid: brand?.isLivid === true };
   },
 
-  async sizeSystem(cw) {
-    // The add-size flow's choice: the draft that created the colourway, then the
-    // brand's default, then a system holding every size it has.
+  async sizeSystems(cw) {
+    // The add-size flow's ranking: the draft that created the colourway, then the
+    // brand's default — either is the answer on its own — else every system that
+    // holds all its sizes (getAddSizeContext ranks those only when neither claims).
     const ctx = await getAddSizeContext(cw.id);
-    const s = ctx?.systems[0];
-    if (!s) return null;
+    const ranked = ctx?.systems ?? [];
+    const evidence = ranked.filter((s) => !/^holds all|^no sizes yet/.test(s.reason));
+    const chosen = evidence.length ? evidence.slice(0, 1) : ranked;
+    if (!chosen.length) return [];
     const entries = await prisma.sizeSystemEntry.findMany({
-      where: { sizeSystemId: s.id },
-      select: { id: true, sizeLabel: true, dim1: true, dim2: true, skuToken: true, archived: true },
+      where: { sizeSystemId: { in: chosen.map((s) => s.id) } },
+      select: { id: true, sizeSystemId: true, sizeLabel: true, dim1: true, dim2: true, skuToken: true, archived: true },
     });
-    return { name: s.name, entries };
+    return chosen.map((s) => ({ name: s.name, entries: entries.filter((e) => e.sizeSystemId === s.id) }));
   },
 
   async skusTaken(skus) {

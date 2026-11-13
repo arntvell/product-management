@@ -5,6 +5,7 @@
 //   npx dotenv -e .env.local -- npx tsx --tsconfig tsconfig.json scripts/partner/dry-run-sizes.ts
 import { prisma } from "../../src/lib/db";
 import { addColorwaySizes, prismaStore, sizesFeedStyle } from "../../src/lib/partner/colorway-sizes";
+import { getAddSizeContext } from "../../src/lib/master/add-size";
 
 async function main() {
   const chambord = await prisma.colorway.findFirst({
@@ -21,13 +22,17 @@ async function main() {
   console.log("CHAMBORD", chambord?.colorwaySku, chambord?.variants.map((v) => v.sizeLabel).join(" "));
   if (!chambord) throw new Error("no live Paraboot Chambord colourway");
   const have = chambord.variants[0]?.sizeLabel ?? "42";
+  const ctx = await getAddSizeContext(chambord.id);
+  console.log("SIZE SYSTEM CANDIDATES", JSON.stringify(ctx?.systems.map((s) => ({ name: s.name, reason: s.reason, stem: s.skuStem }))));
+  const tokens = await prisma.partnerToken.findMany({ select: { name: true, scopes: true, revokedAt: true } });
+  console.log("PARTNER TOKENS", JSON.stringify(tokens));
 
   const r = await addColorwaySizes({
     dry_run: true,
     season: "SS27",
     items: [
       { loom_key: "z-46", colorway_sku: chambord.colorwaySku, sizes: ["46"], cost_nok: 2343.2, msrp_nok: 6900 },
-      { loom_key: "z-have", colorway_sku: chambord.colorwaySku, sizes: [have, "46"], cost_nok: 1, msrp_nok: 1 },
+      { loom_key: "z-have", colorway_sku: chambord.colorwaySku, sizes: [have, "12"], cost_nok: 1, msrp_nok: 1 },
       { loom_key: "z-adhoc", colorway_sku: chambord.colorwaySku, sizes: ["12", "6.5"], cost_nok: 1, msrp_nok: 1 },
       { loom_key: "z-lower", colorway_sku: chambord.colorwaySku.toLowerCase(), sizes: ["46"], cost_nok: 1, msrp_nok: 1 },
       ...(jeans ? [{ loom_key: "z-2d", colorway_sku: jeans.colorwaySku, sizes: ["33"], cost_nok: 1, msrp_nok: 1 }] : []),

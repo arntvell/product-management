@@ -1,4 +1,5 @@
-// Run: npx tsx --test src/lib/partner/colorway-sizes.test.ts
+// Run: ORIGO_POSTGRES_PRISMA_URL=postgresql://nobody@127.0.0.1:1/none npx tsx --test src/lib/partner/colorway-sizes.test.ts
+// (lib/db.ts insists on a URL at import; this one is never reached.)
 // No database: the only one there is, is production. The call runs against an
 // in-memory store; the FeedStyle comes from the real Loom payload builder.
 import { test } from "node:test";
@@ -56,8 +57,8 @@ function fakeStore(colorways: SizesColorway[], opts: { otherSkus?: Record<string
       const cw = colorways.find((c) => c.colorwaySku === sku || c.colorwaySku === sku.toUpperCase());
       return cw ? structuredClone(cw) : null;
     },
-    async sizeSystem() {
-      return EU_SHOES;
+    async sizeSystems() {
+      return [EU_SHOES];
     },
     async skusTaken(skus) {
       return skus.filter((s) => opts.otherSkus?.[s]).map((s) => ({ variantSku: s, colorwaySku: opts.otherSkus![s] }));
@@ -272,7 +273,7 @@ test("items without an array of items is a 400", async () => {
 // --- the planner's rules ---
 
 test("labels: '42,5' and '42.5' are one size; the size system's spelling and token win", () => {
-  const p = planColorwaySizes(chambord(), EU_SHOES, ["42,5", "42.5"]);
+  const p = planColorwaySizes(chambord(), [EU_SHOES], ["42,5", "42.5"]);
   assert.ok(p.ok);
   assert.equal(p.sizes.length, 1);
   assert.equal(p.sizes[0].asked, "42,5");
@@ -281,21 +282,42 @@ test("labels: '42,5' and '42.5' are one size; the size system's spelling and tok
 });
 
 test("a label the colourway's size system lacks is refused, naming the sizes it has", () => {
-  const p = planColorwaySizes(chambord(), EU_SHOES, ["47"]);
+  const p = planColorwaySizes(chambord(), [EU_SHOES], ["47"]);
   assert.equal(p.ok, false);
   assert.match((p as { error: string }).error, /^47 is not a size in Origio's EU Shoes size system, which EXT-PB-CHMBR-LSS-NR is sized in \(40, 41, .*\); pick one of those/);
 });
 
 test("with no size system that fits, a label is added as written, with a warning", () => {
-  const p = planColorwaySizes(chambord(), null, ["47"]);
+  const p = planColorwaySizes(chambord(), [], ["47"]);
   assert.ok(p.ok);
   assert.equal(p.sizes[0].adHoc, true);
   assert.equal(p.sizes[0].sku, "EXT-PB-CHMBR-LSS-NR-47");
   assert.match(p.warnings.join(" "), /no Origio size system fits EXT-PB-CHMBR-LSS-NR; size\(s\) 47 added as written/);
 });
 
+test("several candidate systems: a label any of them has is taken from it; none has it, refused", () => {
+  const UK: SizesSystem = {
+    name: "UK Shoes",
+    entries: ["41", "42", "43", "12"].map((l) => ({ id: `uk${l}`, sizeLabel: l, dim1: l, dim2: null, skuToken: l, archived: false })),
+  };
+  const p = planColorwaySizes(chambord(), [EU_SHOES, UK], ["12"]);
+  assert.ok(p.ok);
+  assert.equal(p.sizes[0].sku, "EXT-PB-CHMBR-LSS-NR-12");
+  const q = planColorwaySizes(chambord(), [EU_SHOES, UK], ["99"]);
+  assert.equal(q.ok, false);
+  assert.match((q as { error: string }).error, /^99 is not a size in any of the size systems EXT-PB-CHMBR-LSS-NR fits \(EU Shoes, UK Shoes\)/);
+});
+
+test("a size the colourway itself just got (a racing call) is not a collision", async () => {
+  const cws = [chambord()];
+  const { store, writes } = fakeStore(cws, { otherSkus: { "EXT-PB-CHMBR-LSS-NR-46": "EXT-PB-CHMBR-LSS-NR" } });
+  const r = await addColorwaySizes({ dry_run: false, items: [item(["46"])] }, store);
+  assert.equal(r.items[0].ok, true);
+  assert.equal(writes.length, 1);
+});
+
 test("a size retired from the size system is refused", () => {
-  const p = planColorwaySizes(chambord(), EU_SHOES, ["39"]);
+  const p = planColorwaySizes(chambord(), [EU_SHOES], ["39"]);
   assert.deepEqual(p, { ok: false, error: "size 39 has been retired from Origio's EU Shoes size system" });
 });
 
@@ -303,7 +325,7 @@ test("waist × length products take no ad hoc size", () => {
   const cw = chambord();
   cw.variants = [{ id: "j", variantSku: "EXT-X-J-3234", sizeLabel: "32/34", dim1: "32", dim2: "34" }];
   cw.colorwaySku = "EXT-X-J";
-  const p = planColorwaySizes(cw, null, ["33"]);
+  const p = planColorwaySizes(cw, [], ["33"]);
   assert.equal(p.ok, false);
   assert.match((p as { error: string }).error, /waist × length/);
 });
@@ -311,28 +333,28 @@ test("waist × length products take no ad hoc size", () => {
 test("new sizes follow the siblings' stem, and siblings that disagree are refused", () => {
   const drifted = chambord();
   drifted.colorwaySku = "EXT-PB-CHMBR-NR";
-  const p = planColorwaySizes(drifted, EU_SHOES, ["46"]);
+  const p = planColorwaySizes(drifted, [EU_SHOES], ["46"]);
   assert.ok(p.ok);
   assert.equal(p.sizes[0].sku, "EXT-PB-CHMBR-LSS-NR-46");
 
   const mixed = chambord();
   mixed.variants[0].variantSku = "EXT-PB-OLD-41";
-  const q = planColorwaySizes(mixed, EU_SHOES, ["46"]);
+  const q = planColorwaySizes(mixed, [EU_SHOES], ["46"]);
   assert.equal(q.ok, false);
   assert.match((q as { error: string }).error, /cannot tell which SKU/);
   // ...but a size it already has still answers.
-  assert.ok(planColorwaySizes(mixed, EU_SHOES, ["42"]).ok);
+  assert.ok(planColorwaySizes(mixed, [EU_SHOES], ["42"]).ok);
 });
 
 test("Livid, archived and non-merchandise colourways are refused", () => {
   const livid = { ...chambord(), isLivid: true };
   const archived = { ...chambord(), status: "ARCHIVED" };
   const material = { ...chambord(), kind: "MATERIAL" };
-  assert.match((planColorwaySizes(livid, EU_SHOES, ["46"]) as { error: string }).error, /Threadflow/);
-  assert.match((planColorwaySizes(archived, EU_SHOES, ["46"]) as { error: string }).error, /archived/);
-  assert.match((planColorwaySizes(material, EU_SHOES, ["46"]) as { error: string }).error, /not merchandise/);
+  assert.match((planColorwaySizes(livid, [EU_SHOES], ["46"]) as { error: string }).error, /Threadflow/);
+  assert.match((planColorwaySizes(archived, [EU_SHOES], ["46"]) as { error: string }).error, /archived/);
+  assert.match((planColorwaySizes(material, [EU_SHOES], ["46"]) as { error: string }).error, /not merchandise/);
 });
 
 test("no sizes is refused", () => {
-  assert.deepEqual(planColorwaySizes(chambord(), EU_SHOES, ["", " "]), { ok: false, error: "no sizes" });
+  assert.deepEqual(planColorwaySizes(chambord(), [EU_SHOES], ["", " "]), { ok: false, error: "no sizes" });
 });

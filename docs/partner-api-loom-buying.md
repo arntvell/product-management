@@ -133,7 +133,9 @@ On refusal: `{ "loom_key", "ok": false, "colorway_sku", "error" }`.
 
 The whole item is written in one transaction, or nothing is.
 
-**The size.** It must be in the colourway's size system. The system is chosen as the add-size flow chooses it: the draft that created the colourway, then the brand's default, then a system that holds all its sizes.
+**The size.** It must be in the colourway's size system, chosen as the add-size flow ranks them:
+- the draft that created the colourway, or else the brand's default. Either one is the only candidate;
+- otherwise, every system that holds all of the colourway's sizes. A label that any of them has is accepted.
 - The size system's spelling and SKU token are used. `"42,5"` and `"42.5"` are the same size.
 - A label the system lacks is **refused**, and the error lists the sizes it has. Origio's Paraboot Chambord (`EXT-PRB-CMB-NR`) is sized UK 7–11, so an EU `46` from the planner is refused, not added beside them.
 - A label is taken as written only when no size system fits the colourway at all, and never for a waist × length colourway.
@@ -152,13 +154,24 @@ The whole item is written in one transaction, or nothing is.
 - `channels` are what the colourway has, so a carry-over live on Shopify or Sitoo stays declared there.
 - `approved_for_production: true` and `dropped: false` are always sent. Loom applies the style to the plan's season, and its feed engine writes approved from the payload, treating absent as false. Loom calls this before `season-assignments`, so the colourway usually has no Origio entry in that season yet. The plain builder would then send `false` and un-approve the line in Loom.
 
+Checked against Loom's `product-feed.ts`: full mode treats an absent `shopify_inventory_item_id` or `sitoo_sku` as "keep", and it never reads `registry_only`. So this builder does not unlink a carry-over's existing Shopify or Sitoo links in Loom.
+
 **Season.** `season` is optional. When it is sent, the style carries that season's NOK MSRP and main image. Without it, `prices` is `{}` and `image` is `null`, and Loom keeps what it has for both. An unknown season is a 400.
 
 **Refused per item:** an unknown colourway (looked up as sent, then normalised), Livid/Threadflow colourways, archived ones, non-merchandise records, no sizes.
 
 **Not handled here (follow-up).** A size added here reaches Shopify and Sitoo only when someone carries it there. Once its barcode arrives through `variants/master-data`, the add-size page (`/catalog/products/new/size`) lists it under sizes missing from a channel and propagates it. Until then Loom holds a variant with no Shopify or Sitoo link on a colourway declared for both, so its stock hub may flag the size.
 
-Tests: `src/lib/partner/colorway-sizes.test.ts`, which uses an in-memory store and the real payload builder. Dry run against the database: `scripts/partner/dry-run-sizes.ts`.
+Tests: `src/lib/partner/colorway-sizes.test.ts`, which uses an in-memory store and the real payload builder. Dry run against the database: `scripts/partner/dry-run-sizes.ts`. It is read-only and printed the results below on 2026-11-13:
+- Paraboot Chambord `EXT-PRB-CMB-NR` (UK Shoes, Paraboot's default system): `12` → `EXT-PRB-CMB-NR-12` and `6.5` → `-6.5`; `46` refused; `7.5` already there;
+- Livid, archived and unknown colourways refused.
+
+**Not yet run:** a real call. The database write (`prismaStore.createVariants`) and the HTTP route have only been typechecked; the tests exercise the real-call path against the in-memory store.
+
+**Deploy / switch on:**
+1. Merge `partner-colorway-sizes` and deploy Origio. It needs no migration and no new scope; the `loom` token already holds `products:create` (read 2026-11-13).
+2. In Loom, set the env `ORIGIO_PARTNER_URL` and `ORIGIO_PARTNER_TOKEN`, and the setting `buying_origio_products` = `on`. These are the same three as for `external-products`.
+3. Suggested Loom change, additive: send `season` (the plan's season) in `addColorwaySizes`, as `assignSeason` does.
 
 ## Scopes
 
