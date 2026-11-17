@@ -372,18 +372,19 @@ enum ProductDraftStatus {
 }
 
 model Season {
-  id           String         @id @default(cuid())
-  code         String         @unique // "SS27", "FW26"
-  name         String?
-  threadflowId String?        @unique // maps to TF seasonId
-  kind         SeasonKind     @default(REGULAR) // REGULAR | CONTINUITY (carry-over / season-less)
-  sortOrder    Int            @default(0)
-  entries      SeasonEntry[]
-  prices       Price[]
-  seasonImages SeasonImage[]
-  drafts       ProductDraft[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id             String          @id @default(cuid())
+  code           String          @unique // "SS27", "FW26"
+  name           String?
+  threadflowId   String?         @unique // maps to TF seasonId
+  kind           SeasonKind      @default(REGULAR) // REGULAR | CONTINUITY (carry-over / season-less)
+  sortOrder      Int             @default(0)
+  entries        SeasonEntry[]
+  shootAdditions ShootAddition[]
+  prices         Price[]
+  seasonImages   SeasonImage[]
+  drafts         ProductDraft[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 // ---------------------------------------------------------------------------
@@ -495,6 +496,7 @@ model Colorway {
   updatedAt      DateTime        @updatedAt
   pushBatchItems PushBatchItem[]
   flatRequests   FlatRequest[]
+  shootAdditions ShootAddition[]
 
   @@index([styleId])
   @@index([brandId])
@@ -618,12 +620,12 @@ model VintageSourceProduct {
 // earlier drop renumbers the drafts after it (src/lib/vintage/drafts.ts).
 // Created garments leave the draft for the master.
 model VintageDropDraft {
-  id       String @id @default(cuid())
-  drop     String @unique
+  id       String  @id @default(cuid())
+  drop     String  @unique
   /// [{ rowId, itemNumber, include, photos, title, … }] — see DraftRow.
   rows     Json
   /// Compare-and-swap for autosave: a save names the revision it was based on.
-  revision Int    @default(0)
+  revision Int     @default(0)
   /// Set when a repack moved this drop's numbers, until someone has seen it.
   notice   String?
 
@@ -709,6 +711,10 @@ model SeasonEntry {
   shootNote             String?
   shootUpdatedAt        DateTime?
   shootUpdatedBy        String? // email of whoever set it
+  // Ticked off on the shot list once the garment is pulled and ready for the
+  // shoot. Prepared = shootPreparedAt is set. Does not take it off the list.
+  shootPreparedAt       DateTime?
+  shootPreparedBy       String?
   variants              SeasonVariant[]
 
   @@unique([colorwayId, seasonId])
@@ -884,9 +890,9 @@ model FieldOwner {
   // pipeline that carried it; these record the authority that settled it —
   // "cfo-list-2026-09-11", "sitoo", "manual:scan". Needed to answer "why does
   // this say X?" after a reconciliation.
-  authority String?
-  evidence  String?
-  decidedAt DateTime?
+  authority      String?
+  evidence       String?
+  decidedAt      DateTime?
   /// The User who last set this field by hand. Null before 2026-10 and for
   /// writes made by a sync or a script.
   editedByUserId String?
@@ -956,32 +962,32 @@ model BarcodeAllocation {
 // `payload` keeps the body as delivered. A row Origio refused is answerable
 // later only if the thing it refused is still readable.
 model LoomInboundEvent {
-  id         String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   /// `X-Loom-Event-Id`. The dedupe key — NOT `X-Loom-Delivery`, which changes
   /// on every attempt.
-  eventId    String   @unique
-  event      String // "barcodes.ready"
-  batchId    String
-  inboundRef String?
-  poNumber   String?
-  revision   Int
-  isCorrection Boolean @default(false)
+  eventId             String    @unique
+  event               String // "barcodes.ready"
+  batchId             String
+  inboundRef          String?
+  poNumber            String?
+  revision            Int
+  isCorrection        Boolean   @default(false)
   /// "processed" | "superseded" (a lower revision arrived late) | "failed"
-  status     String
-  payload    Json
+  status              String
+  payload             Json
   /// Per-outcome tallies: filled, changed, unchanged, unfiled.
-  counts     Json?
+  counts              Json?
   /// Rows Origio did not file, each with the reason. A per-row refusal is never
   /// an HTTP error: any 4xx but 401/408/429 tells Loom to stop retrying and
   /// treat the whole delivery as permanently refused, so a single bad barcode
   /// must not take the inbound down with it.
-  unfiled    Json?
+  unfiled             Json?
   /// Colorways whose barcodes changed, for the channel push that follows. The
   /// receiver does not push: Shopify and Sitoo writes do not fit in Loom's 15 s
   /// budget, and a Loom push needs a person to confirm it.
   affectedColorwayIds Json?
-  receivedAt DateTime @default(now())
-  processedAt DateTime?
+  receivedAt          DateTime  @default(now())
+  processedAt         DateTime?
   /// When every channel the filed barcodes belong on confirmed them. Null means
   /// the master holds barcodes that Shopify, Sitoo and Loom do not — which is
   /// the normal state between a delivery arriving and somebody sending it, and
@@ -990,10 +996,10 @@ model LoomInboundEvent {
   /// Set only when Shopify, Sitoo AND Loom have all reported, so a Sitoo outage
   /// leaves the event pending with its report attached rather than marking it
   /// done and losing the rows.
-  channelsPushedAt DateTime?
+  channelsPushedAt    DateTime?
   /// Per-channel outcome of that send, for the log. Not authoritative — the
   /// channel link rows are — just what happened when it ran.
-  channelReport Json?
+  channelReport       Json?
 
   @@index([batchId, revision])
 }
@@ -1222,25 +1228,47 @@ model StockAlertReceipt {
   @@index([userId, seenAt])
 }
 
+/// A product put on a season's shot list by hand although it is not in that
+/// season (an older product, a continuity piece). A product that IS in the
+/// season is added by setting its SeasonEntry.shootStatus instead. The plan,
+/// note and prepared fields mirror the entry's.
+model ShootAddition {
+  id         String       @id @default(cuid())
+  seasonId   String
+  season     Season       @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  colorwayId String
+  colorway   Colorway     @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  status     ShootStatus?
+  note       String?
+  preparedAt DateTime?
+  preparedBy String?
+  addedBy    String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime?
+  updatedBy  String?
+
+  @@unique([seasonId, colorwayId])
+}
+
 /// A flat-lay to shoot. Admins and Product managers queue a product; the
 /// Vintage photographer uploads the flat against it. Open while doneAt is null.
 /// The upload becomes the colourway's FLAT image in Origo and custom.flat on
 /// Shopify; a Shopify failure leaves the request open with shopifyError set.
 model FlatRequest {
-  id           String    @id @default(cuid())
-  colorwayId   String
-  colorway     Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
-  note         String?
-  requestedBy  String?
-  createdAt    DateTime  @default(now())
+  id            String    @id @default(cuid())
+  colorwayId    String
+  colorway      Colorway  @relation(fields: [colorwayId], references: [id], onDelete: Cascade)
+  note          String?
+  requestedBy   String?
+  createdAt     DateTime  @default(now())
   /// The FLAT MediaAsset the upload created.
-  mediaId      String?
-  uploadedAt   DateTime?
-  uploadedBy   String?
+  mediaId       String?
+  uploadedAt    DateTime?
+  uploadedBy    String?
   /// Set once custom.flat points at the upload. Done = this is set.
-  doneAt       DateTime?
+  doneAt        DateTime?
   shopifyFileId String?
-  shopifyError String?
+  shopifyError  String?
 
   @@index([doneAt])
   @@index([colorwayId])

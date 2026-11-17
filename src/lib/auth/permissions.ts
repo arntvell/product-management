@@ -48,7 +48,7 @@ const READ_ONLY_POSTS = [
 /** Admin-only writes: merges, splits, deletes and bulk repairs. */
 const ADMIN_ROUTES = [
   /^\/api\/users(\/|$)/,
-  /^\/api\/catalog\/shoot$/,
+  /^\/api\/catalog\/shoot(\/additions)?$/,
   /^\/api\/catalog\/brands\/merge$/,
   /^\/api\/catalog\/categories\/merge$/,
   /^\/api\/catalog\/colorways\/merge$/,

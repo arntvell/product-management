@@ -33,11 +33,14 @@ export function bucketFor(hasMedia: boolean, stock: number | null, cancelled: bo
   return inStock && !cancelled ? "shoot" : "waiting";
 }
 
-/** A person's status wins; without one, a product with no images and stock is on the list. */
-export function isOnShotList(plan: ShootStatus | null, bucket: ShootBucket): boolean {
+/**
+ * A person's status wins; without one, a product added by hand is on the
+ * list, and so is one with no images and stock.
+ */
+export function isOnShotList(plan: ShootStatus | null, bucket: ShootBucket, added = false): boolean {
   if (plan === "SHOOT" || plan === "BOOKED") return true;
   if (plan === "SHOT" || plan === "SKIP") return false;
-  return bucket === "shoot";
+  return added || bucket === "shoot";
 }
 
 /**

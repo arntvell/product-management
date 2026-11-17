@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Stat, StatGroup } from "@/components/ui/stat";
@@ -14,9 +15,11 @@ import { BUCKET_LABELS, PLAN_LABELS, bucketFor, isOnShotList, isReadyToGoLive, t
 import type { ShootRow } from "@/lib/master/shoot";
 import type { ShootStatus } from "@/generated/prisma/client";
 import { MediaPanel } from "./media-panel";
+import { OptionSearch } from "./references-panel";
 
 type Tab = "new" | "carry" | "list" | "live";
 type CarryFilter = "all" | "none" | "few" | "marked";
+type PreparedFilter = "all" | "todo" | "done";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "new", label: "New" },
@@ -66,7 +69,15 @@ function StockCell({ row: r }: { row: ShootRow }) {
   );
 }
 
-export function ShootPlanner({ season, rows: initial }: { season: string; rows: ShootRow[] }) {
+export function ShootPlanner({
+  season,
+  rows: initial,
+  candidates,
+}: {
+  season: string;
+  rows: ShootRow[];
+  candidates: { id: string; label: string }[];
+}) {
   const [rows, setRows] = useState(initial);
   const [tab, setTab] = useState<Tab>("new");
   const [lividOnly, setLividOnly] = useState(true);
@@ -74,6 +85,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
   const [drops, setDrops] = useState<string[]>([]);
   const [bucket, setBucket] = useState<ShootBucket | null>(null);
   const [carry, setCarry] = useState<CarryFilter>("all");
+  const [preparedFilter, setPreparedFilter] = useState<PreparedFilter>("all");
   const [openId, setOpenId] = useState<string | null>(null);
 
   const dropOptions = useMemo(() => [...new Set(rows.map((r) => r.drop ?? "No drop"))].sort(), [rows]);
@@ -97,6 +109,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
   const newRows = scoped.filter((r) => r.origin === "NEW");
   const carryRows = scoped.filter((r) => r.origin === "CARRYOVER");
   const listRows = scoped.filter((r) => r.onShotList);
+  const preparedCount = listRows.filter((r) => r.prepared).length;
   // New and carry-overs alike: shot, in stock, not active on Shopify.
   const liveRows = scoped.filter(isReadyToGoLive);
 
@@ -119,7 +132,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
           })
         : tab === "live"
           ? liveRows
-          : listRows;
+          : listRows.filter((r) => (preparedFilter === "todo" ? !r.prepared : preparedFilter === "done" ? r.prepared : true));
 
   function patch(entryId: string, change: Partial<ShootRow>) {
     setRows((prev) =>
@@ -127,7 +140,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
         if (r.entryId !== entryId) return r;
         const next = { ...r, ...change };
         next.bucket = bucketFor(next.hasMedia, next.stock, next.cancelled);
-        next.onShotList = isOnShotList(next.plan, next.bucket);
+        next.onShotList = isOnShotList(next.plan, next.bucket, next.kind === "added");
         return next;
       })
     );
@@ -140,7 +153,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
       const res = await fetch("/api/catalog/shoot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entryId: r.entryId, status: plan, note }),
+        body: JSON.stringify({ entryId: r.entryId, kind: r.kind, status: plan, note }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
@@ -154,18 +167,61 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
     }
   }
 
+  async function setPrepared(r: ShootRow, prepared: boolean) {
+    const before = { prepared: r.prepared, preparedAt: r.preparedAt, preparedBy: r.preparedBy };
+    patch(r.entryId, { prepared });
+    try {
+      const res = await fetch("/api/catalog/shoot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entryId: r.entryId, kind: r.kind, prepared }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      patch(r.entryId, { preparedAt: json.preparedAt, preparedBy: json.preparedBy });
+    } catch (err) {
+      patch(r.entryId, before);
+      toast.error(`Not saved: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  async function remove(r: ShootRow) {
+    try {
+      const res = await fetch("/api/catalog/shoot/additions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: r.entryId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setRows((prev) => prev.filter((x) => x.entryId !== r.entryId));
+    } catch (err) {
+      toast.error(`Not removed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /** Rows the add call returned: replace any the board already has, append the rest. */
+  function merge(added: ShootRow[]) {
+    setRows((prev) => {
+      const byKey = new Map(added.map((r) => [r.entryId, r]));
+      const kept = prev.map((r) => byKey.get(r.entryId) ?? r);
+      const seen = new Set(prev.map((r) => r.entryId));
+      return [...kept, ...added.filter((r) => !seen.has(r.entryId))];
+    });
+  }
+
   function exportCsv() {
     const label = tab === "list" ? "shot-list" : tab === "new" ? "new" : tab === "live" ? "ready-to-go-live" : "carry-overs";
     downloadCsv(
       [
         "Season", "Drop", "Type", "Brand", "Style", "Colour", "SKU", "Category", "Gender",
         "Origo images", "Shopify images", "Stock", "Warehouse", "Stores", "Stock by location", "Status", "Shopify status", "Why not shot", "Plan", "Note",
-        "On shot list", "Shopify admin",
+        "On shot list", "Prepared", "Shopify admin",
       ],
       shown.map((r) => [
         season,
         r.drop ?? "",
-        r.origin === "NEW" ? "New" : "Carry-over",
+        r.origin === "NEW" ? "New" : r.origin === "ADDED" ? `Added${r.fromSeason ? ` (${r.fromSeason})` : ""}` : "Carry-over",
         r.brand,
         r.styleName,
         r.colour,
@@ -184,6 +240,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
         r.plan ? PLAN_LABELS[r.plan] : "",
         r.note ?? "",
         r.onShotList ? "Yes" : "No",
+        r.prepared ? "Yes" : "No",
         r.shopify?.adminUrl ?? "",
       ]),
       `${season}-${label}-${new Date().toISOString().slice(0, 10)}.csv`
@@ -257,12 +314,44 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
             ))}
           </div>
         )}
+        {tab === "list" && (
+          <div className="flex gap-1">
+            {(
+              [
+                ["all", "All"],
+                ["todo", `To prepare ${listRows.length - preparedCount}`],
+                ["done", `Prepared ${preparedCount}`],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setPreparedFilter(id)}
+                className={cn(
+                  "h-8 border px-2.5 text-fine tabular-nums",
+                  preparedFilter === id ? "border-ink bg-ink text-offwhite" : "border-line text-muted-foreground hover:bg-hover"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="ml-auto">
           <Button size="sm" onClick={exportCsv} disabled={!shown.length}>
             Export CSV
           </Button>
         </div>
       </div>
+
+      {tab === "list" && (
+        <AddToList
+          season={season}
+          candidates={candidates}
+          listed={listRows.map((r) => r.colorwayId)}
+          onAdded={merge}
+        />
+      )}
 
       {tab === "new" && (
         <StatGroup>
@@ -289,7 +378,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
       {tab === "carry" ? (
         <div className="grid grid-cols-1 gap-px border border-line bg-line md:grid-cols-2 xl:grid-cols-3">
           {shown.map((r) => (
-            <CarryCard key={r.entryId} row={r} onOpen={() => setOpenId(r.colorwayId)} onSave={save} />
+            <CarryCard key={r.entryId} row={r} onOpen={() => setOpenId(r.colorwayId)} actions={{ save, setPrepared, remove }} />
           ))}
           {!shown.length && <Empty />}
         </div>
@@ -308,7 +397,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
             </thead>
             <tbody>
               {shown.map((r) => (
-                <TableRow key={r.entryId} row={r} onOpen={() => setOpenId(r.colorwayId)} onSave={save} />
+                <TableRow key={r.entryId} row={r} onOpen={() => setOpenId(r.colorwayId)} actions={{ save, setPrepared, remove }} />
               ))}
             </tbody>
           </table>
@@ -331,7 +420,7 @@ export function ShootPlanner({ season, rows: initial }: { season: string; rows: 
               };
               const hasMedia = origo.count > 0 || shopifyCount(r) > 0;
               const bucket = bucketFor(hasMedia, r.stock, r.cancelled);
-              return { ...r, origo, hasMedia, bucket, onShotList: isOnShotList(r.plan, bucket) };
+              return { ...r, origo, hasMedia, bucket, onShotList: isOnShotList(r.plan, bucket, r.kind === "added") };
             })
           )
         }
@@ -344,7 +433,85 @@ function Empty() {
   return <div className="bg-paper px-4 py-10 text-center text-body text-muted-foreground">Nothing here.</div>;
 }
 
-type SaveFn = (r: ShootRow, plan: ShootStatus | null, note: string | null) => void;
+interface RowActions {
+  save: (r: ShootRow, plan: ShootStatus | null, note: string | null) => void;
+  setPrepared: (r: ShootRow, prepared: boolean) => void;
+  remove: (r: ShootRow) => void;
+}
+
+/** Add products to the shot list: from this season, or any other. */
+function AddToList({
+  season,
+  candidates,
+  listed,
+  onAdded,
+}: {
+  season: string;
+  candidates: { id: string; label: string }[];
+  listed: string[];
+  onAdded: (rows: ShootRow[]) => void;
+}) {
+  const [paste, setPaste] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function add(body: { ids?: string[]; skus?: string[] }) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/catalog/shoot/additions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ season, ...body }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not add");
+      onAdded(json.rows);
+      const parts = [`Added ${json.added}.`];
+      if (json.already) parts.push(`${json.already} already on the list.`);
+      if (json.notFound?.length) parts.push(`Not found: ${json.notFound.join(", ")}.`);
+      (json.notFound?.length ? toast.warning : toast.success)(parts.join(" "));
+      setPaste(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not add");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 border border-line bg-paper p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-body">Add to the shot list</span>
+        <OptionSearch
+          className="w-80"
+          options={candidates}
+          exclude={listed}
+          placeholder="Search Livid products"
+          onPick={(o) => void add({ ids: [o.id] })}
+        />
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => setPaste(paste === null ? "" : null)}>
+          Paste SKUs
+        </Button>
+      </div>
+      {paste !== null && (
+        <div className="flex flex-wrap items-end gap-2">
+          <textarea
+            className="h-24 w-96 max-w-full border bg-background p-2 font-mono text-fine"
+            placeholder="Colourway SKUs, one per line or separated by commas"
+            value={paste}
+            onChange={(e) => setPaste(e.target.value)}
+          />
+          <Button
+            size="sm"
+            disabled={busy || !paste.trim()}
+            onClick={() => void add({ skus: paste.split(/[\s,;]+/).filter(Boolean) })}
+          >
+            {busy ? "Adding…" : "Add SKUs"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Thumb({ url, size }: { url: string | undefined; size: "sm" | "lg" }) {
   const cls = size === "sm" ? "size-11" : "aspect-[3/4] w-full";
@@ -353,17 +520,27 @@ function Thumb({ url, size }: { url: string | undefined; size: "sm" | "lg" }) {
   return <img src={catalogImageSrc(url) ?? ""} alt="" loading="lazy" className={cn(cls, "object-cover")} />;
 }
 
-function PlanControls({ row, onSave }: { row: ShootRow; onSave: SaveFn }) {
+function PlanControls({ row, actions }: { row: ShootRow; actions: RowActions }) {
   const [note, setNote] = useState(row.note ?? "");
+  const onSave = actions.save;
   return (
     <div className="flex flex-col gap-1.5">
+      {row.onShotList && (
+        <label
+          className="flex h-8 cursor-pointer items-center gap-2 text-fine"
+          title={row.prepared && row.preparedBy ? `Prepared by ${row.preparedBy}` : undefined}
+        >
+          <Checkbox checked={row.prepared} onCheckedChange={(v) => actions.setPrepared(row, v === true)} />
+          <span className={cn(!row.prepared && "text-muted-foreground")}>Prepared</span>
+        </label>
+      )}
       <select
         value={row.plan ?? ""}
         onChange={(e) => onSave(row, (e.target.value || null) as ShootStatus | null, row.note)}
         className="h-8 border border-line bg-paper px-2 text-fine"
         aria-label="Plan"
       >
-        <option value="">{row.onShotList && !row.plan ? "Auto · on list" : "Auto"}</option>
+        <option value="">{row.kind === "added" ? "Added · on list" : row.onShotList && !row.plan ? "Auto · on list" : "Auto"}</option>
         {(Object.keys(PLAN_LABELS) as ShootStatus[]).map((s) => (
           <option key={s} value={s}>
             {PLAN_LABELS[s]}
@@ -379,6 +556,11 @@ function PlanControls({ row, onSave }: { row: ShootRow; onSave: SaveFn }) {
         placeholder="Note"
         className="h-8 text-fine"
       />
+      {row.kind === "added" && (
+        <Button size="sm" variant="outline" onClick={() => actions.remove(row)}>
+          Remove from list
+        </Button>
+      )}
     </div>
   );
 }
@@ -399,7 +581,7 @@ function StatusCell({ row }: { row: ShootRow }) {
   );
 }
 
-function TableRow({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => void; onSave: SaveFn }) {
+function TableRow({ row: r, onOpen, actions }: { row: ShootRow; onOpen: () => void; actions: RowActions }) {
   return (
     <tr className="border-b border-line align-top last:border-b-0">
       <td className="px-3 py-2">
@@ -412,6 +594,7 @@ function TableRow({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => voi
             <span className="truncate text-fine text-muted-foreground">
               <span className="font-mono">{r.sku}</span> · {r.category}
               {r.origin === "CARRYOVER" ? " · carry-over" : ""}
+              {r.origin === "ADDED" ? ` · added${r.fromSeason ? ` from ${r.fromSeason}` : ""}` : ""}
               {r.brand && !/^livid/i.test(r.brand) ? ` · ${r.brand}` : ""}
             </span>
           </span>
@@ -428,7 +611,7 @@ function TableRow({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => voi
         <StatusCell row={r} />
       </td>
       <td className="w-52 px-3 py-2">
-        <PlanControls key={r.note ?? ""} row={r} onSave={onSave} />
+        <PlanControls key={r.note ?? ""} row={r} actions={actions} />
       </td>
     </tr>
   );
@@ -460,7 +643,7 @@ function MediaCounts({ row: r }: { row: ShootRow }) {
   );
 }
 
-function CarryCard({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => void; onSave: SaveFn }) {
+function CarryCard({ row: r, onOpen, actions }: { row: ShootRow; onOpen: () => void; actions: RowActions }) {
   const images = imagesOf(r).slice(0, 4);
   return (
     <div className="flex flex-col gap-3 bg-paper p-4">
@@ -490,7 +673,7 @@ function CarryCard({ row: r, onOpen, onSave }: { row: ShootRow; onOpen: () => vo
           <MediaCounts row={r} />
         </div>
       </div>
-      <PlanControls key={r.note ?? ""} row={r} onSave={onSave} />
+      <PlanControls key={r.note ?? ""} row={r} actions={actions} />
     </div>
   );
 }

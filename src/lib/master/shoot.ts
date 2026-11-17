@@ -15,8 +15,10 @@
 // inventory only covers what is listed online, so it read a product that is not
 // on Shopify yet as having nothing — 7 of FW26's had stock all along.
 //
-// Read-only against Shopify and Loom. The only write is the person's own decision
-// (SeasonEntry.shootStatus / shootNote), which overrides what is derived here.
+// Read-only against Shopify and Loom. The only writes are people's own: the
+// plan and note (SeasonEntry.shootStatus / shootNote), which override what is
+// derived here; the prepared tick; and products added to the shot list by hand
+// from outside the season (ShootAddition).
 import { prisma } from "@/lib/db";
 import { shopifyGraphQL } from "@/lib/shopify/client";
 import { loomStockFor, type LoomStock } from "@/lib/loom/stock";
@@ -26,7 +28,10 @@ import { bucketFor, isOnShotList, type ShootBucket } from "@/lib/shoot-plan";
 export type { ShootBucket };
 
 export interface ShootRow {
+  /** The SeasonEntry id, or for a product added by hand the ShootAddition id. */
   entryId: string;
+  /** "added": not in this season, put on the shot list by hand. */
+  kind: "entry" | "added";
   colorwayId: string;
   sku: string;
   styleName: string;
@@ -35,7 +40,10 @@ export interface ShootRow {
   category: string;
   gender: string | null;
   drop: string | null;
-  origin: "NEW" | "CARRYOVER";
+  /** ADDED: not in this season; on the shot list because someone put it there. */
+  origin: "NEW" | "CARRYOVER" | "ADDED";
+  /** For an added product, the latest season it belongs to. */
+  fromSeason: string | null;
   cancelled: boolean;
   approved: boolean;
   origo: { count: number; images: string[]; men: number; women: number };
@@ -62,6 +70,10 @@ export interface ShootRow {
   note: string | null;
   planUpdatedAt: string | null;
   planUpdatedBy: string | null;
+  /** Ticked off as pulled and ready for the shoot. Stays on the shot list. */
+  prepared: boolean;
+  preparedAt: string | null;
+  preparedBy: string | null;
   /** On the shot list — the planner's rule, or a person's decision. */
   onShotList: boolean;
 }
@@ -150,7 +162,7 @@ async function readShopify(gids: string[]): Promise<{ byId: Map<string, ShopifyP
 
 /** Why a product without media is not ready to shoot, most decisive first. */
 function blockReason(r: {
-  origin: "NEW" | "CARRYOVER";
+  origin: "NEW" | "CARRYOVER" | "ADDED";
   cancelled: boolean;
   approved: boolean;
   inLoom: boolean;
@@ -166,37 +178,117 @@ function blockReason(r: {
   return null;
 }
 
-export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
-  const entries = await prisma.seasonEntry.findMany({
-    where: {
-      season: { code: seasonCode },
-      colorway: { archived: false, kind: "MERCHANDISE" },
-    },
-    select: {
-      id: true,
-      origin: true,
-      cancelled: true,
-      approvedForProduction: true,
-      drop: true,
-      shootStatus: true,
-      shootNote: true,
-      shootUpdatedAt: true,
-      shootUpdatedBy: true,
-      colorway: {
-        select: {
-          id: true,
-          colorwaySku: true,
-          name: true,
-          vendor: true,
-          categoryRef: { select: { name: true } },
-          brand: { select: { name: true } },
-          style: { select: { styleName: true, gender: true, category: true } },
-          media: { select: { url: true, role: true }, orderBy: { position: "asc" } },
-          publications: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
+/** SS26 < FW26 < SS27; anything else (CONTINUITY) sorts first. */
+function seasonRank(code: string): number {
+  const m = /^(SS|FW)(\d{2})$/.exec(code);
+  return m ? Number(m[2]) * 2 + (m[1] === "FW" ? 1 : 0) : -1;
+}
+
+const COLORWAY_SELECT = {
+  id: true,
+  colorwaySku: true,
+  name: true,
+  vendor: true,
+  categoryRef: { select: { name: true } },
+  brand: { select: { name: true } },
+  style: { select: { styleName: true, gender: true, category: true } },
+  media: { select: { url: true, role: true }, orderBy: { position: "asc" } },
+  publications: { where: { channel: "SHOPIFY" }, select: { externalId: true } },
+} as const;
+
+/**
+ * The season's board. `colorwayIds` narrows it to those products, for the
+ * screen to fetch the rows it just added without reading the whole season.
+ */
+export async function getShootBoard(seasonCode: string, opts: { colorwayIds?: string[] } = {}): Promise<ShootBoard> {
+  const only = opts.colorwayIds ? { id: { in: opts.colorwayIds } } : {};
+  const [seasonEntries, additions] = await Promise.all([
+    prisma.seasonEntry.findMany({
+      where: {
+        season: { code: seasonCode },
+        colorway: { archived: false, kind: "MERCHANDISE", ...only },
+      },
+      select: {
+        id: true,
+        origin: true,
+        cancelled: true,
+        approvedForProduction: true,
+        drop: true,
+        shootStatus: true,
+        shootNote: true,
+        shootUpdatedAt: true,
+        shootUpdatedBy: true,
+        shootPreparedAt: true,
+        shootPreparedBy: true,
+        colorway: { select: COLORWAY_SELECT },
+      },
+    }),
+    prisma.shootAddition.findMany({
+      where: { season: { code: seasonCode }, colorway: { archived: false, ...only } },
+      select: {
+        id: true,
+        status: true,
+        note: true,
+        updatedAt: true,
+        updatedBy: true,
+        addedBy: true,
+        createdAt: true,
+        preparedAt: true,
+        preparedBy: true,
+        colorway: {
+          select: {
+            ...COLORWAY_SELECT,
+            entries: {
+              select: { drop: true, season: { select: { code: true } } },
+            },
+          },
         },
       },
-    },
-  });
+    }),
+  ]);
+
+  // One shape for both: a season entry, or a product added by hand. A product
+  // added by hand that has since joined the season shows once, as its entry.
+  const inSeason = new Set(seasonEntries.map((e) => e.colorway.id));
+  const entries = [
+    ...seasonEntries.map((e) => ({
+      id: e.id,
+      kind: "entry" as const,
+      origin: e.origin as ShootRow["origin"],
+      fromSeason: null as string | null,
+      cancelled: e.cancelled,
+      approvedForProduction: e.approvedForProduction,
+      drop: e.drop,
+      shootStatus: e.shootStatus,
+      shootNote: e.shootNote,
+      shootUpdatedAt: e.shootUpdatedAt,
+      shootUpdatedBy: e.shootUpdatedBy,
+      shootPreparedAt: e.shootPreparedAt,
+      shootPreparedBy: e.shootPreparedBy,
+      colorway: e.colorway,
+    })),
+    ...additions
+      .filter((a) => !inSeason.has(a.colorway.id))
+      .map((a) => {
+        const latest = [...a.colorway.entries].sort((x, y) => seasonRank(y.season.code) - seasonRank(x.season.code))[0];
+        return {
+          id: a.id,
+          kind: "added" as const,
+          origin: "ADDED" as const,
+          fromSeason: latest?.season.code ?? null,
+          cancelled: false,
+          approvedForProduction: true,
+          drop: null,
+          shootStatus: a.status,
+          shootNote: a.note,
+          shootUpdatedAt: a.updatedAt ?? a.createdAt,
+          shootUpdatedBy: a.updatedBy ?? a.addedBy,
+          shootPreparedAt: a.preparedAt,
+          shootPreparedBy: a.preparedBy,
+          colorway: a.colorway,
+        };
+      }),
+  ];
 
   const gidOf = (e: (typeof entries)[number]) =>
     e.colorway.publications.find((p) => p.externalId)?.externalId ?? null;
@@ -253,10 +345,11 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
       ? null
       : blockReason({ origin: e.origin, cancelled, approved: e.approvedForProduction, inLoom: !!stockDetail || !!loom.error, stock });
     const plan = e.shootStatus;
-    const onShotList = isOnShotList(plan, bucket);
+    const onShotList = isOnShotList(plan, bucket, e.kind === "added");
 
     return {
       entryId: e.id,
+      kind: e.kind,
       colorwayId: cw.id,
       sku: cw.colorwaySku,
       styleName: cw.style.styleName,
@@ -266,6 +359,7 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
       gender: cw.style.gender,
       drop: e.drop,
       origin: e.origin,
+      fromSeason: e.fromSeason,
       cancelled,
       approved: e.approvedForProduction,
       origo,
@@ -279,6 +373,9 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
       note: e.shootNote,
       planUpdatedAt: e.shootUpdatedAt?.toISOString() ?? null,
       planUpdatedBy: e.shootUpdatedBy,
+      prepared: !!e.shootPreparedAt,
+      preparedAt: e.shootPreparedAt?.toISOString() ?? null,
+      preparedBy: e.shootPreparedBy,
       onShotList,
     };
   });
@@ -295,19 +392,114 @@ export async function getShootBoard(seasonCode: string): Promise<ShootBoard> {
 
 export const SHOOT_STATUSES: ShootStatus[] = ["SHOOT", "BOOKED", "SHOT", "SKIP"];
 
+export type ShootRowKind = ShootRow["kind"];
+
 export async function setShootPlan(
-  entryId: string,
+  kind: ShootRowKind,
+  id: string,
   plan: { status: ShootStatus | null; note: string | null },
   by: string | null
 ) {
+  const status = plan.status;
+  const note = plan.note?.trim() || null;
+  const at = new Date();
+  if (kind === "added") {
+    const a = await prisma.shootAddition.update({
+      where: { id },
+      data: { status, note, updatedAt: at, updatedBy: by },
+      select: { status: true, note: true, updatedAt: true, updatedBy: true },
+    });
+    return { shootStatus: a.status, shootNote: a.note, shootUpdatedAt: a.updatedAt, shootUpdatedBy: a.updatedBy };
+  }
   return prisma.seasonEntry.update({
-    where: { id: entryId },
-    data: {
-      shootStatus: plan.status,
-      shootNote: plan.note?.trim() || null,
-      shootUpdatedAt: new Date(),
-      shootUpdatedBy: by,
-    },
-    select: { id: true, shootStatus: true, shootNote: true, shootUpdatedAt: true, shootUpdatedBy: true },
+    where: { id },
+    data: { shootStatus: status, shootNote: note, shootUpdatedAt: at, shootUpdatedBy: by },
+    select: { shootStatus: true, shootNote: true, shootUpdatedAt: true, shootUpdatedBy: true },
   });
+}
+
+/** Tick a product off as prepared for the shoot, or untick it. */
+export async function setShootPrepared(kind: ShootRowKind, id: string, prepared: boolean, by: string | null) {
+  const at = prepared ? new Date() : null;
+  const who = prepared ? by : null;
+  if (kind === "added") {
+    await prisma.shootAddition.update({ where: { id }, data: { preparedAt: at, preparedBy: who } });
+  } else {
+    await prisma.seasonEntry.update({ where: { id }, data: { shootPreparedAt: at, shootPreparedBy: who } });
+  }
+  return { preparedAt: at?.toISOString() ?? null, preparedBy: who };
+}
+
+/**
+ * Put products on a season's shot list by hand, by colourway id or SKU. A
+ * product in the season is marked Shoot on its entry; one outside it gets a
+ * ShootAddition. Already on the list (marked Shoot or Booked, or added
+ * before) is left alone. Returns the colourways whose rows changed.
+ */
+export async function addToShotList(
+  seasonCode: string,
+  input: { ids?: string[]; skus?: string[] },
+  by: string | null
+) {
+  const season = await prisma.season.findUnique({ where: { code: seasonCode }, select: { id: true } });
+  if (!season) throw new Error(`No season ${seasonCode}`);
+  const skus = [...new Set((input.skus ?? []).map((x) => x.trim()).filter(Boolean))];
+  const ids = [...new Set((input.ids ?? []).filter(Boolean))];
+  const found = await prisma.colorway.findMany({
+    where: {
+      archived: false,
+      kind: "MERCHANDISE",
+      OR: [...(ids.length ? [{ id: { in: ids } }] : []), ...(skus.length ? [{ colorwaySku: { in: skus, mode: "insensitive" as const } }] : [])],
+    },
+    select: { id: true, colorwaySku: true },
+  });
+  const foundSkus = new Set(found.map((c) => c.colorwaySku.toUpperCase()));
+  const notFound = skus.filter((x) => !foundSkus.has(x.toUpperCase()));
+  const cwIds = found.map((c) => c.id);
+
+  const [entries, existing] = await Promise.all([
+    prisma.seasonEntry.findMany({
+      where: { seasonId: season.id, colorwayId: { in: cwIds } },
+      select: { id: true, colorwayId: true, shootStatus: true },
+    }),
+    prisma.shootAddition.findMany({
+      where: { seasonId: season.id, colorwayId: { in: cwIds } },
+      select: { id: true, colorwayId: true, status: true },
+    }),
+  ]);
+  const entryOf = new Map(entries.map((e) => [e.colorwayId, e]));
+  const additionOf = new Map(existing.map((a) => [a.colorwayId, a]));
+  const at = new Date();
+  const changed: string[] = [];
+  let already = 0;
+  for (const id of cwIds) {
+    const e = entryOf.get(id);
+    const a = additionOf.get(id);
+    if (e) {
+      if (e.shootStatus === "SHOOT" || e.shootStatus === "BOOKED") {
+        already++;
+        continue;
+      }
+      await prisma.seasonEntry.update({
+        where: { id: e.id },
+        data: { shootStatus: "SHOOT", shootUpdatedAt: at, shootUpdatedBy: by },
+      });
+    } else if (a) {
+      // Added before: back on the list if it had been set Shot or Skip.
+      if (a.status !== "SHOT" && a.status !== "SKIP") {
+        already++;
+        continue;
+      }
+      await prisma.shootAddition.update({ where: { id: a.id }, data: { status: null, updatedAt: at, updatedBy: by } });
+    } else {
+      await prisma.shootAddition.create({ data: { seasonId: season.id, colorwayId: id, addedBy: by } });
+    }
+    changed.push(id);
+  }
+  return { added: changed.length, already, notFound, colorwayIds: changed };
+}
+
+/** Take a hand-added product off the season's shot list. */
+export async function removeShootAddition(id: string) {
+  await prisma.shootAddition.delete({ where: { id } });
 }
