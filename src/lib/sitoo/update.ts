@@ -341,14 +341,15 @@ export async function applySitooUpdate(
           // defaulting org to the retail price shows the garment as a discount.
         };
       });
-      const sizes = [...new Set(next.map((r) => r.attributes?.[0]).filter(Boolean))];
-      await retry429(() =>
-        setProductVariants(
-          parentId,
-          { groups: [{ name: "Size", options: sizes as string[] }], variants: next },
-          target
-        )
-      );
+      // The family's own groups go back as they are. Rebuilding them as one
+      // "Size" group broke every two-axis family — jeans are Waist + Length,
+      // each row carrying ["25", "34"] — with `400 Wrong number of attributes`
+      // (Keri Dry Selvage, 2026-11-23). Only a family that came back without
+      // groups gets the single-axis fallback.
+      const groups = fam?.groups?.length
+        ? fam.groups
+        : [{ name: "Size", options: [...new Set(next.map((r) => r.attributes?.[0]).filter(Boolean))] as string[] }];
+      await retry429(() => setProductVariants(parentId, { groups, variants: next }, target));
       updated += members.length;
     } catch (err) {
       for (const m of members)
