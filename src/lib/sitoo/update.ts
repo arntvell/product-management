@@ -36,6 +36,7 @@
 // meaning grows every time someone adds a writer, which is how a guard stops
 // being one.
 
+import { sellingSeasonOf } from "@/lib/master/selling-season";
 import { prisma } from "@/lib/db";
 import { channelProductTitle } from "@/lib/master/channel-title";
 import { normalizeSku } from "@/lib/master/sku";
@@ -150,11 +151,15 @@ export async function planSitooUpdate(
       name: true,
       colorwaySku: true,
       style: { select: { styleName: true } },
+      // Every season's price, not `take: 1`: a product sits in several seasons
+      // and the first row returned was whichever the database found first —
+      // SS27's 2400 for a Kai the shop sells at 2300 in FW26. The selling
+      // season picks the one (lib/master/selling-season.ts).
       prices: {
         where: { currency: "NOK", priceType: "MSRP" },
-        select: { amount: true },
-        take: 1,
+        select: { amount: true, season: { select: { code: true } } },
       },
+      entries: { select: { season: { select: { code: true } } } },
       variants: {
         select: {
           variantSku: true,
@@ -200,7 +205,8 @@ export async function planSitooUpdate(
       missing.push(variantSku);
       continue;
     }
-    const priceTo = money(cw.prices[0]?.amount?.toString());
+    const season = sellingSeasonOf(cw.entries.map((e) => e.season.code));
+    const priceTo = money(cw.prices.find((pr) => pr.season.code.toUpperCase() === season)?.amount?.toString());
     if (!priceTo) withoutPrice.push(variantSku);
     rows.push(
       row({

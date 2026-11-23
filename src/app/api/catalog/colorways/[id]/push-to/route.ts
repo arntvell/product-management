@@ -1,3 +1,4 @@
+import { sellingSeasonOf } from "@/lib/master/selling-season";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { pushColorwayToShopify } from "@/lib/master/push-shopify";
@@ -45,8 +46,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     },
   });
   if (!cw) return NextResponse.json({ error: "Product not found" }, { status: 404 });
-  // The same season rule as the fanout: the product's first season.
-  const season = cw.entries[0]?.season.code;
+  // The same season rule as the fanout: the season it is selling in now.
+  const season = sellingSeasonOf(cw.entries.map((e) => e.season.code)) ?? undefined;
 
   try {
     if (channel === "SHOPIFY") {

@@ -1,3 +1,4 @@
+import { sellingSeasonOf } from "@/lib/master/selling-season";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { pushColorwayToShopify } from "@/lib/master/push-shopify";
@@ -92,7 +93,10 @@ export async function POST(req: Request) {
     loom: cws.length - toLoom.length,
   };
 
-  const seasonOf = (c: (typeof cws)[number]) => c.entries[0]?.season.code;
+  // The season the product is selling in now — its price, and where Loom files
+  // it. Not entries[0], which was whichever row came back first.
+  const seasonOf = (c: (typeof cws)[number]) =>
+    sellingSeasonOf(c.entries.map((e) => e.season.code)) ?? undefined;
   const noSeason = cws.filter((c) => !seasonOf(c)).map((c) => c.colorwaySku);
   const noChannel = cws
     .filter(
