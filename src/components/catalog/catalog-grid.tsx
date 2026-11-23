@@ -253,6 +253,7 @@ export function CatalogGrid({
   scope = "seasonal",
   title,
   note,
+  initialSearch,
 }: {
   initialRows: GridRow[];
   seasons: { code: string }[];
@@ -264,6 +265,11 @@ export function CatalogGrid({
   title?: string;
   /** One line under the toolbar, for anything the scope has to explain. */
   note?: string;
+  /**
+   * Search to open with, from the page URL (`?q=`). Wins over the search saved
+   * for the session, so a shared link always shows what it was made for.
+   */
+  initialSearch?: string;
 }) {
   const seasonal = scope === "seasonal";
   const [rows, setRows] = useState<GridRow[]>(initialRows);
@@ -319,15 +325,16 @@ export function CatalogGrid({
       if (raw) {
         const saved = JSON.parse(raw) as { filters?: Partial<GridFilters>; search?: string; dropped?: string };
         setFilters({ ...EMPTY_FILTERS, ...(saved.filters ?? {}) });
-        if (typeof saved.search === "string") setSearch(saved.search);
+        if (typeof saved.search === "string" && initialSearch === undefined) setSearch(saved.search);
         if (saved.dropped === "all" || saved.dropped === "active" || saved.dropped === "dropped")
           setDroppedFilter(saved.dropped);
       }
     } catch {
       // Storage unavailable: start unfiltered.
     }
+    if (initialSearch !== undefined) setSearch(initialSearch);
     filtersLoaded.current = true;
-  }, [filterKey]);
+  }, [filterKey, initialSearch]);
   useEffect(() => {
     if (!filtersLoaded.current) return;
     try {
@@ -595,6 +602,7 @@ export function CatalogGrid({
 
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const terms = searchTerms(q);
     const filtered = rows.filter((r) => {
       if (droppedFilter === "active" && r.dropped) return false;
       if (droppedFilter === "dropped" && !r.dropped) return false;
@@ -623,6 +631,15 @@ export function CatalogGrid({
         return false;
       if (filters.needs.length && !filters.needs.some((n) => needsMatch(r, n))) return false;
       if (!q) return true;
+      if (terms.skus) return terms.skus.has(r.colorwaySku.toLowerCase());
+      if (terms.phrases)
+        return terms.phrases.some(
+          (t) =>
+            r.colorwaySku.toLowerCase() === t ||
+            r.name.toLowerCase().includes(t) ||
+            r.styleName.toLowerCase().includes(t) ||
+            `${r.styleName} ${r.name}`.toLowerCase().includes(t)
+        );
       return (
         r.name.toLowerCase().includes(q) ||
         r.styleName.toLowerCase().includes(q) ||
@@ -1669,7 +1686,8 @@ export function CatalogGrid({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Filter by style, colorway, SKU…"
+          placeholder="Filter by style, colorway, SKU — or paste a list of SKUs…"
+          title="Several SKUs separated by spaces, commas or new lines show exactly those products. Several names separated by commas show any of them."
           className="h-8 w-64"
         />
         <ColumnPicker
@@ -2842,6 +2860,31 @@ function AddTagToSelected({
 
 type FilterKey = "vendor" | "productType" | "gender" | "status" | "source" | "needs" | "drop" | "origin" | "channel";
 type GridFilters = Record<FilterKey, string[]>;
+/** A colourway SKU: hyphenated tokens, no spaces (LIV-BTH-JPN-RNS, LIV-K-15.5-OZ). */
+const SKU_LIKE = /^[a-z0-9./]+(-[a-z0-9./]+)+$/;
+
+/**
+ * How the search box reads what was typed.
+ *
+ *   one phrase               substring of style, colourway or SKU (as before)
+ *   several SKUs             exactly those products — the list pasted from a
+ *                            spreadsheet column or a message, so a batch (one
+ *                            photo delivery, one push) can be checked as a set
+ *   phrases with commas      any of them
+ *
+ * SKUs are matched whole, not as substrings: LIV-K-JPN-BLCK must not also show
+ * every LIV-K-JPN-BLCK-… colourway.
+ */
+function searchTerms(q: string): { skus?: Set<string>; phrases?: string[] } {
+  const tokens = q.split(/[\s,;]+/).filter(Boolean);
+  if (tokens.length > 1 && tokens.every((t) => SKU_LIKE.test(t))) return { skus: new Set(tokens) };
+  if (/[,;\n]/.test(q)) {
+    const phrases = q.split(/[,;\n]+/).map((t) => t.trim()).filter(Boolean);
+    if (phrases.length > 1) return { phrases };
+  }
+  return {};
+}
+
 const EMPTY_FILTERS: GridFilters = {
   vendor: [], productType: [], gender: [], status: [], source: [], needs: [], drop: [], origin: [], channel: [],
 };

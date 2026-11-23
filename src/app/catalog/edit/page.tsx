@@ -10,9 +10,11 @@ export const dynamic = "force-dynamic";
 export default async function CatalogEditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ season?: string }>;
+  searchParams: Promise<{ season?: string; q?: string }>;
 }) {
-  const { season } = await searchParams;
+  // `q` opens the grid already searched — a link to a set of products, e.g.
+  // ?q=LIV-BTH-JPN-RNS,LIV-K-JPN-BLCK for one photo delivery.
+  const { season, q } = await searchParams;
   const [rows, seasons, colorwayOptions] = await Promise.all([
     // Livid only. The resold brands and vintage live on /catalog/external, where
     // the seasonal machinery here — tabs, drops, carry-over, a price column that
@@ -31,6 +33,7 @@ export default async function CatalogEditPage({
       seasonId={seasonId}
       colorwayOptions={colorwayOptions}
       title="Livid products"
+      initialSearch={q}
     />
   );
 }
