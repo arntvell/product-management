@@ -32,7 +32,8 @@ import {
 } from "@/lib/shopify/adopt";
 
 // Fetch the live product's fields we must MERGE with (not overwrite): tags a
-// merchant added in Shopify admin, and current publish status.
+// merchant added in Shopify admin, current publish status, and a vintage
+// garment's markdown (price + compareAtPrice).
 const PRODUCT_MERGE_QUERY = `
   query ProductMerge($id: ID!) {
     product(id: $id) {
@@ -40,7 +41,7 @@ const PRODUCT_MERGE_QUERY = `
       status
       tags
       metafields(first: 100) { nodes { namespace key type value } }
-      variants(first: 250) { nodes { sku selectedOptions { name value } } }
+      variants(first: 250) { nodes { sku price compareAtPrice selectedOptions { name value } } }
       mediaCount { count }
     }
   }
@@ -483,10 +484,36 @@ export async function pushColorwayToShopify(
         status: string;
         tags: string[];
         metafields: { nodes: Metafield[] };
-        variants: { nodes: { sku: string | null; selectedOptions: { name: string; value: string }[] }[] };
+        variants: {
+          nodes: {
+            sku: string | null;
+            price: string;
+            compareAtPrice: string | null;
+            selectedOptions: { name: string; value: string }[];
+          }[];
+        };
         mediaCount: { count: number } | null;
       } | null;
     }>(PRODUCT_MERGE_QUERY, { id: existing.externalId });
+
+    // A vintage garment marked down on Shopify (a sale: compareAtPrice above
+    // price, e.g. scripts/vintage-sale) keeps its markdown. The master holds
+    // one price, the full one, and this push would otherwise send it back and
+    // end the sale for that garment. Both fields are written explicitly rather
+    // than trusting productSet to leave an omitted compareAtPrice alone.
+    // Mainline is not affected: it goes through the selective update, which
+    // only writes a price the master changed.
+    if (isVintage) {
+      const liveBySku = new Map(
+        (live.product?.variants.nodes ?? []).filter((n) => n.sku).map((n) => [n.sku!.toUpperCase(), n])
+      );
+      for (const v of variants) {
+        const lv = liveBySku.get(v.inventoryItem.sku.toUpperCase());
+        if (!lv?.compareAtPrice || !(Number(lv.compareAtPrice) > Number(lv.price))) continue;
+        Object.assign(v, { price: lv.price, compareAtPrice: lv.compareAtPrice });
+        warnings.push(`Kept the Shopify markdown on ${v.inventoryItem.sku}: ${lv.price} (was ${lv.compareAtPrice}).`);
+      }
+    }
 
     // productSet deletes every variant and every product image it is not given.
     // On a live product that is the shop's stock and its photography, so an
